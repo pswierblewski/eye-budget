@@ -4,3 +4,5 @@ numpy>=1.10
 scipy
 Image
 opencv-python
+openai
+pillow
