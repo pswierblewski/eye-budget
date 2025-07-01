@@ -1,5 +1,14 @@
+from enum import StrEnum
 from pydantic import BaseModel, Field
 from typing import List
+
+class ReceiptsScanStatus(StrEnum):
+    """Enumeration for the status of a receipt scan"""
+    NEW = "pending"
+    PROCESSING = "processing"
+    PROCESSED = "processed"
+    FAILED = "failed"
+
 
 class ProductItem(BaseModel):
     """Represents a purchased product"""
@@ -10,6 +19,7 @@ class ProductItem(BaseModel):
         default=None,
         description="The price for quantity=1 of the product"
     )
+
 
 class TransactionModel(BaseModel):
     """Represents a complete purchase transaction"""
