@@ -27,3 +27,10 @@ class ReceiptsRepository(ABC):
             self.client.download_sync(remote_path="Budżet domowy/Paragony/", local_path=self.target_dir)
         except Exception as e:
             print(f"Error downloading receipts: {e}")
+            
+    def dispose(self):
+        """
+        Dispose of the repository resources.
+        This method is a placeholder for any cleanup operations needed.
+        """
+        print("ReceiptsRepository disposed.")

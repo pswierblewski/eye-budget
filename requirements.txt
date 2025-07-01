@@ -6,3 +6,4 @@ Image
 opencv-python
 openai
 pillow
+psycopg2-binary
