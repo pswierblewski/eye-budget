@@ -7,3 +7,5 @@ opencv-python
 openai
 pillow
 psycopg2-binary
+markdown_strings
+fastapi[standard]
