@@ -1,10 +1,10 @@
-from app import App
+from .app import App
 from fastapi import FastAPI
 
-fapp = FastAPI()
+app = FastAPI()
 
-@fapp.post("/receipts/process")
+@app.post("/receipts/process")
 def process_receipts():
-    app = App()
-    app.run()
-    app.dispose()
+    my_app = App()
+    my_app.run()
+    my_app.dispose()

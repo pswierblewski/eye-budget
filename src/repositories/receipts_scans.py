@@ -1,7 +1,7 @@
 from abc import ABC
 from psycopg2 import extras
 
-from data import ReceiptsScanStatus
+from ..data import ReceiptsScanStatus
 
 class ReceiptsScansRepository(ABC):
     def __init__(self, db_context):

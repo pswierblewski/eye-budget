@@ -4,7 +4,7 @@ import json
 import os
 import time
 from openai import OpenAI
-from data import TransactionModel
+from ..data import TransactionModel
 from PIL import Image
 
 
