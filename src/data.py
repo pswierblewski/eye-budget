@@ -7,7 +7,9 @@ class ReceiptsScanStatus(StrEnum):
     NEW = "pending"
     PROCESSING = "processing"
     PROCESSED = "processed"
-    FAILED = "failed"
+    FAILED = "failed",
+    TO_CONFIRM = "to_confirm",
+    DONE = "done"
 
 
 class ProductItem(BaseModel):
@@ -31,3 +33,27 @@ class TransactionModel(BaseModel):
     )
     total: float = Field(..., description="The total amount to be paid for the transaction.")
     date: str = Field(..., description="The date when the transaction occurred.")
+
+
+class CategoryCandidate(BaseModel):
+    """Represents category candidate for a single product"""
+    category_id: int = Field(..., description="The unique identifier for the category candidate.")
+    category_name: str = Field(..., description="The name of the category candidate.")
+    category_score: float = Field(..., description="The confidence score for the category match.")
+
+
+class CategoryCandidates(BaseModel):
+    """Represents category candidates for a transaction"""
+    category_candidates: List[CategoryCandidate] = Field(
+        ...,
+        description="A list of category candidates for each product in the transaction."
+    )
+    product_name: str = Field(..., description="The name of the product for which the category candidate is suggested.")
+    
+
+class CategoryCandidatesProducts(BaseModel):
+    """Represents category candidates for multiple products in a transaction"""
+    category_candidates: List[CategoryCandidates] = Field(
+        ...,
+        description="A list of category candidates for each product in the transaction."
+    )

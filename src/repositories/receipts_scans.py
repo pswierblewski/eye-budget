@@ -1,32 +1,12 @@
-import os
-import psycopg2
+from abc import ABC
 from psycopg2 import extras
 
-class ReceiptsScansRepository:
-    def __init__(self):
-        self.conn = None
-        self.connect_db()
-        self.table = '"receipts_scans"'
-    
-    def dispose(self):
-        if self.conn:
-            self.conn.close()
-            print("Database connection closed.")
-        else:
-            print("No database connection to close.")
-            
-    def connect_db(self):
-        try:
-            self.conn = psycopg2.connect(
-                host=os.getenv("POSTGRESQL_HOST"),
-                port=os.getenv("POSTGRESQL_PORT"),
-                dbname=os.getenv("POSTGRESQL_DB"),
-                user=os.getenv("POSTGRESQL_USER"),
-                password=os.getenv("POSTGRESQL_PASSWORD")
-            )
-            print("Database connection established.")
-        except Exception as e:
-            print("Failed to connect to database:", e)
+from data import ReceiptsScanStatus
+
+class ReceiptsScansRepository(ABC):
+    def __init__(self, db_context):
+        self.conn = db_context.conn
+        self.table = '"receipts-scans"'
 
     def add_receipt(self, receipt_filename) -> bool:
         if not self.conn:
@@ -68,7 +48,25 @@ class ReceiptsScansRepository:
             print("Failed to update status:", e)
             self.conn.rollback()
             return False
-        
+    
+    def set_category_candidates(self, receipt_filename, category_candidates):
+        if not self.conn:
+            print("No database connection available.")
+            return False
+        try:    
+            with self.conn.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE " + self.table + " SET category_candidates = %s, status = %s WHERE filename = %s",
+                    (extras.Json(category_candidates), ReceiptsScanStatus.TO_CONFIRM, receipt_filename)
+                )
+                self.conn.commit()
+                print(f"Category candidates for {receipt_filename} updated successfully.")
+                return True
+        except Exception as e:
+            print("Failed to update category candidates:", e)
+            self.conn.rollback()
+            return False
+    
     def set_result(self, receipt_filename, result):
         if not self.conn:
             print("No database connection available.")
