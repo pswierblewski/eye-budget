@@ -1,11 +1,11 @@
 from abc import ABC
-from repositories.receipts import ReceiptsRepository
-from repositories.files import FilesRepository
-from services.ocr import OCRService
-from services.categories import CategoriesService
-from repositories.receipts_scans import ReceiptsScansRepository
-from data import ReceiptsScanStatus, TransactionModel
-from repositories.db import DbContext
+from .repositories.receipts import ReceiptsRepository
+from .repositories.files import FilesRepository
+from .services.ocr import OCRService
+from .services.categories import CategoriesService
+from .repositories.receipts_scans import ReceiptsScansRepository
+from .data import ReceiptsScanStatus, TransactionModel
+from .repositories.db import DbContext
 
 class App(ABC):
     def __init__(self):

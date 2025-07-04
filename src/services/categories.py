@@ -3,9 +3,9 @@ import json
 
 from openai import OpenAI
 
-from repositories.categories import CategoriesRepository
-from services.markdown_table import MarkdownTableService
-from data import TransactionModel, CategoryCandidatesProducts
+from ..repositories.categories import CategoriesRepository
+from ..services.markdown_table import MarkdownTableService
+from ..data import TransactionModel, CategoryCandidatesProducts
 
 
 class CategoriesService(ABC):
