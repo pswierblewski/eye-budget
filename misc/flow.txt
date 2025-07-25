@@ -1,0 +1,51 @@
+add new table
+categories descriptions
+
+flow:
+
+get payee
+name get from receipt
+_payee = get payee id by name
+if not existing payee, add it and get its id
+
+add to transactions table
+id: last id + 1
+account: 0
+date: date from receipt
+status: 0
+payee: _payee
+OriginalPayee
+Category: 1
+memo
+number
+reconciledDate
+BudgetBalanceDate
+Transfer: -1
+FITID
+Flags: if no file: 0. if file: 4
+amount: total from receipt (negative)
+SalesTax: 0
+TransferSplit: -1
+MergeDate
+
+
+get category id
+if not existing category, add it and get its id
+//todo: add a category flow
+
+add to splits table
+get last id
+Transaction: id of added transaction
+id: last id + 1
+category: id of added category
+payee: _payee
+amount: product amount from receipt (negative)
+transfer: -1
+memo: product name from receipt, categories candidates
+flags: 0
+budgetBalanceDate
+
+add attachment:
+send a file to webdav:
+Nextcloud/Budżet domowy/MyMoney NET/mymoney.Attachments/wspólne
+file name: id of added transaction + ".jpg"

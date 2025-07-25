@@ -4,7 +4,7 @@ import os
 import psycopg2
 
 
-class DbContext(ABC):
+class EyeBudgetDbContext(ABC):
     def __init__(self):
         self.conn = None
         self.connect_db()

@@ -15,9 +15,12 @@ class OCRService(ABC):
         self.output_dir = os.getenv("OUTPUT_DIR", "output/")
         self.prompt = (
             "Analyze this Polish fiscal receipt. Extract: "
-            "1. Vendor name 2. Title (PARAGON FISKALNY) "
-            "3. Product list (name, quantity, price, unit_price) "
-            "4. Total amount 5. Transaction date (only date without time). "
+            "1. Vendor name. "
+            "2. Title (PARAGON FISKALNY). "
+            "3. Product list (name, quantity, price, unit_price). "
+            "4. Discounts, rabates, bonuses and other product-related discounts should be taken into account as well. Take them into the product list as a product with negative price."
+            "5. Total amount. "
+            "6. Transaction date (only date without time). "
             "Return only valid data; omit missing fields."
         )
         self.model = "gpt-4.1"
@@ -35,20 +38,8 @@ class OCRService(ABC):
                 image_file.read()).decode("utf-8")
         return encoded_string
 
-    def _preprocess_image(self, image_path: str, output_path: str) -> str:
-        with Image.open(image_path) as img:
-            new_size = (img.width // 2, img.height // 2)
-            resized_img = img.resize(new_size)
-            resized_img.save(output_path)
-            return new_size
-
     def process_image(self, image_path: str) -> dict:
-        timestr = time.strftime("%Y%m%d-%H%M%S")
-        output_filename = f'{timestr}.png'
-        output_path = os.path.join(self.output_dir, output_filename)
-        input_image_path = os.path.join(self.input_dir, image_path)
-        self._preprocess_image(input_image_path, output_path)
-        base64_image = self._encode_image(output_path)
+        base64_image = self._encode_image(image_path)
         tool_name = "extract_receipt_data"
         tools = [
             {
