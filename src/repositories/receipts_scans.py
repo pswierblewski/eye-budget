@@ -31,15 +31,15 @@ class ReceiptsScansRepository(ABC):
             self.conn.rollback()
             return False
         
-    def set_status(self, receipt_filename, status):
+    def set_status(self, receipt_filename, status, error_message=None):
         if not self.conn:
             print("No database connection available.")
             return False
         try:
             with self.conn.cursor() as cursor:
                 cursor.execute(
-                    "UPDATE " + self.table + " SET status = %s WHERE filename = %s",
-                    (status, receipt_filename)
+                    "UPDATE " + self.table + " SET status = %s, message = %s WHERE filename = %s",
+                    (status, error_message, receipt_filename)
                 )
                 self.conn.commit()
                 print(f"Status for {receipt_filename} updated to {status}.")
@@ -84,3 +84,6 @@ class ReceiptsScansRepository(ABC):
             print("Failed to update result:", e)
             self.conn.rollback()
             return False
+
+    def dispose(self):
+        print("ReceiptsScansRepository disposed.")
