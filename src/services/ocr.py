@@ -23,7 +23,7 @@ class OCRService(ABC):
             "6. Transaction date (only date without time). "
             "Return only valid data; omit missing fields."
         )
-        self.model = "gpt-4.1"
+        self.model = os.getenv("MODEL", "gpt-5")
         
     def dispose(self):
         """
