@@ -20,10 +20,10 @@ class OCRService(ABC):
             "3. Product list (name, quantity, price, unit_price). "
             "4. Discounts, rabates, bonuses and other product-related discounts should be taken into account as well. Take them into the product list as a product with negative price."
             "5. Total amount. "
-            "6. Transaction date (only date without time). "
+            "6. Transaction date (only date without time). Format: YYYY-MM-DD."
             "Return only valid data; omit missing fields."
         )
-        self.model = os.getenv("MODEL", "gpt-5")
+        self.model = os.getenv("MODEL", "gpt-4.1")
         
     def dispose(self):
         """
