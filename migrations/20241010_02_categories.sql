@@ -1,24 +1,7 @@
--- Create the enum type for status
-CREATE TYPE receipt_status AS ENUM ('new', 'processing', 'processed', 'failed');
+-- Migration: Create categories system
+-- depends: 20241010_01_receipts_scans
 
-alter type receipt_status add value 'to_confirm';
-alter type receipt_status add value 'done';
-
--- Create the table with quoted name
-CREATE TABLE "receipts-scans" (
-    id SERIAL PRIMARY KEY,
-    filename VARCHAR NOT null UNIQUE,
-    status receipt_status NOT NULL DEFAULT 'new',
-    result JSONB
-);
-
-ALTER TABLE "receipts-scans" ADD CONSTRAINT filename UNIQUE (filename);
-
-ALTER TABLE "receipts-scans" add categories_candidates varchar[];
-ALTER TABLE "receipts-scans" drop categories_candidates;
-ALTER TABLE "receipts-scans" add categories_candidates jsonb;
-ALTER TABLE "receipts-scans" add category varchar;
-
+-- Apply
 CREATE TYPE category_type AS ENUM ('expense', 'income');
 
 CREATE TABLE category_groups (
@@ -31,7 +14,7 @@ CREATE TABLE categories (
     id SERIAL PRIMARY KEY,
     parent_id INTEGER REFERENCES categories(id) ON DELETE SET NULL,
     category_group_id INTEGER NOT NULL REFERENCES category_groups(id),
-    name VARCHAR(255) NOT null,
+    name VARCHAR(255) NOT NULL,
     c_type category_type NOT NULL DEFAULT 'expense'
 );
 
@@ -247,26 +230,12 @@ BEGIN
 	PERFORM insert_category(NULL, 'Ubezpieczenie', 'Other Income', 'income');
 	PERFORM insert_category(NULL, 'Zwroty rzeczy', 'Other Income', 'income');
 	PERFORM insert_category(NULL, 'Zwroty zakupów', 'Other Income', 'income');
-end; $$ LANGUAGE plpgsql;
+END;
+$$ LANGUAGE plpgsql;
 
-select c.id, c."name" as "category_name", cp."name" as "category_parent_name", cg."name" as "category_group_name", c.c_type as "category_type"
-from categories c
-left join categories cp on cp.id = c.parent_id
-left join category_groups cg on cg.id = c.category_group_id;
+-- Rollback
+DROP FUNCTION IF EXISTS insert_category(TEXT, TEXT, TEXT, category_type);
+DROP TABLE IF EXISTS categories;
+DROP TABLE IF EXISTS category_groups;
+DROP TYPE IF EXISTS category_type;
 
--- Create products table to store normalized product names
-CREATE TABLE products (
-    id SERIAL PRIMARY KEY,
-    name TEXT NOT NULL UNIQUE
-);
-
--- Create products_alternative_names table to store receipt product names
-CREATE TABLE products_alternative_names (
-    id SERIAL PRIMARY KEY,
-    name TEXT NOT NULL UNIQUE,
-    product INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE
-);
-
--- Create index for faster lookups
-CREATE INDEX idx_products_alternative_names_product ON products_alternative_names(product);
-CREATE INDEX idx_products_alternative_names_name ON products_alternative_names(name);
