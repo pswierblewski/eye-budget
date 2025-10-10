@@ -88,3 +88,17 @@ class Split():
     transfer: int = -1
     memo: str = ""
     flags: int = 0
+
+
+class ProductMapping(BaseModel):
+    """Represents a mapping between receipt product name and normalized product name"""
+    product_alternative_name: str = Field(..., description="The original product name as it appears on the receipt.")
+    product_name: str = Field(..., description="The normalized, human-friendly product name (e.g., 'Pasta do zębów' for 'COLGATE ADV WH CHAR75ML A').")
+
+
+class ProductMappings(BaseModel):
+    """Represents a list of product mappings"""
+    products: List[ProductMapping] = Field(
+        ...,
+        description="A list of product mappings with original and normalized names."
+    )

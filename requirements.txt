@@ -10,3 +10,4 @@ psycopg2-binary
 markdown_strings
 fastapi[standard]
 uvicorn
+yoyo-migrations
