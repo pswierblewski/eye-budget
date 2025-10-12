@@ -102,3 +102,9 @@ class ProductMappings(BaseModel):
         ...,
         description="A list of product mappings with original and normalized names."
     )
+
+
+class VendorMapping(BaseModel):
+    """Represents a mapping between receipt vendor name and normalized vendor name"""
+    vendor_alternative_name: str = Field(..., description="The original vendor name as it appears on the receipt.")
+    vendor_name: str = Field(..., description="The normalized, human-friendly vendor name (e.g., 'Aldi' for 'ALDI Sp. z o.o.').")
