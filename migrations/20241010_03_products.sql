@@ -2,19 +2,19 @@
 -- depends: 20241010_02_categories
 
 -- Apply
-CREATE TABLE products (
+CREATE TABLE IF NOT EXISTS products (
     id SERIAL PRIMARY KEY,
     name TEXT NOT NULL UNIQUE
 );
 
-CREATE TABLE products_alternative_names (
+CREATE TABLE IF NOT EXISTS products_alternative_names (
     id SERIAL PRIMARY KEY,
     name TEXT NOT NULL UNIQUE,
     product INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE
 );
 
-CREATE INDEX idx_products_alternative_names_product ON products_alternative_names(product);
-CREATE INDEX idx_products_alternative_names_name ON products_alternative_names(name);
+CREATE INDEX IF NOT EXISTS idx_products_alternative_names_product ON products_alternative_names(product);
+CREATE INDEX IF NOT EXISTS idx_products_alternative_names_name ON products_alternative_names(name);
 
 -- Rollback
 DROP INDEX IF EXISTS idx_products_alternative_names_name;
