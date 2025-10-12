@@ -270,3 +270,20 @@ CREATE TABLE products_alternative_names (
 -- Create index for faster lookups
 CREATE INDEX idx_products_alternative_names_product ON products_alternative_names(product);
 CREATE INDEX idx_products_alternative_names_name ON products_alternative_names(name);
+
+-- Create vendors table to store normalized vendor names
+CREATE TABLE vendors (
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE
+);
+
+-- Create vendors_alternative_names table to store receipt vendor names
+CREATE TABLE vendors_alternative_names (
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    vendor INTEGER NOT NULL REFERENCES vendors(id) ON DELETE CASCADE
+);
+
+-- Create index for faster lookups
+CREATE INDEX idx_vendors_alternative_names_vendor ON vendors_alternative_names(vendor);
+CREATE INDEX idx_vendors_alternative_names_name ON vendors_alternative_names(name);
