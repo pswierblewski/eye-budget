@@ -2,15 +2,20 @@
 -- depends: 20241010_01_receipts_scans
 
 -- Apply
-CREATE TYPE category_type AS ENUM ('expense', 'income');
+DO $$ 
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'category_type') THEN
+        CREATE TYPE category_type AS ENUM ('expense', 'income');
+    END IF;
+END $$;
 
-CREATE TABLE category_groups (
+CREATE TABLE IF NOT EXISTS category_groups (
     id SERIAL PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
+    name VARCHAR(255) NOT NULL UNIQUE,
     description TEXT
 );
 
-CREATE TABLE categories (
+CREATE TABLE IF NOT EXISTS categories (
     id SERIAL PRIMARY KEY,
     parent_id INTEGER REFERENCES categories(id) ON DELETE SET NULL,
     category_group_id INTEGER NOT NULL REFERENCES category_groups(id),
@@ -27,6 +32,7 @@ CREATE OR REPLACE FUNCTION insert_category(
 DECLARE
     group_id INT;
     parent_id_int INT;
+    existing_category_id INT;
 BEGIN
     SELECT id INTO group_id FROM category_groups WHERE name = group_name;
     IF group_id IS NULL THEN
@@ -40,10 +46,30 @@ BEGIN
         parent_id_int := NULL;
     END IF;
 
-    INSERT INTO categories (parent_id, category_group_id, name, c_type)
-    VALUES (parent_id_int, group_id, category_name, ctype);
+    -- Check if category already exists
+    SELECT id INTO existing_category_id FROM categories 
+    WHERE name = category_name 
+    AND (parent_id = parent_id_int OR (parent_id IS NULL AND parent_id_int IS NULL));
+    
+    -- Only insert if it doesn't exist
+    IF existing_category_id IS NULL THEN
+        INSERT INTO categories (parent_id, category_group_id, name, c_type)
+        VALUES (parent_id_int, group_id, category_name, ctype);
+    END IF;
 END;
 $$ LANGUAGE plpgsql;
+
+-- Add unique constraint to category_groups.name if it doesn't exist
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint 
+        WHERE conname = 'category_groups_name_key' 
+        AND conrelid = 'category_groups'::regclass
+    ) THEN
+        ALTER TABLE category_groups ADD CONSTRAINT category_groups_name_key UNIQUE (name);
+    END IF;
+END $$;
 
 INSERT INTO category_groups (name) VALUES
 ('Bank Charges'),
@@ -56,7 +82,8 @@ INSERT INTO category_groups (name) VALUES
 ('Charitable Donations'),
 ('Other Bills'),
 ('Other Tax Payments'),
-('Clothing Expenses');
+('Clothing Expenses')
+ON CONFLICT (name) DO NOTHING;
 
 DO $$
 BEGIN

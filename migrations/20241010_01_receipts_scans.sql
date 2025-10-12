@@ -2,9 +2,14 @@
 -- depends:
 
 -- Apply
-CREATE TYPE receipt_status AS ENUM ('new', 'processing', 'processed', 'failed', 'to_confirm', 'done');
+DO $$ 
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'receipt_status') THEN
+        CREATE TYPE receipt_status AS ENUM ('new', 'processing', 'processed', 'failed', 'to_confirm', 'done');
+    END IF;
+END $$;
 
-CREATE TABLE "receipts-scans" (
+CREATE TABLE IF NOT EXISTS "receipts-scans" (
     id SERIAL PRIMARY KEY,
     filename VARCHAR NOT NULL UNIQUE,
     status receipt_status NOT NULL DEFAULT 'new',
