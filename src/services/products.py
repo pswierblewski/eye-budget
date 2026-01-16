@@ -10,7 +10,7 @@ from ..data import ProductItem, ProductMappings
 class ProductsService(ABC):
     def __init__(self):
         self.client = OpenAI()
-        self.model = os.getenv("MODEL", "gpt-4o")
+        self.model = os.getenv("MODEL", "gpt-5.2")
         self.prompt = (
             "Analyze the following list of Polish product names from a receipt. "
             "For each product name, provide a normalized, human-friendly name in Polish. "
@@ -62,7 +62,7 @@ class ProductsService(ABC):
         
         response = self.client.responses.create(
             model=self.model,
-            temperature=0.0,
+            reasoning={"effort": "medium"},
             tools=tools,
             tool_choice={"type": "function", "name": tool_name},
             input=[

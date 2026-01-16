@@ -9,7 +9,7 @@ from ..data import VendorMapping
 class VendorsService(ABC):
     def __init__(self):
         self.client = OpenAI()
-        self.model = os.getenv("MODEL", "gpt-4o")
+        self.model = os.getenv("MODEL", "gpt-5.2")
         self.prompt = (
             "Analyze the following Polish vendor/store name from a receipt. "
             "Provide a normalized, human-friendly vendor name in Polish. "
@@ -58,7 +58,7 @@ class VendorsService(ABC):
         
         response = self.client.responses.create(
             model=self.model,
-            temperature=0.0,
+            reasoning={"effort": "medium"},
             tools=tools,
             tool_choice={"type": "function", "name": tool_name},
             input=[
