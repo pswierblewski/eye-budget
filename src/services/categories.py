@@ -13,7 +13,7 @@ class CategoriesService(ABC):
         self.categories_repository = CategoriesRepository(db_context=db_context)
         self.markdown_table_service = MarkdownTableService()
         self.client = OpenAI()
-        self.model = "gpt-4.1"
+        self.model = "gpt-5.2"
         self.categories = ""
         self.prompt = """
 You are an expert in Polish fiscal receipts.
@@ -67,7 +67,7 @@ Please analyze the transaction and return category_ids with a name and a confide
         )
         response = self.client.responses.create(
             model=self.model,
-            temperature=0.0,
+            reasoning={"effort": "medium"},
             tools=tools,
             tool_choice={"type": "function", "name": tool_name},
             input=[

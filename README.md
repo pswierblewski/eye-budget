@@ -2,6 +2,16 @@
 
 ## Docker Usage
 
+Activate Python virtual environment:
+```
+source venv/bin/activate
+```
+
+Install dependencies:
+```
+pip install -r requirements.txt
+```
+
 Build the Docker image:
 
 ```
