@@ -1,6 +1,7 @@
 # Eye Budget
 
-## Docker Usage
+sqlite db:
+mymoney.mmdb: C:\Users\Pawel.Swierblewski\Nextcloud\Budżet domowy\MyMoney NET
 
 Activate Python virtual environment:
 ```
@@ -11,6 +12,8 @@ Install dependencies:
 ```
 pip install -r requirements.txt
 ```
+
+## Docker Usage
 
 Build the Docker image:
 

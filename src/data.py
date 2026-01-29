@@ -108,3 +108,41 @@ class VendorMapping(BaseModel):
     """Represents a mapping between receipt vendor name and normalized vendor name"""
     vendor_alternative_name: str = Field(..., description="The original vendor name as it appears on the receipt.")
     vendor_name: str = Field(..., description="The normalized, human-friendly vendor name (e.g., 'Aldi' for 'ALDI Sp. z o.o.').")
+
+
+class EvaluationMetrics(BaseModel):
+    """Metrics for a single receipt evaluation"""
+    processing_time_ms: int = Field(..., description="Time to process the receipt in milliseconds.")
+    fields_extracted: int = Field(..., description="Count of non-null fields extracted.")
+    field_completeness: float = Field(..., description="Ratio of extracted fields to total expected fields.")
+    product_count: int = Field(..., description="Number of products extracted.")
+    has_vendor: bool = Field(..., description="Whether vendor was extracted.")
+    has_date: bool = Field(..., description="Whether date was extracted.")
+    has_total: bool = Field(..., description="Whether total was extracted.")
+    products_sum: float = Field(..., description="Sum of all product prices.")
+    extracted_total: float = Field(..., description="Total amount as extracted from receipt.")
+    total_difference: float = Field(..., description="Absolute difference between products_sum and extracted_total.")
+    is_consistent: bool = Field(..., description="Whether products_sum matches extracted_total within tolerance.")
+
+
+class EvaluationResult(BaseModel):
+    """Result of evaluating a single receipt"""
+    filename: str = Field(..., description="Name of the processed file.")
+    success: bool = Field(..., description="Whether processing completed without error.")
+    error_message: str | None = Field(default=None, description="Error details if processing failed.")
+    metrics: EvaluationMetrics | None = Field(default=None, description="Evaluation metrics if successful.")
+    transaction: TransactionModel | None = Field(default=None, description="Extracted transaction data if successful.")
+
+
+class EvaluationRunSummary(BaseModel):
+    """Summary of an evaluation run"""
+    run_id: int = Field(..., description="Unique identifier for this evaluation run.")
+    model_used: str = Field(..., description="Model identifier used for processing.")
+    total_files: int = Field(..., description="Total number of files processed.")
+    successful: int = Field(..., description="Number of successfully processed files.")
+    failed: int = Field(..., description="Number of failed files.")
+    success_rate: float = Field(..., description="Ratio of successful to total files.")
+    avg_processing_time_ms: float = Field(..., description="Average processing time per file.")
+    avg_field_completeness: float = Field(..., description="Average field completeness across all files.")
+    avg_consistency_rate: float = Field(..., description="Percentage of files with consistent totals.")
+    results: List[EvaluationResult] = Field(..., description="Individual results for each file.")
