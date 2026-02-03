@@ -16,9 +16,9 @@ CREATE TABLE IF NOT EXISTS vendors_alternative_names (
 CREATE INDEX IF NOT EXISTS idx_vendors_alternative_names_vendor ON vendors_alternative_names(vendor);
 CREATE INDEX IF NOT EXISTS idx_vendors_alternative_names_name ON vendors_alternative_names(name);
 
--- Rollback
-DROP INDEX IF EXISTS idx_vendors_alternative_names_name;
-DROP INDEX IF EXISTS idx_vendors_alternative_names_vendor;
-DROP TABLE IF EXISTS vendors_alternative_names;
-DROP TABLE IF EXISTS vendors;
+-- Rollback (commented out - only for manual rollback reference)
+-- DROP INDEX IF EXISTS idx_vendors_alternative_names_name;
+-- DROP INDEX IF EXISTS idx_vendors_alternative_names_vendor;
+-- DROP TABLE IF EXISTS vendors_alternative_names;
+-- DROP TABLE IF EXISTS vendors;
 
