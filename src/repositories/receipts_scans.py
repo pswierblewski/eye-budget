@@ -6,7 +6,7 @@ from ..data import ReceiptsScanStatus
 class ReceiptsScansRepository(ABC):
     def __init__(self, db_context):
         self.conn = db_context.conn
-        self.table = '"receipts-scans"'
+        self.table = 'receipts_scans'
 
     def add_receipt(self, receipt_filename) -> bool:
         if not self.conn:
