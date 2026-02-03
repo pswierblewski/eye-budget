@@ -8,8 +8,9 @@ WORKDIR /app
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the rest of the application code
+# Copy the application code and migrations
 COPY src/ ./src/
+COPY migrations/ ./migrations/
 
 # Expose the port FastAPI will run on
 EXPOSE 8000
@@ -23,4 +24,4 @@ ENV INPUT_DIR=/app/input \
     MY_MONEY_SQLITE_PATH=/app/sqlite/my_money.db
 
 # Run the FastAPI app with uvicorn
-CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"] 
+CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
