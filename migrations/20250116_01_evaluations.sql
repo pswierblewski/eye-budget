@@ -1,9 +1,6 @@
 -- Migration: Create evaluation tables
 -- depends: 20241010_04_vendors
 
--- Apply
-
--- Evaluation runs table (stores summary of each evaluation run)
 CREATE TABLE IF NOT EXISTS evaluation_runs (
     id SERIAL PRIMARY KEY,
     run_timestamp TIMESTAMP DEFAULT NOW(),
@@ -44,8 +41,3 @@ CREATE TABLE IF NOT EXISTS evaluation_results (
 
 -- Index for faster lookups by run_id
 CREATE INDEX IF NOT EXISTS idx_evaluation_results_run_id ON evaluation_results(run_id);
-
--- Rollback (commented out - only for manual rollback reference)
--- DROP INDEX IF EXISTS idx_evaluation_results_run_id;
--- DROP TABLE IF EXISTS evaluation_results;
--- DROP TABLE IF EXISTS evaluation_runs;

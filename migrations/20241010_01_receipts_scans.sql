@@ -1,7 +1,6 @@
 -- Migration: Create receipts_scans table
 -- depends:
 
--- Apply
 DO $$ 
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'receipt_status') THEN
@@ -17,8 +16,3 @@ CREATE TABLE IF NOT EXISTS receipts_scans (
     categories_candidates JSONB,
     category VARCHAR
 );
-
--- Rollback (commented out - only for manual rollback reference)
--- DROP TABLE IF EXISTS receipts_scans;
--- DROP TYPE IF EXISTS receipt_status;
-
