@@ -2,7 +2,7 @@ from dataclasses import dataclass
 import datetime
 from enum import StrEnum
 from pydantic import BaseModel, Field
-from typing import List
+from typing import List, Optional
 
 class ReceiptsScanStatus(StrEnum):
     """Enumeration for the status of a receipt scan"""
@@ -123,6 +123,13 @@ class EvaluationMetrics(BaseModel):
     extracted_total: float = Field(..., description="Total amount as extracted from receipt.")
     total_difference: float = Field(..., description="Absolute difference between products_sum and extracted_total.")
     is_consistent: bool = Field(..., description="Whether products_sum matches extracted_total within tolerance.")
+    # Ground truth comparison metrics (optional, only present when comparing against ground truth)
+    vendor_correct: Optional[bool] = Field(default=None, description="Whether extracted vendor matches ground truth.")
+    date_correct: Optional[bool] = Field(default=None, description="Whether extracted date matches ground truth.")
+    total_correct: Optional[bool] = Field(default=None, description="Whether extracted total is within tolerance of ground truth.")
+    total_accuracy: Optional[float] = Field(default=None, description="Accuracy of total: 1.0 - (abs(extracted - expected) / expected).")
+    product_count_correct: Optional[bool] = Field(default=None, description="Whether product count matches ground truth.")
+    products_accuracy: Optional[float] = Field(default=None, description="Percentage of products matched correctly.")
 
 
 class EvaluationResult(BaseModel):
@@ -146,3 +153,25 @@ class EvaluationRunSummary(BaseModel):
     avg_field_completeness: float = Field(..., description="Average field completeness across all files.")
     avg_consistency_rate: float = Field(..., description="Percentage of files with consistent totals.")
     results: List[EvaluationResult] = Field(..., description="Individual results for each file.")
+    # Ground truth comparison metrics (optional, only present when comparing against ground truth)
+    avg_vendor_accuracy: Optional[float] = Field(default=None, description="Percentage of correct vendor extractions.")
+    avg_date_accuracy: Optional[float] = Field(default=None, description="Percentage of correct date extractions.")
+    avg_total_accuracy: Optional[float] = Field(default=None, description="Average total accuracy across all files.")
+    avg_products_accuracy: Optional[float] = Field(default=None, description="Average products accuracy across all files.")
+
+
+class GroundTruthEntry(BaseModel):
+    """Internal model for database operations - represents a ground truth record"""
+    id: int = Field(..., description="Unique identifier for this ground truth entry.")
+    filename: str = Field(..., description="Original filename of the receipt image.")
+    minio_object_key: str = Field(..., description="MinIO object key where the image is stored.")
+    ground_truth: TransactionModel = Field(..., description="The verified/corrected transaction data.")
+    created_at: datetime.datetime = Field(..., description="When this entry was created.")
+    updated_at: datetime.datetime = Field(..., description="When this entry was last updated.")
+
+
+class GroundTruthResponse(BaseModel):
+    """API response model for ground truth operations"""
+    id: int = Field(..., description="Unique identifier for this ground truth entry.")
+    filename: str = Field(..., description="Original filename of the receipt image.")
+    ground_truth: TransactionModel = Field(..., description="The verified/corrected transaction data.")

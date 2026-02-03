@@ -11,8 +11,6 @@ from PIL import Image
 class OCRService(ABC):
     def __init__(self):
         self.client = OpenAI()
-        self.input_dir = os.getenv("INPUT_DIR", "input/")
-        self.output_dir = os.getenv("OUTPUT_DIR", "output/")
         self.prompt = (
             "Analyze this Polish fiscal receipt. Extract: "
             "1. Vendor name. "
