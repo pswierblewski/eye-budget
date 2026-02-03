@@ -199,3 +199,4 @@ preprocessed/
 
 # Yoyo migrations
 .yoyo-migrate
+yoyo.ini

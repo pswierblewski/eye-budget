@@ -260,9 +260,9 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Rollback
-DROP FUNCTION IF EXISTS insert_category(TEXT, TEXT, TEXT, category_type);
-DROP TABLE IF EXISTS categories;
-DROP TABLE IF EXISTS category_groups;
-DROP TYPE IF EXISTS category_type;
+-- Rollback (commented out - only for manual rollback reference)
+-- DROP FUNCTION IF EXISTS insert_category(TEXT, TEXT, TEXT, category_type);
+-- DROP TABLE IF EXISTS categories CASCADE;
+-- DROP TABLE IF EXISTS category_groups CASCADE;
+-- DROP TYPE IF EXISTS category_type;
 

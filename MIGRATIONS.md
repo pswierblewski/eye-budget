@@ -73,15 +73,23 @@ yoyo mark
        name VARCHAR(255) NOT NULL
    );
    
-   -- Rollback
-   DROP TABLE IF EXISTS example;
+   -- Rollback (commented out - only for manual rollback reference)
+   -- DROP TABLE IF EXISTS example;
    ```
+
+   **Important:** Rollback statements MUST be commented out! Yoyo executes ALL
+   SQL statements in the file during `apply`. The `-- Rollback` comment is just
+   documentation - it doesn't create a separate rollback section.
 
 ### Migration File Structure
 
 - **`-- depends:`** - List the migration(s) this one depends on (uses filename without extension)
-- **`-- Apply`** - SQL commands to apply the migration (moving forward)
-- **`-- Rollback`** - SQL commands to undo the migration (moving backward)
+- **`-- Apply`** - Comment marker before SQL commands to apply (just documentation)
+- **`-- Rollback`** - Comment marker before rollback statements (MUST be commented out!)
+
+**Warning:** Yoyo executes ALL uncommented SQL statements during `apply`. The
+`-- Apply` and `-- Rollback` comments are just for documentation - they don't
+create separate sections. Always comment out rollback statements!
 
 ### Naming Convention
 
@@ -101,11 +109,12 @@ The project currently has these migrations:
 ## Best Practices
 
 1. **Always test migrations** in a development database first
-2. **Write rollback scripts** for every migration (makes it easy to undo mistakes)
-3. **Keep migrations small** - one logical change per migration
-4. **Never edit applied migrations** - create a new migration instead
-5. **Use transactions implicitly** - Yoyo wraps each migration in a transaction automatically
-6. **Check dependencies** - ensure migrations run in the correct order
+2. **Document rollback scripts** for every migration (commented out, for manual reference)
+3. **Comment out rollback statements** - Yoyo executes ALL SQL in the file during apply!
+4. **Keep migrations small** - one logical change per migration
+5. **Never edit applied migrations** - create a new migration instead
+6. **Use transactions implicitly** - Yoyo wraps each migration in a transaction automatically
+7. **Check dependencies** - ensure migrations run in the correct order
 
 ## Migration Workflow
 
@@ -171,14 +180,14 @@ yoyo new -m "add_processed_date_to_receipts"
 
 Edit `migrations/YYYYMMDD_NN_add_processed_date_to_receipts.sql`:
 ```sql
--- Migration: Add processed_date column to receipts-scans
+-- Migration: Add processed_date column to receipts_scans
 -- depends: 20241010_03_products
 
 -- Apply
-ALTER TABLE "receipts-scans" ADD COLUMN processed_date TIMESTAMP;
+ALTER TABLE receipts_scans ADD COLUMN processed_date TIMESTAMP;
 
--- Rollback
-ALTER TABLE "receipts-scans" DROP COLUMN IF EXISTS processed_date;
+-- Rollback (commented out - only for manual rollback reference)
+-- ALTER TABLE receipts_scans DROP COLUMN IF EXISTS processed_date;
 ```
 
 Apply:

@@ -1,4 +1,4 @@
--- Migration: Create receipts-scans table
+-- Migration: Create receipts_scans table
 -- depends:
 
 -- Apply
@@ -9,7 +9,7 @@ BEGIN
     END IF;
 END $$;
 
-CREATE TABLE IF NOT EXISTS "receipts-scans" (
+CREATE TABLE IF NOT EXISTS receipts_scans (
     id SERIAL PRIMARY KEY,
     filename VARCHAR NOT NULL UNIQUE,
     status receipt_status NOT NULL DEFAULT 'new',
@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS "receipts-scans" (
     category VARCHAR
 );
 
--- Rollback
-DROP TABLE IF EXISTS "receipts-scans";
-DROP TYPE IF EXISTS receipt_status;
+-- Rollback (commented out - only for manual rollback reference)
+-- DROP TABLE IF EXISTS receipts_scans;
+-- DROP TYPE IF EXISTS receipt_status;
 

@@ -16,9 +16,9 @@ CREATE TABLE IF NOT EXISTS products_alternative_names (
 CREATE INDEX IF NOT EXISTS idx_products_alternative_names_product ON products_alternative_names(product);
 CREATE INDEX IF NOT EXISTS idx_products_alternative_names_name ON products_alternative_names(name);
 
--- Rollback
-DROP INDEX IF EXISTS idx_products_alternative_names_name;
-DROP INDEX IF EXISTS idx_products_alternative_names_product;
-DROP TABLE IF EXISTS products_alternative_names;
-DROP TABLE IF EXISTS products;
+-- Rollback (commented out - only for manual rollback reference)
+-- DROP INDEX IF EXISTS idx_products_alternative_names_name;
+-- DROP INDEX IF EXISTS idx_products_alternative_names_product;
+-- DROP TABLE IF EXISTS products_alternative_names;
+-- DROP TABLE IF EXISTS products;
 

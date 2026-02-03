@@ -1,0 +1,16 @@
+[DEFAULT]
+# Database connection string
+# Format: postgresql://user:password@host:port/database
+
+# Simple local setup (adjust as needed):
+database = postgresql://${POSTGRESQL_USER}:${POSTGRESQL_PASSWORD}@${POSTGRESQL_HOST}:${POSTGRESQL_PORT}/${POSTGRESQL_DB}
+
+# Directory containing migration scripts
+sources = migrations
+
+# Batch mode: apply migrations without prompting
+batch_mode = false
+
+# Verbosity level
+verbosity = 2
+

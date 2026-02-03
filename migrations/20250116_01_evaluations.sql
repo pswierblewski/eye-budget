@@ -45,7 +45,7 @@ CREATE TABLE IF NOT EXISTS evaluation_results (
 -- Index for faster lookups by run_id
 CREATE INDEX IF NOT EXISTS idx_evaluation_results_run_id ON evaluation_results(run_id);
 
--- Rollback
+-- Rollback (commented out - only for manual rollback reference)
 -- DROP INDEX IF EXISTS idx_evaluation_results_run_id;
 -- DROP TABLE IF EXISTS evaluation_results;
 -- DROP TABLE IF EXISTS evaluation_runs;
