@@ -196,3 +196,7 @@ cython_debug/
 input/
 output/
 preprocessed/
+
+# Yoyo migrations
+.yoyo-migrate
+yoyo.ini

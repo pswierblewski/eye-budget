@@ -23,7 +23,7 @@ class OCRService(ABC):
             "6. Transaction date (only date without time). Format: YYYY-MM-DD."
             "Return only valid data; omit missing fields."
         )
-        self.model = os.getenv("MODEL", "gpt-4.1")
+        self.model = os.getenv("MODEL", "gpt-5.2")
         
     def dispose(self):
         """
@@ -51,7 +51,7 @@ class OCRService(ABC):
         ]
         response = self.client.responses.create(
             model=self.model,
-            temperature=0.0,
+            reasoning={"effort": "medium"},
             tools=tools,
             tool_choice={"type": "function", "name": tool_name},
             input=[
