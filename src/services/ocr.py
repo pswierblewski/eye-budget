@@ -67,6 +67,6 @@ class OCRService(ABC):
                 }
             ],
         )
-        response_arguments = response.output[0].arguments
+        response_arguments = response.output[1].arguments
         args = json.loads(response_arguments)
         return args

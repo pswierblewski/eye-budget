@@ -39,7 +39,12 @@ class EvaluationService:
         # Create evaluation run
         run_id = self.evaluations_repository.create_run(
             model_used=model_used,
-            config={"source": "ground_truth"}
+            config={
+                "source": "ground_truth",
+                "model": self.ocr_service.model,
+                "prompt": self.ocr_service.prompt,
+                "reasoning_effort": "medium",
+            }
         )
         
         # Load all ground truth entries
