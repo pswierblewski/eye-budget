@@ -9,8 +9,13 @@
             "name": "Python Debugger: Current File",
             "type": "debugpy",
             "request": "launch",
-            "program": "src/main.py",
-            "console": "integratedTerminal"
+            "program": "${workspaceFolder}/src/main.py",
+            "python": "${workspaceFolder}/venv/bin/python3",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            }
         }
     ]
 }
