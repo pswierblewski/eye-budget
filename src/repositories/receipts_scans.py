@@ -1,7 +1,17 @@
 from abc import ABC
+from dataclasses import dataclass
+
 from psycopg2 import extras
 
-from ..data import ReceiptsScanStatus
+from ..data import ReceiptsScanStatus, TransactionModel
+
+
+@dataclass
+class ProcessedScan:
+    id: int
+    filename: str
+    transaction_model: TransactionModel
+
 
 class ReceiptsScansRepository(ABC):
     def __init__(self, db_context):
@@ -84,6 +94,48 @@ class ReceiptsScansRepository(ABC):
             print("Failed to update result:", e)
             self.conn.rollback()
             return False
+
+    def get_scan_id_by_filename(self, filename: str) -> int | None:
+        if not self.conn:
+            return None
+        try:
+            with self.conn.cursor() as cursor:
+                cursor.execute(
+                    "SELECT id FROM " + self.table + " WHERE filename = %s",
+                    (filename,),
+                )
+                result = cursor.fetchone()
+                return result[0] if result else None
+        except Exception as e:
+            print("Failed to get scan id:", e)
+            return None
+
+    def get_processed_scans(self) -> list[ProcessedScan]:
+        """Returns all scans with status 'processed' that have a non-null result."""
+        if not self.conn:
+            return []
+        try:
+            with self.conn.cursor() as cursor:
+                cursor.execute(
+                    "SELECT id, filename, result FROM " + self.table +
+                    " WHERE status = %s AND result IS NOT NULL",
+                    (ReceiptsScanStatus.PROCESSED,),
+                )
+                rows = cursor.fetchall()
+                scans = []
+                for row in rows:
+                    try:
+                        scans.append(ProcessedScan(
+                            id=row[0],
+                            filename=row[1],
+                            transaction_model=TransactionModel(**row[2]),
+                        ))
+                    except Exception as e:
+                        print(f"Skipping scan id={row[0]}: failed to parse result — {e}")
+                return scans
+        except Exception as e:
+            print("Failed to fetch processed scans:", e)
+            return []
 
     def dispose(self):
         print("ReceiptsScansRepository disposed.")
