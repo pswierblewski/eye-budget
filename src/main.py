@@ -12,6 +12,24 @@ def process_receipts():
     my_app.dispose()
 
 
+@app.post("/receipts/sync-clients")
+def sync_clients() -> dict:
+    """
+    Push all already-processed receipts to every configured budget client
+    that hasn't received them yet.
+
+    Useful when a new client is added and you want to backfill its database
+    with all receipts that were processed before the client was configured.
+
+    Returns a summary: {client_name: {synced, skipped, failed}}.
+    """
+    my_app = App()
+    try:
+        return my_app.sync_clients()
+    finally:
+        my_app.dispose()
+
+
 @app.post("/receipts/evaluate", response_model=EvaluationRunSummary)
 def evaluate_receipts() -> EvaluationRunSummary:
     """

@@ -2,7 +2,7 @@ import os
 import sqlite3
 from abc import ABC
 
-from src.data import Split, Transaction
+from src.clients.my_money.models import Split, Transaction
 
 
 class MyMoneyDbContext(ABC):
@@ -53,7 +53,7 @@ class MyMoneyDbContext(ABC):
 
     def insert_payee(self, name):
         cursor = self.conn.cursor()
-        max_id = self.get_max_id_payees()   
+        max_id = self.get_max_id_payees()
         new_id = max_id + 1
         cursor.execute("INSERT INTO Payees (Id, Name) VALUES (?, ?)", (new_id, name))
         self.conn.commit()
@@ -63,14 +63,20 @@ class MyMoneyDbContext(ABC):
         cursor = self.conn.cursor()
         max_id = self.get_max_id_transactions()
         new_id = max_id + 1
-        cursor.execute("INSERT INTO Transactions (Id, Account, Date, Status, Payee, OriginalPayee, Category, Memo, Number, Transfer, FITID, Flags, Amount, SalesTax, TransferSplit) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (new_id, transaction.account, transaction.date, transaction.status, transaction.payee, transaction.original_payee, transaction.category, transaction.memo, transaction.number, transaction.transfer, transaction.fitid, transaction.flags, transaction.amount, transaction.sales_tax, transaction.transfer_split))
+        cursor.execute(
+            "INSERT INTO Transactions (Id, Account, Date, Status, Payee, OriginalPayee, Category, Memo, Number, Transfer, FITID, Flags, Amount, SalesTax, TransferSplit) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (new_id, transaction.account, transaction.date, transaction.status, transaction.payee, transaction.original_payee, transaction.category, transaction.memo, transaction.number, transaction.transfer, transaction.fitid, transaction.flags, transaction.amount, transaction.sales_tax, transaction.transfer_split)
+        )
         self.conn.commit()
         return new_id
 
     def insert_split(self, split: Split):
         cursor = self.conn.cursor()
         max_id = self.get_max_id_splits()
-        cursor.execute('INSERT INTO Splits ("Transaction", Id, Category, Payee, Amount, Transfer, Memo, Flags) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (split.transaction, max_id + 1, split.category, split.payee, split.amount, split.transfer, split.memo, split.flags))
+        cursor.execute(
+            'INSERT INTO Splits ("Transaction", Id, Category, Payee, Amount, Transfer, Memo, Flags) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            (split.transaction, max_id + 1, split.category, split.payee, split.amount, split.transfer, split.memo, split.flags)
+        )
         self.conn.commit()
 
     def update_transaction_flags(self, transaction_id: int, flags: int):
