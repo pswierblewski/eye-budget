@@ -88,6 +88,38 @@ class GroundTruthRepository(ABC):
             self.conn.rollback()
             return False
 
+    def get_by_filename(self, filename: str) -> Optional[GroundTruthEntry]:
+        """
+        Get a ground truth entry by filename.
+        
+        Args:
+            filename: The original filename to search for
+            
+        Returns:
+            GroundTruthEntry if found, None otherwise
+        """
+        if not self.conn:
+            print("No database connection available.")
+            return None
+        try:
+            with self.conn.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT id, filename, minio_object_key, ground_truth, created_at, updated_at
+                    FROM evaluation_ground_truth
+                    WHERE filename = %s
+                    LIMIT 1
+                    """,
+                    (filename,)
+                )
+                row = cursor.fetchone()
+                if row is None:
+                    return None
+                return self._row_to_entry(row)
+        except Exception as e:
+            print(f"Failed to get ground truth entry by filename: {e}")
+            return None
+
     def get_by_id(self, entry_id: int) -> Optional[GroundTruthEntry]:
         """
         Get a ground truth entry by ID.

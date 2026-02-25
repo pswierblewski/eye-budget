@@ -43,6 +43,8 @@ async def create_ground_truth(file: UploadFile = File(...)) -> GroundTruthRespon
         # Create ground truth entry
         result = my_app.create_ground_truth(filename, file_data)
         return result
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     finally:
