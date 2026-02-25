@@ -11,14 +11,18 @@ from PIL import Image
 class OCRService(ABC):
     def __init__(self):
         self.client = OpenAI()
-        self.input_dir = os.getenv("INPUT_DIR", "input/")
-        self.output_dir = os.getenv("OUTPUT_DIR", "output/")
         self.prompt = (
             "Analyze this Polish fiscal receipt. Extract: "
             "1. Vendor name. "
             "2. Title (PARAGON FISKALNY). "
             "3. Product list (name, quantity, price, unit_price). "
-            "4. Discounts, rabates, bonuses and other product-related discounts should be taken into account as well. Take them into the product list as a product with negative price."
+            "4. Discounts and rebates: "
+            "   - Lines like 'Uwzgl. rabat: -X,XX st. c Y,YY' mean a discount was applied to the preceding product. "
+            "     'st. c Y,YY' is the original price — use it as that product's price and unit_price. "
+            "     Add the discount as a separate product entry with negative price (e.g. name: 'Rabat (Uwzgl. rabat)', price: -X.XX). "
+            "   - Lines like 'Rabat <name>' with a negative amount in the right column are standalone discount lines — "
+            "     add them as a separate product entry with that negative price. "
+            "   - In all cases, discounts and rebates must appear in the product list with a negative price. "
             "5. Total amount. "
             "6. Transaction date (only date without time). Format: YYYY-MM-DD."
             "Return only valid data; omit missing fields."
@@ -69,6 +73,6 @@ class OCRService(ABC):
                 }
             ],
         )
-        response_arguments = response.output[0].arguments
+        response_arguments = response.output[1].arguments
         args = json.loads(response_arguments)
         return args
