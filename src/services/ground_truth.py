@@ -37,6 +37,10 @@ class GroundTruthService:
         Returns:
             GroundTruthResponse with the created entry
         """
+        # Check for duplicate filename
+        if self.ground_truth_repository.get_by_filename(filename) is not None:
+            raise ValueError(f"Ground truth entry for '{filename}' already exists.")
+
         # Generate a unique object key for MinIO
         temp_id = str(uuid.uuid4())[:8]
         object_key = f"ground-truth/{temp_id}_{filename}"
