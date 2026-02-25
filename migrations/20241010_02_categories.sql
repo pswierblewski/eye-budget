@@ -1,7 +1,6 @@
 -- Migration: Create categories system
 -- depends: 20241010_01_receipts_scans
 
--- Apply
 DO $$ 
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'category_type') THEN
@@ -259,10 +258,3 @@ BEGIN
 	PERFORM insert_category(NULL, 'Zwroty zakupów', 'Other Income', 'income');
 END;
 $$ LANGUAGE plpgsql;
-
--- Rollback (commented out - only for manual rollback reference)
--- DROP FUNCTION IF EXISTS insert_category(TEXT, TEXT, TEXT, category_type);
--- DROP TABLE IF EXISTS categories CASCADE;
--- DROP TABLE IF EXISTS category_groups CASCADE;
--- DROP TYPE IF EXISTS category_type;
-
