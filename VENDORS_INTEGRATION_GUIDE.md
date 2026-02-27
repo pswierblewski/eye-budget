@@ -125,8 +125,6 @@ vendor_mapping = self.vendors_service.process_vendor(transaction_model.vendor)
 vendor_id = self.vendors_repository.process_vendor_mapping(vendor_mapping)
 
 # You can now use vendor_id in your application logic
-# Continue with existing code...
-transaction_id = self.my_money_repository.insert_transaction(transaction_model)
 ```
 
 ## Example Mappings
