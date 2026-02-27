@@ -1,0 +1,70 @@
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  soketi:
+    image: quay.io/soketi/soketi:latest
+    environment:
+      SOKETI_DEFAULT_APP_ID: ${SOKETI_APP_ID:-1}
+      SOKETI_DEFAULT_APP_KEY: ${SOKETI_APP_KEY:-eye-budget-key}
+      SOKETI_DEFAULT_APP_SECRET: ${SOKETI_APP_SECRET:-eye-budget-secret}
+      SOKETI_DEBUG: "0"
+    ports:
+      - "6001:6001"
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://localhost:6001/ready', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+    env_file: .env
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      SOKETI_HOST: soketi
+      SOKETI_PORT: "6001"
+      SOKETI_APP_ID: ${SOKETI_APP_ID:-1}
+      SOKETI_APP_KEY: ${SOKETI_APP_KEY:-eye-budget-key}
+      SOKETI_APP_SECRET: ${SOKETI_APP_SECRET:-eye-budget-secret}
+      INPUT_DIR: /app/input
+      OUTPUT_DIR: /app/preprocessed
+    ports:
+      - "8080:8000"
+    volumes:
+      - ${INPUT_DIR}:/app/input:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+      soketi:
+        condition: service_healthy
+
+  celery-worker:
+    build:
+      context: ./backend
+    command: celery -A src.celery_app worker --loglevel=info --concurrency=2
+    env_file: .env
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      SOKETI_HOST: soketi
+      SOKETI_PORT: "6001"
+      SOKETI_APP_ID: ${SOKETI_APP_ID:-1}
+      SOKETI_APP_KEY: ${SOKETI_APP_KEY:-eye-budget-key}
+      SOKETI_APP_SECRET: ${SOKETI_APP_SECRET:-eye-budget-secret}
+      INPUT_DIR: /app/input
+      OUTPUT_DIR: /app/preprocessed
+    volumes:
+      - ${INPUT_DIR}:/app/input:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+      soketi:
+        condition: service_healthy
