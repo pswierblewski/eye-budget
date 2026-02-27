@@ -209,8 +209,7 @@ vendor_id = self.vendors_repository.process_vendor_mapping(vendor_mapping)
 product_mappings = self.products_service.process_products(transaction_model.products)
 self.products_repository.process_product_mappings(product_mappings.products)
 
-# Continue with existing code...
-transaction_id = self.my_money_repository.insert_transaction(transaction_model)
+# Continue with your application logic...
 ```
 
 ## Benefits

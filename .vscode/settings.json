@@ -1,3 +1,10 @@
 {
-    "python.defaultInterpreterPath": "${workspaceFolder}/venv/bin/python"
+    "python.defaultInterpreterPath": "${workspaceFolder}/venv/bin/python",
+    "chat.tools.terminal.autoApprove": {
+        "mkdir": true,
+        "npm install": true,
+        "npx tsc": true,
+        "pip": true,
+        "/home/pawel/eye-budget/venv/bin/python": true
+    }
 }

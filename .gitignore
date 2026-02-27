@@ -192,11 +192,21 @@ cython_debug/
 #  exclude from AI features like autocomplete and code analysis. Recommended for sensitive data
 #  refer to https://docs.cursor.com/context/ignore-files
 .cursorignore
-.cursorindexingignore\
-input/
-output/
-preprocessed/
+.cursorindexingignore
+
+# Backend data dirs
+backend/input/
+backend/output/
+backend/preprocessed/
+backend/sqlite/
+backend/.env
 
 # Yoyo migrations
 .yoyo-migrate
+backend/.yoyo-migrate
+
+# Frontend
+frontend/node_modules/
+frontend/.next/
+frontend/.env.local
 yoyo.ini
