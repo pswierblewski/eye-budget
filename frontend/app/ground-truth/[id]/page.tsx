@@ -14,7 +14,7 @@ function ReceiptImage({ entryId }: { entryId: number }) {
   if (error) {
     return (
       <div className="flex items-center justify-center rounded-xl border border-dashed border-gray-300 bg-gray-50 h-64 text-gray-400 text-sm">
-        Image not available
+        Obraz niedostępny
       </div>
     );
   }
@@ -94,7 +94,7 @@ export default function GroundTruthEditPage({
     try {
       parsed = JSON.parse(form);
     } catch {
-      setParseError("Invalid JSON – please fix before saving.");
+      setParseError("Nieprawidłowy JSON – popraw przed zapisem.");
       return;
     }
     saveMutation.mutate(parsed);
@@ -102,16 +102,16 @@ export default function GroundTruthEditPage({
 
   if (isLoading) {
     return (
-      <div className="text-sm text-gray-400 py-16 text-center">Loading…</div>
+      <div className="text-sm text-gray-400 py-16 text-center">Ładowanie…</div>
     );
   }
 
   if (!entry) {
     return (
       <div className="text-sm text-red-500 py-16 text-center">
-        Entry not found.{" "}
+        Nie znaleziono wpisu.{" "}
         <Link href="/ground-truth" className="underline">
-          Back
+          Wróć
         </Link>
       </div>
     );
@@ -124,7 +124,7 @@ export default function GroundTruthEditPage({
           href="/ground-truth"
           className="text-sm text-gray-500 hover:text-gray-700"
         >
-          ← Ground Truth
+          ← Dane wzorcowe
         </Link>
         <h1 className="text-xl font-bold text-gray-900 flex-1 truncate">
           {entry.filename}
@@ -140,11 +140,10 @@ export default function GroundTruthEditPage({
         {/* JSON editor */}
         <div className="flex-1 space-y-2 min-w-0">
           <label className="text-sm font-medium text-gray-700">
-            Transaction JSON
+            JSON transakcji
           </label>
           <p className="text-xs text-gray-400">
-            Edit the ground truth data directly. Must be valid JSON matching the
-            TransactionModel schema.
+            Edytuj dane wzorcowe bezpośrednio. Musi być poprawny JSON zgodny ze schematem TransactionModel.
           </p>
           <textarea
             value={form}
@@ -158,7 +157,7 @@ export default function GroundTruthEditPage({
           )}
           {saveMutation.isError && (
             <p className="text-sm text-red-500">
-              Save failed. Check the data and try again.
+              Zapis nieudany. Sprawdź dane i spróbuj ponownie.
             </p>
           )}
           <button
@@ -166,7 +165,7 @@ export default function GroundTruthEditPage({
             disabled={saveMutation.isPending}
             className="px-5 py-2.5 rounded-md bg-[#635bff] text-white font-medium text-sm hover:bg-[#5248db] disabled:opacity-50 transition-colors"
           >
-            {saveMutation.isPending ? "Saving…" : "Save changes"}
+            {saveMutation.isPending ? "Zapisywanie…" : "Zapisz zmiany"}
           </button>
         </div>
       </div>

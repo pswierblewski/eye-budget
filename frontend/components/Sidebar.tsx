@@ -7,13 +7,15 @@ import {
   ReceiptText,
   BookMarked,
   FlaskConical,
+  Landmark,
 } from "lucide-react";
 
 const navItems = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/receipts", label: "Receipts", icon: ReceiptText },
-  { href: "/ground-truth", label: "Ground Truth", icon: BookMarked },
-  { href: "/evaluations", label: "Evaluations", icon: FlaskConical },
+  { href: "/", label: "Panel główny", icon: LayoutDashboard },
+  { href: "/receipts", label: "Paragony", icon: ReceiptText },
+  { href: "/bank-transactions", label: "Transakcje bankowe", icon: Landmark },
+  { href: "/ground-truth", label: "Dane wzorcowe", icon: BookMarked },
+  { href: "/evaluations", label: "Ewaluacje", icon: FlaskConical },
 ];
 
 export function Sidebar() {

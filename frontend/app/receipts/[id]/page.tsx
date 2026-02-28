@@ -2,13 +2,13 @@
 
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getReceipt, listCategories, confirmReceipt, reopenReceipt } from "@/lib/api";
+import { getReceipt, listCategories, confirmReceipt, reopenReceipt, getBankTxCandidates, linkBankToReceipt, unlinkBankTransaction } from "@/lib/api";
 import { ReceiptImageViewer } from "@/components/ReceiptImageViewer";
 import { ProductCategoryRow } from "@/components/ProductCategoryRow";
 import { StatusBadge } from "@/components/StatusBadge";
 import { VendorDropdown } from "@/components/VendorDropdown";
 import { ProductDropdown } from "@/components/ProductDropdown";
-import { ProductItem } from "@/lib/types";
+import { BankTxCandidateItem, ProductItem } from "@/lib/types";
 import Link from "next/link";
 
 /** Convert YYYY-MM-DD (backend) → DD-MM-YYYY (display) */
@@ -111,18 +111,44 @@ export default function ReceiptReviewPage({
     },
   });
 
+  const [showBankCandidates, setShowBankCandidates] = useState(false);
+
+  const { data: bankCandidates = [], isFetching: bankCandidatesLoading } = useQuery<BankTxCandidateItem[]>({
+    queryKey: ["receipt-bank-candidates", scanId],
+    queryFn: () => getBankTxCandidates(scanId),
+    enabled: showBankCandidates,
+  });
+
+  const linkBankMutation = useMutation({
+    mutationFn: (bankTxId: number) =>
+      linkBankToReceipt(bankTxId, scan!.transaction!.id),
+    onSuccess: (updated) => {
+      // updated is BankTransactionDetail — but we re-fetch the scan to get bank_link
+      queryClient.invalidateQueries({ queryKey: ["receipt", scanId] });
+      queryClient.invalidateQueries({ queryKey: ["receipt-bank-candidates", scanId] });
+      setShowBankCandidates(false);
+    },
+  });
+
+  const unlinkBankMutation = useMutation({
+    mutationFn: (bankTxId: number) => unlinkBankTransaction(bankTxId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["receipt", scanId] });
+    },
+  });
+
   if (scanLoading) {
     return (
-      <div className="text-sm text-gray-400 py-16 text-center">Loading…</div>
+      <div className="text-sm text-gray-400 py-16 text-center">Ładowanie…</div>
     );
   }
 
   if (!scan) {
     return (
       <div className="text-sm text-red-500 py-16 text-center">
-        Receipt not found.{" "}
+        Nie znaleziono paragonu.{" "}
         <Link href="/receipts" className="underline">
-          Back
+          Wróć
         </Link>
       </div>
     );
@@ -190,7 +216,7 @@ export default function ReceiptReviewPage({
           href="/receipts"
           className="text-sm text-gray-500 hover:text-gray-700"
         >
-          ← Receipts
+          ← Paragony
         </Link>
         <h1 className="text-xl font-bold text-gray-900 flex-1 truncate">
           {scan.filename}
@@ -208,13 +234,13 @@ export default function ReceiptReviewPage({
             /* Confirmed — read-only view */
             <>
               <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-2.5 flex items-center justify-between gap-2">
-                <span className="text-green-600 font-semibold text-sm">✓ Confirmed</span>
+                <span className="text-green-600 font-semibold text-sm">✓ Potwierdzono</span>
                 <button
                   onClick={() => reopenMutation.mutate()}
                   disabled={reopenMutation.isPending}
                   className="text-sm text-gray-500 hover:text-gray-700 underline disabled:opacity-50"
                 >
-                  {reopenMutation.isPending ? "Reopening…" : "Edit receipt"}
+                  {reopenMutation.isPending ? "Otwieranie…" : "Edytuj paragon"}
                 </button>
               </div>
 
@@ -232,7 +258,7 @@ export default function ReceiptReviewPage({
               </div>
 
               <div className="space-y-2">
-                <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Products</h2>
+                <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Produkty</h2>
                 {scan.transaction.items.map((item) => {
                   const cat = allCategories.find((c) => c.id === item.category_id);
                   const catLabel = cat
@@ -257,6 +283,98 @@ export default function ReceiptReviewPage({
                   );
                 })}
               </div>
+
+              {/* Bank transaction link section */}
+              <div className="rounded-xl border border-gray-200 p-4 space-y-2">
+                <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
+                  Transakcja bankowa
+                </h2>
+
+                {scan.bank_link ? (
+                  /* Existing link */
+                  <div className="flex items-center justify-between gap-4 rounded-lg border border-green-200 bg-green-50 px-3 py-2">
+                    <Link
+                      href="/bank-transactions"
+                      className="text-xs space-y-0.5 hover:underline min-w-0"
+                    >
+                      <p className="font-medium text-[#635bff]">
+                        {scan.bank_link.counterparty ?? "—"}
+                      </p>
+                      <p className="text-gray-500">
+                        {scan.bank_link.booking_date} · {scan.bank_link.amount.toFixed(2)} PLN
+                      </p>
+                    </Link>
+                    <button
+                      disabled={unlinkBankMutation.isPending}
+                      onClick={() => unlinkBankMutation.mutate(scan.bank_link!.bank_transaction_id)}
+                      className="shrink-0 px-2 py-1 text-[10px] rounded-md border border-red-300
+                                 text-red-600 hover:bg-red-50 transition-colors disabled:opacity-40"
+                    >
+                      {unlinkBankMutation.isPending ? "…" : "Odepnij"}
+                    </button>
+                  </div>
+                ) : showBankCandidates ? (
+                  /* Candidate list */
+                  bankCandidatesLoading ? (
+                    <p className="text-xs text-gray-400 animate-pulse">Szukanie…</p>
+                  ) : bankCandidates.length === 0 ? (
+                    <p className="text-xs text-gray-400 italic">
+                      Nie znaleziono pasujących transakcji bankowych.
+                    </p>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {bankCandidates.map((c) => {
+                        const scoreLabel =
+                          c.match_score >= 3 ? "kwota + data + sklep" : "kwota + data";
+                        const scoreColor =
+                          c.match_score >= 3
+                            ? "bg-green-100 text-green-700"
+                            : "bg-yellow-100 text-yellow-700";
+                        return (
+                          <div
+                            key={c.bank_transaction_id}
+                            className="flex items-center justify-between gap-3 rounded-lg border
+                                       border-gray-200 bg-white px-3 py-2"
+                          >
+                            <div className="text-xs space-y-0.5 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <p className="font-medium text-gray-800 truncate">
+                                  {c.counterparty ?? "—"}
+                                </p>
+                                <span
+                                  className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${scoreColor}`}
+                                >
+                                  {scoreLabel}
+                                </span>
+                              </div>
+                              <p className="text-gray-500">
+                                {c.booking_date} · {c.amount.toFixed(2)} PLN
+                              </p>
+                            </div>
+                            <button
+                              disabled={linkBankMutation.isPending}
+                              onClick={() => linkBankMutation.mutate(c.bank_transaction_id)}
+                              className="shrink-0 px-2 py-1 text-[10px] rounded-md bg-[#635bff]
+                                         text-white hover:bg-[#4b44cc] transition-colors disabled:opacity-40"
+                            >
+                              {linkBankMutation.isPending ? "…" : "Powiąż"}
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )
+                ) : (
+                  /* Trigger button */
+                  <button
+                    onClick={() => setShowBankCandidates(true)}
+                    className="text-xs px-3 py-1.5 rounded-md border border-[#635bff] text-[#635bff]
+                               hover:bg-[#635bff]/10 transition-colors"
+                  >
+                    Znajdź pasującą transakcję bankową
+                  </button>
+                )}
+              </div>
             </>
           ) : (
             /* Editable — assign categories (and optionally edit OCR fields) */
@@ -264,7 +382,7 @@ export default function ReceiptReviewPage({
               {/* Top-level OCR fields — always editable */}
               <div className="rounded-xl border border-gray-200 p-4 space-y-2">
                 <label className="block text-xs text-gray-600">
-                  Vendor
+                  Sklep
                   <input
                     type="text"
                     value={editedVendor}
@@ -273,14 +391,14 @@ export default function ReceiptReviewPage({
                   />
                 </label>
                 <div className="block text-xs text-gray-600">
-                  Normalized as
+                  Normalizuj jako
                   <VendorDropdown
                     value={editedNormalizedVendor}
                     onChange={setEditedNormalizedVendor}
                   />
                 </div>
                 <label className="block text-xs text-gray-600">
-                  Date
+                  Data
                   <input
                     type="date"
                     value={toIsoDate(editedDate)}
@@ -289,7 +407,7 @@ export default function ReceiptReviewPage({
                   />
                 </label>
                 <label className="block text-xs text-gray-600">
-                  Total (PLN)
+                  Suma (PLN)
                   <input
                     type="text"
                     inputMode="decimal"
@@ -302,7 +420,7 @@ export default function ReceiptReviewPage({
 
               <div className="space-y-2">
                 <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
-                  Assign categories
+                  Przypisz kategorie
                 </h2>
                 {products.map((product, index) => (
                   <div key={product.name} className="rounded-lg border border-gray-200 bg-white">
@@ -320,7 +438,7 @@ export default function ReceiptReviewPage({
                     {/* Numeric field editors */}
                     <div className="flex gap-2 px-3 pb-2 border-t border-gray-100">
                         <label className="flex-1 text-xs text-gray-600 pt-2">
-                          Qty
+                          Ilość
                           <input
                             type="number"
                             step="0.001"
@@ -334,7 +452,7 @@ export default function ReceiptReviewPage({
                           />
                         </label>
                         <label className="flex-1 text-xs text-gray-600 pt-2">
-                          Unit price
+                          Cena jedn.
                           <input
                             type="text"
                             inputMode="decimal"
@@ -344,7 +462,7 @@ export default function ReceiptReviewPage({
                           />
                         </label>
                         <label className="flex-1 text-xs text-gray-600 pt-2">
-                          Total price
+                          Cena łączna
                           <input
                             type="text"
                             inputMode="decimal"
@@ -358,7 +476,7 @@ export default function ReceiptReviewPage({
                     {/* Normalized product name */}
                     <div className="px-3 pb-2 border-t border-gray-100">
                       <div className="block text-xs text-gray-600 pt-2">
-                        Normalized as
+                        Normalizuj jako
                         <ProductDropdown
                           value={editedNormalizedProducts[product.name] ?? ""}
                           onChange={(name) =>
@@ -378,7 +496,6 @@ export default function ReceiptReviewPage({
                         price={product.price}
                         quantity={product.quantity}
                         candidates={candidatesMap[product.name] ?? []}
-                        allCategories={allCategories}
                         selectedCategoryId={getSelection(product.name)}
                         showHeader={false}
                         onChange={(categoryId) =>
@@ -405,12 +522,12 @@ export default function ReceiptReviewPage({
                 }}
                 className="mt-2 w-full py-2.5 rounded-md bg-[#635bff] text-white font-medium text-sm hover:bg-[#5248db] disabled:opacity-50 transition-colors"
               >
-                {confirmMutation.isPending ? "Confirming…" : "Confirm receipt"}
+                {confirmMutation.isPending ? "Zapisywanie…" : "Potwierdź paragon"}
               </button>
 
               {confirmMutation.isError && (
                 <p className="text-sm text-red-500 text-center">
-                  Failed to confirm. Please try again.
+                  Błąd zapisu. Spróbuj ponownie.
                 </p>
               )}
             </>

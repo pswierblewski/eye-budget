@@ -1,3 +1,4 @@
+import asyncio
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -28,7 +29,9 @@ def run_evaluation_task(self):
         )
 
     try:
-        summary = my_app.run(evaluate=True, on_progress=on_progress)
+        summary = asyncio.run(
+            my_app.evaluation_service.run_evaluation_async(on_progress=on_progress)
+        )
         pusher.trigger(
             f"evaluation-{task_id}",
             "evaluation.done",

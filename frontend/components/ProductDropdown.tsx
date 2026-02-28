@@ -114,7 +114,7 @@ export function ProductDropdown({ value, onChange }: ProductDropdownProps) {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Search products…"
+              placeholder="Szukaj produktów…"
               className="flex-1 text-sm border border-gray-200 rounded-md px-2 py-1
                 focus:outline-none focus:ring-2 focus:ring-[#635bff]"
             />
@@ -126,7 +126,7 @@ export function ProductDropdown({ value, onChange }: ProductDropdownProps) {
                 bg-[#635bff] text-white disabled:opacity-40 disabled:cursor-not-allowed
                 hover:bg-[#4f46e5] transition-colors"
             >
-              {addMutation.isPending ? "Adding…" : "Add"}
+              {addMutation.isPending ? "Dodawanie…" : "Dodaj"}
             </button>
           </div>
 
@@ -135,8 +135,8 @@ export function ProductDropdown({ value, onChange }: ProductDropdownProps) {
             {filtered.length === 0 ? (
               <li className="px-3 py-2 text-xs text-gray-400">
                 {search.trim()
-                  ? `No match — press Add to create "${search.trim()}"`
-                  : "No products yet"}
+                  ? `Brak wyników — kliknij Dodaj, aby utworzyć „${search.trim()}"`
+                  : "Brak produktów"}
               </li>
             ) : (
               filtered.map((p) => (

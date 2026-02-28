@@ -5,6 +5,7 @@ from src.app import App
 from src.celery_app import celery_app
 from src.tasks.process_receipts import process_receipts_task
 from src.tasks.run_evaluation import run_evaluation_task
+from src.tasks.categorize_bank_transactions import categorize_bank_transactions_task
 from src.data import (
     EvaluationRunSummary,
     GroundTruthResponse,
@@ -12,11 +13,19 @@ from src.data import (
     ReceiptScanListItem,
     ReceiptScanDetail,
     CategoryItem,
+    CreateCategoryRequest,
     ConfirmReceiptRequest,
     EvaluationRunListItem,
     EvaluationRunDetail,
     VendorItem,
     NormalizedProductItem,
+    BankTransactionListItem,
+    BankTransactionDetail,
+    BankImportResult,
+    ConfirmBankTransactionRequest,
+    ReceiptCandidateItem,
+    BankTxCandidateItem,
+    LinkReceiptRequest,
 )
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.responses import StreamingResponse
@@ -202,12 +211,35 @@ def create_product(request: CreateProductRequest) -> NormalizedProductItem:
 # Categories
 # ------------------------------------------------------------------
 
+@app.get("/categories/groups", response_model=list[str])
+def list_category_groups() -> list[str]:
+    """Return all distinct category group names."""
+    my_app = App()
+    try:
+        return my_app.get_all_category_groups()
+    finally:
+        my_app.dispose()
+
+
 @app.get("/categories", response_model=list[CategoryItem])
 def list_categories() -> list[CategoryItem]:
     """Return all expense categories with parent and group context."""
     my_app = App()
     try:
         return my_app.get_all_expense_categories()
+    finally:
+        my_app.dispose()
+
+
+@app.post("/categories", response_model=CategoryItem, status_code=201)
+def create_category(request: CreateCategoryRequest) -> CategoryItem:
+    """Create a new expense category."""
+    my_app = App()
+    try:
+        result = my_app.create_category(request.name, request.group_name, request.parent_id)
+        if result is None:
+            raise HTTPException(status_code=500, detail="Failed to create category")
+        return result
     finally:
         my_app.dispose()
 
@@ -319,5 +351,131 @@ def list_ground_truth() -> list[GroundTruthResponse]:
     my_app = App()
     try:
         return my_app.list_ground_truth()
+    finally:
+        my_app.dispose()
+
+
+# ------------------------------------------------------------------
+# Bank Transactions (CSV import)
+# ------------------------------------------------------------------
+
+@app.post("/bank-transactions/import", response_model=BankImportResult, status_code=201)
+async def import_bank_transactions(file: UploadFile = File(...)) -> BankImportResult:
+    """Import a Pekao SA CSV export. New transactions are deduplicated by reference number.
+    LLM categorization runs in the background via Celery — poll /tasks/{task_id} for status."""
+    my_app = App()
+    try:
+        data = await file.read()
+        result, new_ids = my_app.import_bank_csv(data)
+        if new_ids:
+            task = categorize_bank_transactions_task.delay(new_ids)
+            result.task_id = task.id
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        my_app.dispose()
+
+
+@app.get("/bank-transactions", response_model=list[BankTransactionListItem])
+def list_bank_transactions(status: str | None = None) -> list[BankTransactionListItem]:
+    """List bank transactions, optionally filtered by status (to_confirm | done)."""
+    my_app = App()
+    try:
+        return my_app.get_all_bank_transactions(status)
+    finally:
+        my_app.dispose()
+
+
+@app.get("/bank-transactions/{tx_id}", response_model=BankTransactionDetail)
+def get_bank_transaction(tx_id: int) -> BankTransactionDetail:
+    """Get full detail for a single bank transaction including LLM category candidates."""
+    my_app = App()
+    try:
+        result = my_app.get_bank_transaction_by_id(tx_id)
+        if result is None:
+            raise HTTPException(status_code=404, detail=f"Bank transaction {tx_id} not found")
+        return result
+    finally:
+        my_app.dispose()
+
+
+@app.post("/bank-transactions/{tx_id}/confirm", response_model=BankTransactionDetail)
+def confirm_bank_transaction(
+    tx_id: int, request: ConfirmBankTransactionRequest
+) -> BankTransactionDetail:
+    """Confirm a category for a bank transaction and mark it as done."""
+    my_app = App()
+    try:
+        result = my_app.confirm_bank_transaction(tx_id, request)
+        if result is None:
+            raise HTTPException(status_code=404, detail=f"Bank transaction {tx_id} not found")
+        return result
+    finally:
+        my_app.dispose()
+
+
+@app.post("/bank-transactions/{tx_id}/reopen", response_model=BankTransactionDetail)
+def reopen_bank_transaction(tx_id: int) -> BankTransactionDetail:
+    """Reset a confirmed bank transaction back to to_confirm for re-categorization."""
+    my_app = App()
+    try:
+        result = my_app.reopen_bank_transaction(tx_id)
+        if result is None:
+            raise HTTPException(status_code=404, detail=f"Bank transaction {tx_id} not found")
+        return result
+    finally:
+        my_app.dispose()
+
+
+# ------------------------------------------------------------------
+# Bank ↔ Receipt linking
+# ------------------------------------------------------------------
+
+@app.get("/bank-transactions/{tx_id}/receipt-candidates", response_model=list[ReceiptCandidateItem])
+def get_receipt_candidates(tx_id: int) -> list[ReceiptCandidateItem]:
+    """Return receipt_transaction candidates that could be linked to this bank transaction."""
+    my_app = App()
+    try:
+        return my_app.get_receipt_candidates_for_bank_tx(tx_id)
+    finally:
+        my_app.dispose()
+
+
+@app.get("/receipts/{scan_id}/bank-transaction-candidates", response_model=list[BankTxCandidateItem])
+def get_bank_tx_candidates(scan_id: int) -> list[BankTxCandidateItem]:
+    """Return bank_transaction candidates that could be linked to this receipt scan."""
+    my_app = App()
+    try:
+        return my_app.get_bank_tx_candidates_for_receipt(scan_id)
+    finally:
+        my_app.dispose()
+
+
+@app.post("/bank-transactions/{tx_id}/link", response_model=BankTransactionDetail)
+def link_bank_to_receipt(tx_id: int, request: LinkReceiptRequest) -> BankTransactionDetail:
+    """Link a bank transaction to a receipt transaction."""
+    my_app = App()
+    try:
+        result = my_app.link_bank_to_receipt(tx_id, request)
+        if result is None:
+            raise HTTPException(
+                status_code=409,
+                detail="Link already exists or the receipt_transaction_id is already linked to another bank transaction.",
+            )
+        return result
+    finally:
+        my_app.dispose()
+
+
+@app.delete("/bank-transactions/{tx_id}/link", response_model=BankTransactionDetail)
+def unlink_bank_transaction(tx_id: int) -> BankTransactionDetail:
+    """Remove the link between a bank transaction and a receipt."""
+    my_app = App()
+    try:
+        result = my_app.unlink_bank_transaction(tx_id)
+        if result is None:
+            raise HTTPException(status_code=404, detail=f"Bank transaction {tx_id} not found")
+        return result
     finally:
         my_app.dispose()

@@ -26,10 +26,20 @@ type ProgressState = {
   errorMsg?: string;
 };
 
+const STATUS_LEGEND = [
+  { status: "new", description: "Paragon dodany do systemu, oczekuje na przetworzenie." },
+  { status: "processing", description: "Trwa rozpoznawanie tekstu (OCR) i analiza paragonu." },
+  { status: "processed", description: "Analiza zakończona, oczekuje na weryfikację kategorii." },
+  { status: "to_confirm", description: "Wymaga ręcznego potwierdzenia lub poprawienia kategorii." },
+  { status: "done", description: "Paragon zweryfikowany i w pełni przetworzony." },
+  { status: "failed", description: "Przetwarzanie nie powiodło się — sprawdź plik i spróbuj ponownie." },
+] as const;
+
 export default function ReceiptsPage() {
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [progress, setProgress] = useState<ProgressState | null>(null);
+  const [legendOpen, setLegendOpen] = useState(false);
   const channelRef = useRef<ReturnType<ReturnType<typeof getPusher>["subscribe"]> | null>(null);
 
   // Cleanup Pusher subscription on unmount
@@ -84,7 +94,7 @@ export default function ReceiptsPage() {
   const columns: Column<ReceiptScanListItem>[] = [
     { header: "ID", accessor: "id", className: "w-16 text-gray-400 font-mono", sortValue: (r) => r.id },
     {
-      header: "File",
+      header: "Plik",
       accessor: (r) => (
         <Link
           href={`/receipts/${r.id}`}
@@ -96,17 +106,17 @@ export default function ReceiptsPage() {
       sortValue: (r) => r.filename,
     },
     {
-      header: "Vendor",
+      header: "Sklep",
       accessor: (r) => r.vendor ?? <span className="text-gray-400">—</span>,
       sortValue: (r) => r.vendor ?? "",
     },
     {
-      header: "Date",
+      header: "Data",
       accessor: (r) => r.date ?? <span className="text-gray-400">—</span>,
       sortValue: (r) => r.date ?? "",
     },
     {
-      header: "Total",
+      header: "Suma",
       accessor: (r) =>
         r.total != null ? (
           `${r.total.toFixed(2)} PLN`
@@ -129,19 +139,19 @@ export default function ReceiptsPage() {
             href={`/receipts/${r.id}`}
             className="text-xs font-medium text-[#635bff] hover:underline"
           >
-            Review →
+            Przejrzyj →
           </Link>
         ) : null,
     },
   ];
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="flex flex-col flex-1 min-h-0 gap-6">
+      <div className="flex items-center justify-between flex-shrink-0">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Receipts</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Paragony</h1>
           <p className="text-sm text-gray-500 mt-1">
-            All scanned receipts and their processing status.
+            Wszystkie zeskanowane paragony i ich status przetwarzania.
           </p>
         </div>
         <button
@@ -149,20 +159,41 @@ export default function ReceiptsPage() {
           disabled={processMutation.isPending || progress?.status === "running"}
           className="px-4 py-2 rounded-md bg-[#635bff] text-white text-sm font-medium hover:bg-[#5248db] disabled:opacity-50 transition-colors"
         >
-          {processMutation.isPending || progress?.status === "running" ? "Processing…" : "Process receipts"}
+          {processMutation.isPending || progress?.status === "running" ? "Przetwarzanie…" : "Przetwórz paragony"}
         </button>
+      </div>
+
+      {/* Status legend */}
+      <div className="flex-shrink-0 rounded-lg border border-gray-200 bg-white overflow-hidden">
+        <button
+          onClick={() => setLegendOpen((o) => !o)}
+          className="w-full flex items-center justify-between px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+        >
+          <span>Legenda statusów</span>
+          <span className={`transition-transform duration-200 ${legendOpen ? "rotate-180" : ""}`}>▾</span>
+        </button>
+        {legendOpen && (
+          <div className="border-t border-gray-100 px-4 py-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-2">
+            {STATUS_LEGEND.map(({ status, description }) => (
+              <div key={status} className="flex items-start gap-2.5 py-1">
+                <StatusBadge status={status} />
+                <span className="text-xs text-gray-500 leading-5">{description}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Live progress bar */}
       {progress && (
-        <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm">
+        <div className="flex-shrink-0 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm">
           {progress.status === "running" && (
             <>
               <div className="flex justify-between mb-1 text-gray-600">
                 <span>
                   {progress.total > 0
-                    ? `Processing ${progress.index} / ${progress.total} — ${progress.filename}`
-                    : "Starting…"}
+                    ? `Przetwarzanie ${progress.index} / ${progress.total} — ${progress.filename}`
+                    : "Uruchamianie…"}
                 </span>
                 <span>{progress.total > 0 ? `${Math.round((progress.index / progress.total) * 100)}%` : ""}</span>
               </div>
@@ -175,7 +206,7 @@ export default function ReceiptsPage() {
             </>
           )}
           {progress.status === "done" && (
-            <p className="text-green-600 font-medium">✓ Processing complete — {progress.total} receipt{progress.total !== 1 ? "s" : ""} processed.</p>
+            <p className="text-green-600 font-medium">✓ Przetwarzanie zakończone — przetworzono {progress.total} paragon{progress.total !== 1 ? "ów" : ""}.</p>
           )}
           {progress.status === "error" && (
             <p className="text-red-600 font-medium">✗ Error: {progress.errorMsg}</p>
@@ -184,7 +215,7 @@ export default function ReceiptsPage() {
       )}
 
       {/* Filter tabs */}
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2 flex-shrink-0">
         {STATUS_FILTERS.map((s) => (
           <button
             key={s}
@@ -196,19 +227,20 @@ export default function ReceiptsPage() {
             }`}
           >
             {s === "all"
-              ? `All (${receipts.length})`
+              ? `Wszystkie (${receipts.length})`
               : `${s} (${receipts.filter((r) => r.status === s).length})`}
           </button>
         ))}
       </div>
 
       {isLoading ? (
-        <div className="text-sm text-gray-400 py-8 text-center">Loading…</div>
+        <div className="text-sm text-gray-400 py-8 text-center">Ładowanie…</div>
       ) : (
         <DataTable
           columns={columns}
           rows={filtered}
-          emptyMessage="No receipts match this filter."
+          emptyMessage="Brak paragonów spełniających filtr."
+          className="flex-1 min-h-0"
         />
       )}
     </div>

@@ -1,3 +1,4 @@
+import asyncio
 import os
 import time
 
@@ -78,6 +79,110 @@ class EvaluationService:
         self.evaluations_repository.update_run_summary(run_id, summary)
         
         return summary
+
+    async def run_evaluation_async(self, on_progress=None) -> EvaluationRunSummary:
+        """Async version of run_evaluation: processes ground truth entries in parallel."""
+        CONCURRENT_LLM_CALLS = 5
+
+        model_used = self.ocr_service.model
+
+        # Create evaluation run (synchronous, once)
+        run_id = self.evaluations_repository.create_run(
+            model_used=model_used,
+            config={
+                "source": "ground_truth",
+                "model": self.ocr_service.model,
+                "prompt": self.ocr_service.prompt,
+                "reasoning_effort": "medium",
+            },
+        )
+
+        ground_truth_entries = self.ground_truth_repository.get_all()
+        if not ground_truth_entries:
+            print("No ground truth entries to evaluate.")
+            return self._create_empty_summary(run_id, model_used)
+
+        total = len(ground_truth_entries)
+        sem = asyncio.Semaphore(CONCURRENT_LLM_CALLS)
+        db_lock = asyncio.Lock()
+        counter = {"value": 0}
+        counter_lock = asyncio.Lock()
+        results_store: list[EvaluationResult | None] = [None] * total
+
+        async def _evaluate_one(index: int, entry: GroundTruthEntry):
+            async with sem:
+                # Download + preprocess (IO-bound) outside db_lock
+                temp_path = await asyncio.to_thread(
+                    self.minio_service.get_temp_file, entry.minio_object_key
+                )
+                preprocessed_path = await asyncio.to_thread(
+                    self.preprocessing_service.preprocess_image, temp_path
+                )
+                try:
+                    # Dominant latency — async OCR call
+                    result = await self._evaluate_ground_truth_entry_async(
+                        entry, preprocessed_path
+                    )
+                finally:
+                    await asyncio.to_thread(
+                        lambda: os.remove(temp_path) if os.path.exists(temp_path) else None
+                    )
+
+            results_store[index] = result
+
+            async with db_lock:
+                await asyncio.to_thread(
+                    self.evaluations_repository.add_result, run_id, result
+                )
+
+            if on_progress:
+                async with counter_lock:
+                    counter["value"] += 1
+                    idx = counter["value"]
+                on_progress(
+                    index=idx,
+                    total=total,
+                    filename=entry.filename,
+                    success=result.success,
+                )
+
+        await asyncio.gather(
+            *[_evaluate_one(i, entry) for i, entry in enumerate(ground_truth_entries)]
+        )
+
+        results = [r for r in results_store if r is not None]
+        summary = self._calculate_summary(run_id, model_used, results)
+        self.evaluations_repository.update_run_summary(run_id, summary)
+        return summary
+
+    async def _evaluate_ground_truth_entry_async(
+        self, entry: GroundTruthEntry, preprocessed_path: str
+    ) -> EvaluationResult:
+        """Async version: reuses an already-preprocessed image path."""
+        start_time = time.time()
+        try:
+            print(f"Evaluating ground truth entry: {entry.filename}")
+            ocr_result = await self.ocr_service.process_image_async(preprocessed_path)
+            transaction = TransactionModel(**ocr_result)
+            processing_time_ms = int((time.time() - start_time) * 1000)
+            metrics = self.calculate_metrics(
+                transaction, processing_time_ms, ground_truth=entry.ground_truth
+            )
+            print(f"Ground truth entry {entry.filename} evaluated successfully.")
+            return EvaluationResult(
+                filename=entry.filename,
+                success=True,
+                metrics=metrics,
+                transaction=transaction,
+            )
+        except Exception as e:
+            processing_time_ms = int((time.time() - start_time) * 1000)
+            print(f"Error evaluating ground truth entry {entry.filename}: {e}")
+            return EvaluationResult(
+                filename=entry.filename,
+                success=False,
+                error_message=str(e),
+            )
 
     def _evaluate_ground_truth_entry(self, entry: GroundTruthEntry) -> EvaluationResult:
         """Process a ground truth entry and return evaluation result with accuracy metrics."""

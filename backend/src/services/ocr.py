@@ -1,9 +1,10 @@
 from abc import ABC
+import asyncio
 import base64
 import json
 import os
 import time
-from openai import OpenAI
+from openai import AsyncOpenAI, OpenAI
 from ..data import TransactionModel
 from PIL import Image
 
@@ -11,6 +12,7 @@ from PIL import Image
 class OCRService(ABC):
     def __init__(self):
         self.client = OpenAI()
+        self.async_client = AsyncOpenAI()
         self.prompt = (
             "Analyze this Polish fiscal receipt. Extract: "
             "1. Vendor name. "
@@ -82,3 +84,42 @@ class OCRService(ABC):
         response_arguments = tool_call.arguments
         args = json.loads(response_arguments)
         return args
+
+    async def process_image_async(self, image_path: str) -> dict:
+        """Async version of process_image — uses AsyncOpenAI for concurrent calls."""
+        base64_image = await asyncio.to_thread(self._encode_image, image_path)
+        tool_name = "extract_receipt_data"
+        tools = [
+            {
+                "type": "function",
+                "name": tool_name,
+                "description": "Extract structured data from Polish receipts",
+                "parameters": TransactionModel.model_json_schema(),
+            }
+        ]
+        response = await self.async_client.responses.create(
+            model=self.model,
+            reasoning={"effort": "medium"},
+            tools=tools,
+            tool_choice={"type": "function", "name": tool_name},
+            input=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "input_text", "text": self.prompt},
+                        {
+                            "type": "input_image",
+                            "image_url": f"data:image/jpeg;base64,{base64_image}",
+                            "detail": "high",
+                        },
+                    ],
+                }
+            ],
+        )
+        tool_call = next(
+            (item for item in response.output if item.type == "function_call"),
+            None,
+        )
+        if tool_call is None:
+            raise ValueError("No function call found in OpenAI response")
+        return json.loads(tool_call.arguments)

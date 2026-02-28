@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 
 export type Column<T> = {
   header: string;
@@ -12,14 +13,21 @@ export function DataTable<T extends { id: number | string }>({
   rows,
   emptyMessage = "No data.",
   className = "",
+  defaultSortCol = null,
+  defaultSortDir = "asc",
+  renderExpandedRow,
 }: {
   columns: Column<T>[];
   rows: T[];
   emptyMessage?: string;
   className?: string;
+  defaultSortCol?: string | null;
+  defaultSortDir?: "asc" | "desc";
+  renderExpandedRow?: (row: T) => React.ReactNode;
 }) {
-  const [sortCol, setSortCol] = useState<string | null>(null);
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [sortCol, setSortCol] = useState<string | null>(defaultSortCol);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">(defaultSortDir);
+  const [expandedId, setExpandedId] = useState<number | string | null>(null);
 
   function handleSort(header: string) {
     if (sortCol === header) {
@@ -49,6 +57,7 @@ export function DataTable<T extends { id: number | string }>({
       <table className="w-full text-sm">
         <thead className="sticky top-0 z-10">
           <tr className="border-b border-gray-200 bg-[#f6f9fc]">
+            {renderExpandedRow && <th className="w-8 px-3 py-3" />}
             {columns.map((col) => {
               const sortable = !!col.sortValue;
               const isActive = sortCol === col.header;
@@ -75,7 +84,7 @@ export function DataTable<T extends { id: number | string }>({
           {sortedRows.length === 0 ? (
             <tr>
               <td
-                colSpan={columns.length}
+                colSpan={columns.length + (renderExpandedRow ? 1 : 0)}
                 className="px-4 py-8 text-center text-gray-400"
               >
                 {emptyMessage}
@@ -83,21 +92,37 @@ export function DataTable<T extends { id: number | string }>({
             </tr>
           ) : (
             sortedRows.map((row) => (
-              <tr
-                key={row.id}
-                className="border-b border-gray-100 last:border-0 hover:bg-gray-50 transition-colors"
-              >
-                {columns.map((col) => (
-                  <td
-                    key={col.header}
-                    className={`px-4 py-3 ${col.className ?? ""}`}
-                  >
-                    {typeof col.accessor === "function"
-                      ? col.accessor(row)
-                      : String(row[col.accessor] ?? "")}
-                  </td>
-                ))}
-              </tr>
+              <Fragment key={row.id}>
+                <tr
+                  onClick={renderExpandedRow ? () => setExpandedId((prev) => (prev === row.id ? null : row.id)) : undefined}
+                  className={`border-b border-gray-100 last:border-0 hover:bg-gray-50 transition-colors ${renderExpandedRow ? "cursor-pointer" : ""}`}
+                >
+                  {renderExpandedRow && (
+                    <td className="px-3 py-3 text-gray-400">
+                      {expandedId === row.id
+                        ? <ChevronDown className="h-4 w-4" />
+                        : <ChevronRight className="h-4 w-4" />}
+                    </td>
+                  )}
+                  {columns.map((col) => (
+                    <td
+                      key={col.header}
+                      className={`px-4 py-3 ${col.className ?? ""}`}
+                    >
+                      {typeof col.accessor === "function"
+                        ? col.accessor(row)
+                        : String(row[col.accessor] ?? "")}
+                    </td>
+                  ))}
+                </tr>
+                {renderExpandedRow && expandedId === row.id && (
+                  <tr className="bg-gray-50">
+                    <td colSpan={columns.length + 1} className="px-6 py-4 border-b border-gray-100">
+                      {renderExpandedRow(row)}
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
             ))
           )}
         </tbody>
