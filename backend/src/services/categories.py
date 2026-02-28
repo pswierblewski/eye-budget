@@ -1,5 +1,6 @@
 from abc import ABC
 import json
+import os
 
 from openai import OpenAI
 
@@ -13,7 +14,7 @@ class CategoriesService(ABC):
         self.categories_repository = CategoriesRepository(db_context=db_context)
         self.markdown_table_service = MarkdownTableService()
         self.client = OpenAI()
-        self.model = "gpt-5.2"
+        self.model = os.getenv("MODEL", "gpt-5.2")
         self.categories = ""
         self.prompt = """
 You are an expert in Polish fiscal receipts.

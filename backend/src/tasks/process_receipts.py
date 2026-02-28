@@ -1,3 +1,4 @@
+import asyncio
 import os
 from dotenv import load_dotenv
 
@@ -29,7 +30,7 @@ def process_receipts_task(self):
         )
 
     try:
-        my_app.run(evaluate=False, on_progress=on_progress)
+        asyncio.run(my_app._run_production_async(on_progress=on_progress))
         pusher.trigger(
             "receipts",
             "receipt.done",

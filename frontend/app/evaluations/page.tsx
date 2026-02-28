@@ -64,7 +64,7 @@ export default function EvaluationsPage() {
   const columns: Column<EvaluationRunListItem>[] = [
     { header: "ID", accessor: "id", className: "w-16 text-gray-400 font-mono", sortValue: (r) => r.id },
     {
-      header: "Timestamp",
+      header: "Data",
       accessor: (r) =>
         new Date(r.run_timestamp).toLocaleString("en-GB", {
           dateStyle: "short",
@@ -73,27 +73,27 @@ export default function EvaluationsPage() {
       sortValue: (r) => r.run_timestamp,
     },
     { header: "Model", accessor: "model_used", sortValue: (r) => r.model_used },
-    { header: "Files", accessor: "total_files", className: "text-right", sortValue: (r) => r.total_files },
+    { header: "Pliki", accessor: "total_files", className: "text-right", sortValue: (r) => r.total_files },
     {
-      header: "Success rate",
+      header: "Trafność",
       accessor: (r) => r.success_rate != null ? `${(r.success_rate * 100).toFixed(1)}%` : "—",
       className: "text-right",
       sortValue: (r) => r.success_rate ?? -1,
     },
     {
-      header: "Avg completeness",
+      header: "Śr. kompletność",
       accessor: (r) => r.avg_field_completeness != null ? `${(r.avg_field_completeness * 100).toFixed(1)}%` : "—",
       className: "text-right",
       sortValue: (r) => r.avg_field_completeness ?? -1,
     },
     {
-      header: "Avg consistency",
+      header: "Śr. spójność",
       accessor: (r) => r.avg_consistency_rate != null ? `${(r.avg_consistency_rate * 100).toFixed(1)}%` : "—",
       className: "text-right",
       sortValue: (r) => r.avg_consistency_rate ?? -1,
     },
     {
-      header: "Avg time (ms)",
+      header: "Śr. czas (ms)",
       accessor: (r) => r.avg_processing_time_ms != null ? Math.round(r.avg_processing_time_ms).toString() : "—",
       className: "text-right",
       sortValue: (r) => r.avg_processing_time_ms ?? -1,
@@ -105,7 +105,7 @@ export default function EvaluationsPage() {
           href={`/evaluations/${r.id}`}
           className="text-xs text-[#635bff] hover:underline"
         >
-          Details →
+          Szczegóły →
         </Link>
       ),
     },
@@ -115,9 +115,9 @@ export default function EvaluationsPage() {
     <div className="flex flex-col h-full gap-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Evaluations</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Ewaluacje</h1>
           <p className="text-sm text-gray-500 mt-1">
-            OCR quality evaluation runs against ground truth.
+            Przebiegi oceny jakości OCR na danych wzorcowych.
           </p>
         </div>
         <button
@@ -125,7 +125,7 @@ export default function EvaluationsPage() {
           disabled={runMutation.isPending || progress?.status === "running"}
           className="px-4 py-2 rounded-md bg-[#635bff] text-white text-sm font-medium hover:bg-[#5248db] disabled:opacity-50 transition-colors"
         >
-          {runMutation.isPending || progress?.status === "running" ? "Running…" : "Run evaluation"}
+          {runMutation.isPending || progress?.status === "running" ? "Trwa ocena…" : "Uruchom ocenę"}
         </button>
       </div>
 
@@ -137,8 +137,8 @@ export default function EvaluationsPage() {
               <div className="flex justify-between mb-1 text-gray-600">
                 <span>
                   {progress.total > 0
-                    ? `Evaluating ${progress.index} / ${progress.total} — ${progress.filename}`
-                    : "Starting…"}
+                    ? `Ocenianie ${progress.index} / ${progress.total} — ${progress.filename}`
+                    : "Uruchamianie…"}
                 </span>
                 <span>{progress.total > 0 ? `${Math.round((progress.index / progress.total) * 100)}%` : ""}</span>
               </div>
@@ -151,7 +151,7 @@ export default function EvaluationsPage() {
             </>
           )}
           {progress.status === "done" && (
-            <p className="text-green-600 font-medium">✓ Evaluation complete.</p>
+            <p className="text-green-600 font-medium">✓ Ocena zakończona.</p>
           )}
           {progress.status === "error" && (
             <p className="text-red-600 font-medium">✗ Error: {progress.errorMsg}</p>
@@ -160,12 +160,12 @@ export default function EvaluationsPage() {
       )}
 
       {isLoading ? (
-        <div className="text-sm text-gray-400 py-8 text-center">Loading…</div>
+        <div className="text-sm text-gray-400 py-8 text-center">Ładowanie…</div>
       ) : (
         <DataTable
           columns={columns}
           rows={runs}
-          emptyMessage="No evaluation runs yet."
+          emptyMessage="Brak przebiegów ewaluacji."
           className="flex-1 min-h-0"
         />
       )}

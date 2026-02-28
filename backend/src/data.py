@@ -8,8 +8,8 @@ class ReceiptsScanStatus(StrEnum):
     NEW = "pending"
     PROCESSING = "processing"
     PROCESSED = "processed"
-    FAILED = "failed",
-    TO_CONFIRM = "to_confirm",
+    FAILED = "failed"
+    TO_CONFIRM = "to_confirm"
     DONE = "done"
 
 
@@ -203,6 +203,7 @@ class ReceiptScanDetail(BaseModel):
     categories_candidates: dict | None = None
     minio_object_key: str | None = None
     transaction: ReceiptTransaction | None = None  # populated once confirmed
+    bank_link: Optional['BankLinkInfo'] = None
     # Pre-fill suggestions: normalized names already known from DB for the raw OCR names
     vendor_normalization: str | None = None
     product_normalizations: dict[str, str | None] | None = None
@@ -214,6 +215,13 @@ class CategoryItem(BaseModel):
     name: str
     parent_name: str | None = None
     group_name: str | None = None
+
+
+class CreateCategoryRequest(BaseModel):
+    """Request body for creating a new expense category."""
+    name: str
+    group_name: str
+    parent_id: int | None = None
 
 
 class ConfirmReceiptRequest(BaseModel):
@@ -255,3 +263,117 @@ class EvaluationRunListItem(BaseModel):
 class EvaluationRunDetail(EvaluationRunListItem):
     """Full evaluation run including per-file results."""
     results: list[EvaluationResult]
+
+
+# ---------------------------------------------------------------------------
+# Bank transaction models (CSV import)
+# ---------------------------------------------------------------------------
+
+class BankTransactionStatus(StrEnum):
+    TO_CONFIRM = "to_confirm"
+    DONE = "done"
+
+
+class BankTransactionListItem(BaseModel):
+    """Lightweight bank transaction for list views."""
+    id: int
+    reference_number: str
+    booking_date: str                        # ISO date string
+    counterparty: str | None = None
+    description: str | None = None
+    amount: float
+    currency: str
+    operation_type: str | None = None
+    status: str
+    category_id: int | None = None
+    category_name: str | None = None
+
+
+class BankTransactionDetail(BaseModel):
+    """Full bank transaction detail including LLM category candidates."""
+    id: int
+    reference_number: str
+    booking_date: str
+    value_date: str | None = None
+    counterparty: str | None = None
+    counterparty_address: str | None = None
+    source_account: str | None = None
+    target_account: str | None = None
+    description: str | None = None
+    amount: float
+    currency: str
+    operation_type: str | None = None
+    status: str
+    category_id: int | None = None
+    category_name: str | None = None
+    category_candidates: list | None = None  # list[CategoryCandidate]
+    vendor_id: int | None = None
+    receipt_link: Optional['ReceiptLinkInfo'] = None
+
+
+class BankImportResult(BaseModel):
+    """Result of a CSV import operation."""
+    imported: int
+    duplicates: int
+    errors: int
+    task_id: str | None = None  # Celery task ID for background categorization
+
+
+class ConfirmBankTransactionRequest(BaseModel):
+    """Request body for confirming a bank transaction category."""
+    category_id: int
+
+
+class CategoryCandidatesTransaction(BaseModel):
+    """LLM tool-call schema for assigning a category to a bank transaction."""
+    category_candidates: List[CategoryCandidate] = Field(
+        ...,
+        description="Ordered list of category candidates for this bank transaction, most likely first."
+    )
+
+
+# ---------------------------------------------------------------------------
+# Bank ↔ Receipt linking models
+# ---------------------------------------------------------------------------
+
+class ReceiptLinkInfo(BaseModel):
+    """Info embedded in BankTransactionDetail when a receipt link exists."""
+    receipt_transaction_id: int
+    scan_id: int
+    scan_filename: str
+    vendor_name: str
+    date: str
+    total: float
+
+
+class BankLinkInfo(BaseModel):
+    """Info embedded in ReceiptScanDetail when a bank transaction link exists."""
+    bank_transaction_id: int
+    counterparty: str | None = None
+    booking_date: str
+    amount: float
+
+
+class ReceiptCandidateItem(BaseModel):
+    """A receipt_transaction candidate for linking to a bank transaction."""
+    receipt_transaction_id: int
+    scan_id: int
+    scan_filename: str
+    vendor_name: str
+    date: str
+    total: float
+    match_score: int  # 2 = amount+date, 3 = amount+date+vendor
+
+
+class BankTxCandidateItem(BaseModel):
+    """A bank_transaction candidate for linking to a receipt."""
+    bank_transaction_id: int
+    counterparty: str | None = None
+    booking_date: str
+    amount: float
+    match_score: int
+
+
+class LinkReceiptRequest(BaseModel):
+    """Request body for POST /bank-transactions/{id}/link."""
+    receipt_transaction_id: int

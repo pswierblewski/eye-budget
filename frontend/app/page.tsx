@@ -45,7 +45,7 @@ export default function DashboardPage() {
       sortValue: (r) => r.id,
     },
     {
-      header: "File",
+      header: "Plik",
       accessor: (r) => (
         <Link
           href={`/receipts/${r.id}`}
@@ -57,17 +57,17 @@ export default function DashboardPage() {
       sortValue: (r) => r.filename,
     },
     {
-      header: "Vendor",
+      header: "Sklep",
       accessor: (r) => r.vendor ?? <span className="text-gray-400">—</span>,
       sortValue: (r) => r.vendor ?? "",
     },
     {
-      header: "Date",
+      header: "Data",
       accessor: (r) => r.date ?? <span className="text-gray-400">—</span>,
       sortValue: (r) => r.date ?? "",
     },
     {
-      header: "Total",
+      header: "Suma",
       accessor: (r) =>
         r.total != null ? (
           `${r.total.toFixed(2)} PLN`
@@ -88,9 +88,9 @@ export default function DashboardPage() {
     <div className="space-y-8">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Panel główny</h1>
           <p className="text-sm text-gray-500 mt-1">
-            Receipt processing overview
+            Przegląd przetwarzania paragonów
           </p>
         </div>
         <div className="flex gap-3">
@@ -99,48 +99,48 @@ export default function DashboardPage() {
             disabled={evalMutation.isPending}
             className="px-4 py-2 rounded-md border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors"
           >
-            {evalMutation.isPending ? "Running…" : "Run evaluation"}
+            {evalMutation.isPending ? "Trwa ocena…" : "Uruchom ocenę"}
           </button>
           <button
             onClick={() => processMutation.mutate()}
             disabled={processMutation.isPending}
             className="px-4 py-2 rounded-md bg-[#635bff] text-white text-sm font-medium hover:bg-[#5248db] disabled:opacity-50 transition-colors"
           >
-            {processMutation.isPending ? "Processing…" : "Process receipts"}
+            {processMutation.isPending ? "Przetwarzanie…" : "Przetwórz paragony"}
           </button>
         </div>
       </div>
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatCard label="Total receipts" value={total} />
-        <StatCard label="To confirm" value={toConfirm} accent />
-        <StatCard label="Done" value={done} />
-        <StatCard label="Failed" value={failed} />
+        <StatCard label="Wszystkie paragony" value={total} />
+        <StatCard label="Do potwierdzenia" value={toConfirm} accent />
+        <StatCard label="Gotowe" value={done} />
+        <StatCard label="Błąd" value={failed} />
       </div>
 
       {/* Recent receipts */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-base font-semibold text-gray-900">
-            Recent receipts
+            Ostatnie paragony
           </h2>
           <Link
             href="/receipts"
             className="text-sm text-[#635bff] hover:underline"
           >
-            View all →
+            Pokaż wszystkie →
           </Link>
         </div>
         {isLoading ? (
           <div className="text-sm text-gray-400 py-8 text-center">
-            Loading…
+            Ładowanie…
           </div>
         ) : (
           <DataTable
             columns={columns}
             rows={recent}
-            emptyMessage="No receipts yet. Click 'Process receipts' to start."
+            emptyMessage="Brak paragonów. Kliknij 'Przetwórz paragony', aby rozpocząć."
           />
         )}
       </div>

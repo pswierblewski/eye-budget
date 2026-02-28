@@ -1,4 +1,5 @@
 const STATUS_STYLES: Record<string, string> = {
+  new: "bg-gray-100 text-gray-600",
   pending: "bg-gray-100 text-gray-600",
   processing: "bg-blue-100 text-blue-700",
   processed: "bg-yellow-100 text-yellow-700",
@@ -8,12 +9,13 @@ const STATUS_STYLES: Record<string, string> = {
 };
 
 const STATUS_LABELS: Record<string, string> = {
-  pending: "Pending",
-  processing: "Processing",
-  processed: "Processed",
-  to_confirm: "To Confirm",
-  done: "Done",
-  failed: "Failed",
+  new: "Nowy",
+  pending: "Oczekujący",
+  processing: "Przetwarzanie",
+  processed: "Przetworzony",
+  to_confirm: "Do potwierdzenia",
+  done: "Gotowe",
+  failed: "Błąd",
 };
 
 export function StatusBadge({ status }: { status: string }) {

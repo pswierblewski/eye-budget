@@ -1,4 +1,6 @@
 from abc import ABC
+import asyncio
+import os as _os_top
 
 from src.services.preprocessing import PreprocessingService
 from src.services.minio_storage import MinioStorageService
@@ -7,6 +9,8 @@ from src.services.ground_truth import GroundTruthService
 from src.services.vendors import VendorsService
 from src.services.products import ProductsService
 from src.services.categories import CategoriesService
+from src.services.bank_categorization import BankCategorizationService
+from src.services.bank_csv_parser import PekaoCsvParser
 from .repositories.files import FilesRepository
 from .repositories.vendors import VendorsRepository
 from .repositories.products import ProductsRepository
@@ -16,6 +20,8 @@ from .repositories.evaluations import EvaluationsRepository
 from .repositories.ground_truth import GroundTruthRepository
 from .repositories.transactions import TransactionsRepository
 from .repositories.categories import CategoriesRepository
+from .repositories.bank_transactions import BankTransactionsRepository
+from .repositories.bank_receipt_links import BankReceiptLinksRepository
 from .data import (
     ReceiptsScanStatus,
     TransactionModel,
@@ -28,7 +34,18 @@ from .data import (
     ConfirmReceiptRequest,
     EvaluationRunListItem,
     EvaluationRunDetail,
-    VendorItem,    NormalizedProductItem,)
+    VendorItem,
+    NormalizedProductItem,
+    BankTransactionListItem,
+    BankTransactionDetail,
+    BankImportResult,
+    ConfirmBankTransactionRequest,
+    ReceiptLinkInfo,
+    BankLinkInfo,
+    ReceiptCandidateItem,
+    BankTxCandidateItem,
+    LinkReceiptRequest,
+)
 from .db_contexts.eye_budget import EyeBudgetDbContext
 
 
@@ -47,6 +64,9 @@ class App(ABC):
         self.transactions_repository = TransactionsRepository(self.eye_budget_db_context)
         self.categories_repository = CategoriesRepository(self.eye_budget_db_context)
 
+        self.bank_transactions_repository = BankTransactionsRepository(self.eye_budget_db_context)
+        self.bank_receipt_links_repository = BankReceiptLinksRepository(self.eye_budget_db_context)
+
         # Core services
         self.ocr_service = OCRService()
         self.preprocessing_service = PreprocessingService()
@@ -55,6 +75,9 @@ class App(ABC):
         self.products_service = ProductsService()
         self.categories_service = CategoriesService(self.eye_budget_db_context)
         self.categories_service.build()
+        self.bank_categorization_service = BankCategorizationService(self.eye_budget_db_context)
+        self.bank_categorization_service.build()
+        self.bank_csv_parser = PekaoCsvParser()
 
         # High-level services
         self.evaluation_service = EvaluationService(
@@ -114,16 +137,23 @@ class App(ABC):
 
     def _run_production(self, on_progress=None):
         """Run the standard production processing pipeline."""
-        files = self.files_repository.list_input_files()
-        if not files:
+        all_files = self.files_repository.list_input_files()
+        if not all_files:
             print("No files to process.")
             return
-        total = len(files)
-        for index, file in enumerate(files, start=1):
+        # Filter to only new files: attempt add, keep those successfully added
+        new_files = []
+        for file in all_files:
             added = self.receipts_scans_repository.add_receipt(file)
-            if not added:
+            if added:
+                new_files.append(file)
+            else:
                 print(f"File {file} already added.")
-                continue
+        if not new_files:
+            print("No new files to process.")
+            return
+        total = len(new_files)
+        for index, file in enumerate(new_files, start=1):
             try:
                 print(f"Processing file: {file}")
                 self.receipts_scans_repository.set_status(file, ReceiptsScanStatus.PROCESSING)
@@ -133,8 +163,7 @@ class App(ABC):
                 scan_id = self.receipts_scans_repository.get_scan_id_by_filename(file)
                 with open(preprocessed_image_path, "rb") as f:
                     image_data = f.read()
-                import os as _os
-                object_key = f"receipts/{scan_id}_{_os.path.basename(file)}"
+                object_key = f"receipts/{scan_id}_{_os_top.path.basename(file)}"
                 self.minio_service.upload_image(image_data, object_key)
                 self.receipts_scans_repository.set_minio_key(file, object_key)
 
@@ -165,6 +194,129 @@ class App(ABC):
                 self.receipts_scans_repository.set_status(file, ReceiptsScanStatus.FAILED, e)
                 if on_progress:
                     on_progress(index=index, total=total, filename=file, status="failed")
+
+    async def _run_production_async(self, on_progress=None):
+        """Async version of _run_production: processes receipts in parallel (up to 5 at a time)."""
+        CONCURRENT_LLM_CALLS = 5
+
+        all_files = self.files_repository.list_input_files()
+        if not all_files:
+            print("No files to process.")
+            return
+
+        # Sequential dedup pass (fast DB inserts, ~ms each)
+        new_files = []
+        for file in all_files:
+            added = self.receipts_scans_repository.add_receipt(file)
+            if added:
+                new_files.append(file)
+            else:
+                print(f"File {file} already added.")
+
+        if not new_files:
+            print("No new files to process.")
+            return
+
+        total = len(new_files)
+        sem = asyncio.Semaphore(CONCURRENT_LLM_CALLS)
+        db_lock = asyncio.Lock()
+        # Thread-safe counter for 1-based progress index
+        counter = {"value": 0}
+        counter_lock = asyncio.Lock()
+
+        async def _process_file(file: str):
+            async with sem:
+                try:
+                    print(f"Processing file: {file}")
+                    async with db_lock:
+                        await asyncio.to_thread(
+                            self.receipts_scans_repository.set_status,
+                            file, ReceiptsScanStatus.PROCESSING,
+                        )
+
+                    preprocessed_image_path = await asyncio.to_thread(
+                        self.preprocessing_service.preprocess_image, file
+                    )
+
+                    async with db_lock:
+                        scan_id = await asyncio.to_thread(
+                            self.receipts_scans_repository.get_scan_id_by_filename, file
+                        )
+                    object_key = f"receipts/{scan_id}_{_os_top.path.basename(file)}"
+
+                    def _upload():
+                        with open(preprocessed_image_path, "rb") as f:
+                            image_data = f.read()
+                        self.minio_service.upload_image(image_data, object_key)
+
+                    await asyncio.to_thread(_upload)
+                    async with db_lock:
+                        await asyncio.to_thread(
+                            self.receipts_scans_repository.set_minio_key, file, object_key
+                        )
+
+                    # Dominant latency — run async OCR call outside the db_lock
+                    ocr_result = await self.ocr_service.process_image_async(preprocessed_image_path)
+
+                    async with db_lock:
+                        await asyncio.to_thread(
+                            self.receipts_scans_repository.set_result, file, ocr_result
+                        )
+                        await asyncio.to_thread(
+                            self.receipts_scans_repository.set_status,
+                            file, ReceiptsScanStatus.PROCESSED,
+                        )
+
+                    print(f"File {file} processed successfully.")
+
+                    transaction_model = TransactionModel(**ocr_result)
+
+                    vendor_mapping = await asyncio.to_thread(
+                        self.vendors_service.process_vendor, transaction_model.vendor
+                    )
+                    async with db_lock:
+                        await asyncio.to_thread(
+                            self.vendors_repository.process_vendor_mapping, vendor_mapping
+                        )
+                    transaction_model = transaction_model.model_copy(
+                        update={"vendor": vendor_mapping.vendor_name}
+                    )
+
+                    product_mappings = await asyncio.to_thread(
+                        self.products_service.process_products, transaction_model.products
+                    )
+                    async with db_lock:
+                        await asyncio.to_thread(
+                            self.products_repository.process_product_mappings,
+                            product_mappings.products,
+                        )
+
+                    category_candidates = await asyncio.to_thread(
+                        self.categories_service.assign_category_candidates, transaction_model
+                    )
+                    async with db_lock:
+                        await asyncio.to_thread(
+                            self.receipts_scans_repository.set_category_candidates,
+                            file, category_candidates,
+                        )
+
+                    status = "done"
+                except Exception as e:
+                    print(f"Error processing file {file}: {e}")
+                    async with db_lock:
+                        await asyncio.to_thread(
+                            self.receipts_scans_repository.set_status,
+                            file, ReceiptsScanStatus.FAILED, e,
+                        )
+                    status = "failed"
+
+            if on_progress:
+                async with counter_lock:
+                    counter["value"] += 1
+                    idx = counter["value"]
+                on_progress(index=idx, total=total, filename=file, status=status)
+
+        await asyncio.gather(*[_process_file(f) for f in new_files])
 
     # Ground Truth Methods (delegated to service)
 
@@ -208,6 +360,11 @@ class App(ABC):
                 p.name: self.products_repository.get_normalized_name_by_alternative_name(p.name)
                 for p in detail.result.products
             }
+        # Attach bank link info if a confirmed receipt_transaction exists
+        if detail.transaction is not None:
+            link_data = self.bank_receipt_links_repository.get_bank_link_info(detail.transaction.id)
+            if link_data:
+                detail.bank_link = BankLinkInfo(**link_data)
         return detail
 
     def get_receipt_image_bytes(self, scan_id: int) -> bytes | None:
@@ -342,6 +499,14 @@ class App(ABC):
         """Return all expense categories."""
         return self.categories_repository.get_all_expense_categories()
 
+    def get_all_category_groups(self) -> list[str]:
+        """Return all distinct category group names."""
+        return self.categories_repository.get_all_groups()
+
+    def create_category(self, name: str, group_name: str, parent_id: int | None) -> CategoryItem | None:
+        """Create a new expense category."""
+        return self.categories_repository.create_category(name, group_name, parent_id)
+
     def get_all_evaluation_runs(self) -> list[EvaluationRunListItem]:
         """Return all evaluation runs, newest first."""
         return self.evaluations_repository.get_all_runs()
@@ -349,6 +514,120 @@ class App(ABC):
     def get_evaluation_run(self, run_id: int) -> EvaluationRunDetail | None:
         """Return a single evaluation run with all per-file results."""
         return self.evaluations_repository.get_run_with_results(run_id)
+
+    # ------------------------------------------------------------------
+    # Bank transactions
+    # ------------------------------------------------------------------
+
+    def import_bank_csv(self, data: bytes) -> tuple[BankImportResult, list[int]]:
+        """Parse a Pekao CSV and insert new rows. Returns result + IDs pending categorization.
+
+        LLM categorization is NOT run here — the caller should dispatch it as a
+        background Celery task using the returned list of new IDs.
+        """
+        rows = self.bank_csv_parser.parse_bytes(data)
+        if not rows:
+            return BankImportResult(imported=0, duplicates=0, errors=0), []
+
+        inserted, duplicates = self.bank_transactions_repository.insert_transactions(rows)
+
+        # Collect IDs that still need LLM categorization
+        new_ids = self.bank_transactions_repository.get_new_ids_for_categorization()
+        return BankImportResult(imported=inserted, duplicates=duplicates, errors=0), new_ids
+
+    def categorize_bank_transactions(self, transaction_ids: list[int]) -> None:
+        """Run LLM categorization for the given bank transaction IDs."""
+        for tx_id in transaction_ids:
+            try:
+                tx = self.bank_transactions_repository.get_by_id(tx_id)
+                if tx is None:
+                    continue
+                candidates = self.bank_categorization_service.assign_candidates(tx)
+                self.bank_transactions_repository.update_candidates(tx_id, candidates)
+            except Exception as e:
+                print(f"LLM categorization failed for bank_transaction {tx_id}: {e}")
+
+    def get_all_bank_transactions(
+        self, status: str | None = None
+    ) -> list[BankTransactionListItem]:
+        return self.bank_transactions_repository.get_list(status)
+
+    def get_bank_transaction_by_id(self, tx_id: int) -> BankTransactionDetail | None:
+        detail = self.bank_transactions_repository.get_by_id(tx_id)
+        if detail is None:
+            return None
+        link_data = self.bank_receipt_links_repository.get_receipt_link_info(tx_id)
+        if link_data:
+            detail.receipt_link = ReceiptLinkInfo(**link_data)
+        return detail
+
+    def confirm_bank_transaction(
+        self, tx_id: int, request: ConfirmBankTransactionRequest
+    ) -> BankTransactionDetail | None:
+        self.bank_transactions_repository.confirm(tx_id, request.category_id)
+        return self.bank_transactions_repository.get_by_id(tx_id)
+
+    def reopen_bank_transaction(self, tx_id: int) -> BankTransactionDetail | None:
+        self.bank_transactions_repository.reopen(tx_id)
+        return self.get_bank_transaction_by_id(tx_id)
+
+    # ------------------------------------------------------------------
+    # Bank ↔ Receipt linking
+    # ------------------------------------------------------------------
+
+    def get_receipt_candidates_for_bank_tx(
+        self, tx_id: int
+    ) -> list[ReceiptCandidateItem]:
+        """Return receipt_transaction candidates that match a bank transaction."""
+        candidates = self.bank_receipt_links_repository.find_receipt_candidates(tx_id)
+        return [
+            ReceiptCandidateItem(
+                receipt_transaction_id=c.receipt_transaction_id,
+                scan_id=c.scan_id,
+                scan_filename=c.scan_filename,
+                vendor_name=c.vendor_name,
+                date=c.date,
+                total=c.total,
+                match_score=c.match_score,
+            )
+            for c in candidates
+        ]
+
+    def get_bank_tx_candidates_for_receipt(
+        self, scan_id: int
+    ) -> list[BankTxCandidateItem]:
+        """Return bank_transaction candidates that match the receipt_transaction for a scan."""
+        tx = self.transactions_repository.get_by_scan_id(scan_id)
+        if tx is None:
+            return []
+        candidates = self.bank_receipt_links_repository.find_bank_tx_candidates(tx.id)
+        return [
+            BankTxCandidateItem(
+                bank_transaction_id=c.bank_transaction_id,
+                counterparty=c.counterparty,
+                booking_date=c.booking_date,
+                amount=c.amount,
+                match_score=c.match_score,
+            )
+            for c in candidates
+        ]
+
+    def link_bank_to_receipt(
+        self, tx_id: int, request: LinkReceiptRequest
+    ) -> BankTransactionDetail | None:
+        """Create a link between a bank transaction and a receipt transaction."""
+        ok = self.bank_receipt_links_repository.create_link(
+            bank_transaction_id=tx_id,
+            receipt_transaction_id=request.receipt_transaction_id,
+        )
+        if not ok:
+            return None  # conflict — already linked
+        return self.get_bank_transaction_by_id(tx_id)
+
+    def unlink_bank_transaction(self, tx_id: int) -> BankTransactionDetail | None:
+        """Remove the link from a bank transaction to any receipt."""
+        self.bank_receipt_links_repository.delete_link_by_bank_tx(tx_id)
+        return self.get_bank_transaction_by_id(tx_id)
 
     def dispose(self):
         self.files_repository.dispose()
@@ -359,6 +638,8 @@ class App(ABC):
         self.products_repository.dispose()
         self.transactions_repository.dispose()
         self.categories_repository.dispose()
+        self.bank_transactions_repository.dispose()
+        self.bank_receipt_links_repository.dispose()
         self.ocr_service.dispose()
         self.minio_service.dispose()
         self.vendors_service.dispose()
