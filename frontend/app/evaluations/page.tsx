@@ -18,6 +18,10 @@ type ProgressState = {
 
 export default function EvaluationsPage() {
   const queryClient = useQueryClient();
+  const PAGE_SIZE = 50;
+  const [page, setPage] = useState(1);
+  const [sortBy, setSortBy] = useState("id");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [progress, setProgress] = useState<ProgressState | null>(null);
   const channelRef = useRef<ReturnType<ReturnType<typeof getPusher>["subscribe"]> | null>(null);
 
@@ -28,10 +32,13 @@ export default function EvaluationsPage() {
     };
   }, []);
 
-  const { data: runs = [], isLoading } = useQuery({
-    queryKey: ["evaluations"],
-    queryFn: listEvaluations,
+  const { data, isLoading } = useQuery({
+    queryKey: ["evaluations", page, sortBy, sortDir],
+    queryFn: () => listEvaluations({ page, limit: PAGE_SIZE, sort_by: sortBy, sort_dir: sortDir }),
+    staleTime: 30_000,
   });
+  const runs = data?.items ?? [];
+  const total = data?.total ?? 0;
 
   const runMutation = useMutation({
     mutationFn: runEvaluation,
@@ -62,7 +69,7 @@ export default function EvaluationsPage() {
   });
 
   const columns: Column<EvaluationRunListItem>[] = [
-    { header: "ID", accessor: "id", className: "w-16 text-gray-400 font-mono", sortValue: (r) => r.id },
+    { header: "ID", accessor: "id", className: "w-16 text-gray-400 font-mono", serverSortKey: "id" },
     {
       header: "Data",
       accessor: (r) =>
@@ -70,33 +77,33 @@ export default function EvaluationsPage() {
           dateStyle: "short",
           timeStyle: "short",
         }),
-      sortValue: (r) => r.run_timestamp,
+      serverSortKey: "run_timestamp",
     },
-    { header: "Model", accessor: "model_used", sortValue: (r) => r.model_used },
-    { header: "Pliki", accessor: "total_files", className: "text-right", sortValue: (r) => r.total_files },
+    { header: "Model", accessor: "model_used", serverSortKey: "model_used" },
+    { header: "Pliki", accessor: "total_files", className: "text-right", serverSortKey: "total_files" },
     {
       header: "Trafność",
       accessor: (r) => r.success_rate != null ? `${(r.success_rate * 100).toFixed(1)}%` : "—",
       className: "text-right",
-      sortValue: (r) => r.success_rate ?? -1,
+      serverSortKey: "success_rate",
     },
     {
       header: "Śr. kompletność",
       accessor: (r) => r.avg_field_completeness != null ? `${(r.avg_field_completeness * 100).toFixed(1)}%` : "—",
       className: "text-right",
-      sortValue: (r) => r.avg_field_completeness ?? -1,
+      serverSortKey: "avg_field_completeness",
     },
     {
       header: "Śr. spójność",
       accessor: (r) => r.avg_consistency_rate != null ? `${(r.avg_consistency_rate * 100).toFixed(1)}%` : "—",
       className: "text-right",
-      sortValue: (r) => r.avg_consistency_rate ?? -1,
+      serverSortKey: "avg_consistency_rate",
     },
     {
       header: "Śr. czas (ms)",
       accessor: (r) => r.avg_processing_time_ms != null ? Math.round(r.avg_processing_time_ms).toString() : "—",
       className: "text-right",
-      sortValue: (r) => r.avg_processing_time_ms ?? -1,
+      serverSortKey: "avg_processing_time_ms",
     },
     {
       header: "",
@@ -167,6 +174,11 @@ export default function EvaluationsPage() {
           rows={runs}
           emptyMessage="Brak przebiegów ewaluacji."
           className="flex-1 min-h-0"
+          pagination={{
+            page, pageSize: PAGE_SIZE, total, onPageChange: setPage,
+            sortBy, sortDir,
+            onSortChange: (key, dir) => { setSortBy(key); setSortDir(dir); setPage(1); },
+          }}
         />
       )}
     </div>

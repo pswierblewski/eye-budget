@@ -5,6 +5,7 @@ import {
   listReceipts,
   processReceipts,
   runEvaluation,
+  getReceiptCounts,
 } from "@/lib/api";
 import { StatCard } from "@/components/StatCard";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -14,14 +15,30 @@ import Link from "next/link";
 
 export default function DashboardPage() {
   const queryClient = useQueryClient();
-  const { data: receipts = [], isLoading } = useQuery({
-    queryKey: ["receipts"],
-    queryFn: listReceipts,
+  const { data, isLoading } = useQuery({
+    queryKey: ["receipts", 1, "all"],
+    queryFn: () => listReceipts({ page: 1, limit: 10 }),
+    staleTime: 30_000,
   });
+  const recent = data?.items ?? [];
+
+  const { data: statusCounts = {} } = useQuery({
+    queryKey: ["receipts-counts"],
+    queryFn: getReceiptCounts,
+    staleTime: 30_000,
+  });
+
+  const total = Object.values(statusCounts).reduce<number>((s, v) => s + v, 0);
+  const toConfirm = statusCounts["to_confirm"] ?? 0;
+  const done = statusCounts["done"] ?? 0;
+  const failed = statusCounts["failed"] ?? 0;
 
   const processMutation = useMutation({
     mutationFn: processReceipts,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["receipts"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["receipts"] });
+      queryClient.invalidateQueries({ queryKey: ["receipts-counts"] });
+    },
   });
 
   const evalMutation = useMutation({
@@ -29,13 +46,6 @@ export default function DashboardPage() {
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: ["evaluations"] }),
   });
-
-  const total = receipts.length;
-  const toConfirm = receipts.filter((r) => r.status === "to_confirm").length;
-  const done = receipts.filter((r) => r.status === "done").length;
-  const failed = receipts.filter((r) => r.status === "failed").length;
-
-  const recent = receipts.slice(0, 10);
 
   const columns: Column<ReceiptScanListItem>[] = [
     {

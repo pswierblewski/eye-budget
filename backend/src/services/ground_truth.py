@@ -131,14 +131,22 @@ class GroundTruthService:
             created_at=entry.created_at
         )
 
-    def list(self) -> list[GroundTruthResponse]:
+    def list(
+        self,
+        limit: int = 50,
+        offset: int = 0,
+        sort_by: str = "id",
+        sort_dir: str = "desc",
+    ) -> tuple[list[GroundTruthResponse], int]:
         """
-        List all ground truth entries.
-        
+        List all ground truth entries, paginated.
+
         Returns:
-            List of GroundTruthResponse for all entries
+            Tuple of (entries, total_count)
         """
-        entries = self.ground_truth_repository.get_all()
+        entries, total = self.ground_truth_repository.get_all(
+            limit=limit, offset=offset, sort_by=sort_by, sort_dir=sort_dir
+        )
         return [
             GroundTruthResponse(
                 id=entry.id,
@@ -147,7 +155,7 @@ class GroundTruthService:
                 created_at=entry.created_at
             )
             for entry in entries
-        ]
+        ], total
 
     def create_from_confirmed_receipt(
         self,

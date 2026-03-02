@@ -13,6 +13,7 @@ celery_app = Celery(
         "src.tasks.process_receipts",
         "src.tasks.run_evaluation",
         "src.tasks.categorize_bank_transactions",
+        "src.tasks.retry_receipt",
     ],
 )
 

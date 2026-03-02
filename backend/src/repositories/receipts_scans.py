@@ -50,6 +50,10 @@ class ReceiptsScansRepository(ABC):
         if not self.conn:
             print("No database connection available.")
             return False
+        # Ensure error_message is a plain string — exception objects cannot be
+        # serialised by psycopg2 and will raise "can't adapt type '...'".
+        if error_message is not None and not isinstance(error_message, str):
+            error_message = str(error_message)
         try:
             with self.conn.cursor() as cursor:
                 cursor.execute(
@@ -213,22 +217,46 @@ class ReceiptsScansRepository(ABC):
             self.conn.rollback()
             return False
 
-    def get_all(self) -> list[ReceiptScanListItem]:
+    def get_all(
+        self,
+        status: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+        sort_by: str = "id",
+        sort_dir: str = "desc",
+    ) -> tuple[list[ReceiptScanListItem], int]:
+        _SORT_COLS: dict[str, str] = {
+            "id": "id",
+            "filename": "filename",
+            "vendor": "result->>'vendor'",
+            "date": "result->>'date'",
+            "total": "(result->>'total')::numeric",
+            "status": "status",
+        }
+        order_expr = _SORT_COLS.get(sort_by, "id")
+        direction = "ASC" if sort_dir.lower() == "asc" else "DESC"
         if not self.conn:
-            return []
+            return [], 0
         try:
             with self.conn.cursor() as cursor:
+                where = "WHERE status = %s" if status else ""
+                params: list = [status] if status else []
                 cursor.execute(
-                    """
+                    f"""
                     SELECT id, filename, status,
                            result->>'vendor',
                            result->>'date',
-                           result->>'total'
-                    FROM """ + self.table + """
-                    ORDER BY id DESC
-                    """
+                           result->>'total',
+                           COUNT(*) OVER () AS total_count
+                    FROM {self.table}
+                    {where}
+                    ORDER BY {order_expr} {direction} NULLS LAST
+                    LIMIT %s OFFSET %s
+                    """,
+                    params + [limit, offset],
                 )
                 rows = cursor.fetchall()
+                total = int(rows[0][6]) if rows else 0
                 return [
                     ReceiptScanListItem(
                         id=row[0],
@@ -239,10 +267,25 @@ class ReceiptsScansRepository(ABC):
                         total=float(row[5]) if row[5] is not None else None,
                     )
                     for row in rows
-                ]
+                ], total
         except Exception as e:
             print("Failed to fetch all scans:", e)
-            return []
+            return [], 0
+
+    def get_status_counts(self) -> dict[str, int]:
+        """Return count per status for all receipt scans."""
+        if not self.conn:
+            return {}
+        try:
+            with self.conn.cursor() as cursor:
+                cursor.execute(
+                    "SELECT status, COUNT(*) FROM " + self.table + " GROUP BY status"
+                )
+                rows = cursor.fetchall()
+                return {row[0]: int(row[1]) for row in rows}
+        except Exception as e:
+            print("Failed to fetch status counts:", e)
+            return {}
 
     def get_by_id(self, scan_id: int) -> ReceiptScanDetail | None:
         if not self.conn:
@@ -277,4 +320,53 @@ class ReceiptsScansRepository(ABC):
                 )
         except Exception as e:
             print("Failed to fetch scan by id:", e)
+            return None
+
+    def delete_scan_by_id(self, scan_id: int) -> bool:
+        """Delete a scan row by ID. FK cleanup (transactions, links) must be done by caller."""
+        if not self.conn:
+            return False
+        try:
+            with self.conn.cursor() as cursor:
+                cursor.execute(
+                    "DELETE FROM " + self.table + " WHERE id = %s",
+                    (scan_id,),
+                )
+                self.conn.commit()
+                return True
+        except Exception as e:
+            print("Failed to delete scan:", e)
+            self.conn.rollback()
+            return False
+
+    def reset_for_retry(self, scan_id: int) -> str | None:
+        """
+        Reset a scan so it can be re-processed by the pipeline.
+
+        Clears result, categories_candidates and message, and sets status to
+        PROCESSING.  Returns the filename on success, None if the scan was
+        not found or an error occurred.
+        """
+        if not self.conn:
+            return None
+        try:
+            with self.conn.cursor() as cursor:
+                cursor.execute(
+                    """
+                    UPDATE """ + self.table + """
+                    SET status = %s,
+                        result = NULL,
+                        categories_candidates = NULL,
+                        message = NULL
+                    WHERE id = %s
+                    RETURNING filename
+                    """,
+                    (ReceiptsScanStatus.PROCESSING, scan_id),
+                )
+                row = cursor.fetchone()
+                self.conn.commit()
+                return row[0] if row else None
+        except Exception as e:
+            print("Failed to reset scan for retry:", e)
+            self.conn.rollback()
             return None

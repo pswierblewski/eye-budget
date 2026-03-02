@@ -128,37 +128,51 @@ class BankTransactionsRepository:
     # Read
     # ------------------------------------------------------------------
 
-    def get_list(self, status: Optional[str] = None) -> list[BankTransactionListItem]:
-        """Return all transactions (optionally filtered by status), newest first."""
+    def get_list(
+        self,
+        status: Optional[str] = None,
+        limit: int = 50,
+        offset: int = 0,
+        sort_by: str = "booking_date",
+        sort_dir: str = "desc",
+    ) -> tuple[list[BankTransactionListItem], int]:
+        """Return transactions (optionally filtered by status), paginated."""
+        _SORT_COLS: dict[str, str] = {
+            "id": "bt.id",
+            "booking_date": "bt.booking_date",
+            "counterparty": "bt.counterparty",
+            "amount": "bt.amount",
+            "operation_type": "bt.operation_type",
+            "category_name": "c.name",
+            "status": "bt.status",
+        }
+        order_expr = _SORT_COLS.get(sort_by, "bt.booking_date")
+        # secondary sort by id keeps pages stable
+        secondary = "bt.id DESC" if order_expr != "bt.id" else ""
+        direction = "ASC" if sort_dir.lower() == "asc" else "DESC"
+        order_clause = f"{order_expr} {direction} NULLS LAST" + (f", {secondary}" if secondary else "")
         if not self.conn:
-            return []
+            return [], 0
         try:
             with self.conn.cursor() as cur:
-                if status:
-                    cur.execute(
-                        """
-                        SELECT bt.id, bt.reference_number, bt.booking_date,
-                               bt.counterparty, bt.description, bt.amount, bt.currency,
-                               bt.operation_type, bt.status, bt.category_id, c.name
-                        FROM bank_transactions bt
-                        LEFT JOIN categories c ON c.id = bt.category_id
-                        WHERE bt.status = %s
-                        ORDER BY bt.booking_date DESC, bt.id DESC
-                        """,
-                        (status,),
-                    )
-                else:
-                    cur.execute(
-                        """
-                        SELECT bt.id, bt.reference_number, bt.booking_date,
-                               bt.counterparty, bt.description, bt.amount, bt.currency,
-                               bt.operation_type, bt.status, bt.category_id, c.name
-                        FROM bank_transactions bt
-                        LEFT JOIN categories c ON c.id = bt.category_id
-                        ORDER BY bt.booking_date DESC, bt.id DESC
-                        """
-                    )
+                where = "WHERE bt.status = %s" if status else ""
+                params: list = [status] if status else []
+                cur.execute(
+                    f"""
+                    SELECT bt.id, bt.reference_number, bt.booking_date,
+                           bt.counterparty, bt.description, bt.amount, bt.currency,
+                           bt.operation_type, bt.status, bt.category_id, c.name,
+                           COUNT(*) OVER () AS total_count
+                    FROM bank_transactions bt
+                    LEFT JOIN categories c ON c.id = bt.category_id
+                    {where}
+                    ORDER BY {order_clause}
+                    LIMIT %s OFFSET %s
+                    """,
+                    params + [limit, offset],
+                )
                 rows = cur.fetchall()
+            total = int(rows[0][11]) if rows else 0
             return [
                 BankTransactionListItem(
                     id=r[0],
@@ -174,10 +188,23 @@ class BankTransactionsRepository:
                     category_name=r[10],
                 )
                 for r in rows
-            ]
+            ], total
         except Exception as e:
             print(f"BankTransactionsRepository.get_list error: {e}")
-            return []
+            return [], 0
+
+    def get_status_counts(self) -> dict[str, int]:
+        """Return count per status for all bank transactions."""
+        if not self.conn:
+            return {}
+        try:
+            with self.conn.cursor() as cur:
+                cur.execute("SELECT status, COUNT(*) FROM bank_transactions GROUP BY status")
+                rows = cur.fetchall()
+                return {row[0]: int(row[1]) for row in rows}
+        except Exception as e:
+            print(f"BankTransactionsRepository.get_status_counts error: {e}")
+            return {}
 
     def get_by_id(self, transaction_id: int) -> Optional[BankTransactionDetail]:
         """Return full detail for a single transaction."""

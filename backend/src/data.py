@@ -1,7 +1,17 @@
 import datetime
 from enum import StrEnum
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import List, Optional, Generic, TypeVar
+
+T = TypeVar("T")
+
+
+class PaginatedResponse(BaseModel, Generic[T]):
+    """Generic paginated response wrapper."""
+    items: List[T]
+    total: int
+    limit: int
+    offset: int
 
 class ReceiptsScanStatus(StrEnum):
     """Enumeration for the status of a receipt scan"""

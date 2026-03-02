@@ -1,6 +1,5 @@
 from abc import ABC
 import os
-import time
 from PIL import Image
 
 class PreprocessingService(ABC):
@@ -10,8 +9,8 @@ class PreprocessingService(ABC):
 
     def preprocess_image(self, image_path: str) -> str:
         input_image_path = os.path.join(self.input_dir, image_path)
-        timestr = time.strftime("%Y%m%d-%H%M%S")
-        output_filename = f'{timestr}.{os.getenv("PREPROCESSED_IMAGE_EXTENSION")}'
+        stem = os.path.splitext(os.path.basename(image_path))[0]
+        output_filename = f'{stem}.{os.getenv("PREPROCESSED_IMAGE_EXTENSION")}'
         output_path = os.path.join(self.output_dir, output_filename)
         os.makedirs(self.output_dir, exist_ok=True)
         with Image.open(input_image_path) as img:

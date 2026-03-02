@@ -5,6 +5,7 @@ from src.app import App
 from src.celery_app import celery_app
 from src.tasks.process_receipts import process_receipts_task
 from src.tasks.run_evaluation import run_evaluation_task
+from src.tasks.retry_receipt import retry_receipt_task
 from src.tasks.categorize_bank_transactions import categorize_bank_transactions_task
 from src.data import (
     EvaluationRunSummary,
@@ -26,6 +27,7 @@ from src.data import (
     ReceiptCandidateItem,
     BankTxCandidateItem,
     LinkReceiptRequest,
+    PaginatedResponse,
 )
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.responses import StreamingResponse
@@ -69,12 +71,31 @@ def get_task_status(task_id: str):
 # Receipts read + confirm endpoints
 # ------------------------------------------------------------------
 
-@app.get("/receipts", response_model=list[ReceiptScanListItem])
-def list_receipts() -> list[ReceiptScanListItem]:
-    """List all receipt scans, newest first."""
+@app.get("/receipts/counts")
+def get_receipt_counts() -> dict[str, int]:
+    """Return count of receipt scans per status."""
     my_app = App()
     try:
-        return my_app.get_all_receipts()
+        return my_app.get_receipt_status_counts()
+    finally:
+        my_app.dispose()
+
+
+@app.get("/receipts", response_model=PaginatedResponse[ReceiptScanListItem])
+def list_receipts(
+    status: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+    sort_by: str = "id",
+    sort_dir: str = "desc",
+) -> PaginatedResponse[ReceiptScanListItem]:
+    """List receipt scans, paginated, optionally filtered by status."""
+    my_app = App()
+    try:
+        items, total = my_app.get_all_receipts(
+            status=status, limit=limit, offset=offset, sort_by=sort_by, sort_dir=sort_dir
+        )
+        return PaginatedResponse(items=items, total=total, limit=limit, offset=offset)
     finally:
         my_app.dispose()
 
@@ -101,6 +122,23 @@ def get_receipt_image(scan_id: int) -> StreamingResponse:
         if image_bytes is None:
             raise HTTPException(status_code=404, detail=f"Image for scan {scan_id} not found")
         return StreamingResponse(io.BytesIO(image_bytes), media_type="image/png")
+    finally:
+        my_app.dispose()
+
+
+@app.post("/receipts/{scan_id}/reupload-image")
+def reupload_receipt_image(scan_id: int):
+    """
+    Re-preprocess the source image from the input directory and re-upload it to
+    MinIO.  Use this when the receipt image is missing (e.g. MinIO was reset or
+    preprocessing failed mid-way on first run).
+    """
+    my_app = App()
+    try:
+        ok = my_app.reupload_receipt_image(scan_id)
+        if not ok:
+            raise HTTPException(status_code=404, detail=f"Could not reupload image for scan {scan_id} — source file may be missing")
+        return {"ok": True}
     finally:
         my_app.dispose()
 
@@ -142,6 +180,36 @@ def reopen_receipt(scan_id: int) -> ReceiptScanDetail:
         return result
     finally:
         my_app.dispose()
+
+
+@app.delete("/receipts/{scan_id}", status_code=200)
+def delete_receipt(scan_id: int):
+    """
+    Permanently delete a receipt scan together with its confirmed transaction,
+    line items, bank links and MinIO image.
+    """
+    my_app = App()
+    try:
+        ok = my_app.delete_receipt(scan_id)
+        if not ok:
+            raise HTTPException(status_code=404, detail=f"Receipt scan {scan_id} not found")
+        return {"ok": True}
+    finally:
+        my_app.dispose()
+
+
+@app.post("/receipts/{scan_id}/retry", response_model=TaskResponse, status_code=202)
+def retry_receipt(scan_id: int):
+    """
+    Re-run the full OCR pipeline for a single receipt scan.
+
+    Resets the scan status to 'pending' and dispatches a background Celery task
+    that re-runs preprocessing, OCR, vendor/product normalisation and category
+    candidate assignment for the given scan.  Available for scans in status
+    new / processing / processed / failed.
+    """
+    task = retry_receipt_task.delay(scan_id)
+    return TaskResponse(task_id=task.id)
 
 
 # ------------------------------------------------------------------
@@ -248,12 +316,20 @@ def create_category(request: CreateCategoryRequest) -> CategoryItem:
 # Evaluations
 # ------------------------------------------------------------------
 
-@app.get("/evaluations", response_model=list[EvaluationRunListItem])
-def list_evaluations() -> list[EvaluationRunListItem]:
-    """List all evaluation runs, newest first."""
+@app.get("/evaluations", response_model=PaginatedResponse[EvaluationRunListItem])
+def list_evaluations(
+    limit: int = 50,
+    offset: int = 0,
+    sort_by: str = "id",
+    sort_dir: str = "desc",
+) -> PaginatedResponse[EvaluationRunListItem]:
+    """List evaluation runs, paginated, newest first."""
     my_app = App()
     try:
-        return my_app.get_all_evaluation_runs()
+        items, total = my_app.get_all_evaluation_runs(
+            limit=limit, offset=offset, sort_by=sort_by, sort_dir=sort_dir
+        )
+        return PaginatedResponse(items=items, total=total, limit=limit, offset=offset)
     finally:
         my_app.dispose()
 
@@ -343,14 +419,22 @@ def get_ground_truth(entry_id: int) -> GroundTruthResponse:
         my_app.dispose()
 
 
-@app.get("/ground-truth", response_model=list[GroundTruthResponse])
-def list_ground_truth() -> list[GroundTruthResponse]:
+@app.get("/ground-truth", response_model=PaginatedResponse[GroundTruthResponse])
+def list_ground_truth(
+    limit: int = 50,
+    offset: int = 0,
+    sort_by: str = "id",
+    sort_dir: str = "desc",
+) -> PaginatedResponse[GroundTruthResponse]:
     """
-    List all ground truth entries.
+    List ground truth entries, paginated.
     """
     my_app = App()
     try:
-        return my_app.list_ground_truth()
+        items, total = my_app.list_ground_truth(
+            limit=limit, offset=offset, sort_by=sort_by, sort_dir=sort_dir
+        )
+        return PaginatedResponse(items=items, total=total, limit=limit, offset=offset)
     finally:
         my_app.dispose()
 
@@ -377,12 +461,31 @@ async def import_bank_transactions(file: UploadFile = File(...)) -> BankImportRe
         my_app.dispose()
 
 
-@app.get("/bank-transactions", response_model=list[BankTransactionListItem])
-def list_bank_transactions(status: str | None = None) -> list[BankTransactionListItem]:
-    """List bank transactions, optionally filtered by status (to_confirm | done)."""
+@app.get("/bank-transactions/counts")
+def get_bank_transaction_counts() -> dict[str, int]:
+    """Return count of bank transactions per status."""
     my_app = App()
     try:
-        return my_app.get_all_bank_transactions(status)
+        return my_app.get_bank_transaction_status_counts()
+    finally:
+        my_app.dispose()
+
+
+@app.get("/bank-transactions", response_model=PaginatedResponse[BankTransactionListItem])
+def list_bank_transactions(
+    status: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+    sort_by: str = "booking_date",
+    sort_dir: str = "desc",
+) -> PaginatedResponse[BankTransactionListItem]:
+    """List bank transactions, paginated, optionally filtered by status."""
+    my_app = App()
+    try:
+        items, total = my_app.get_all_bank_transactions(
+            status=status, limit=limit, offset=offset, sort_by=sort_by, sort_dir=sort_dir
+        )
+        return PaginatedResponse(items=items, total=total, limit=limit, offset=offset)
     finally:
         my_app.dispose()
 

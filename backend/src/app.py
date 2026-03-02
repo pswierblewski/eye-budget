@@ -154,46 +154,9 @@ class App(ABC):
             return
         total = len(new_files)
         for index, file in enumerate(new_files, start=1):
-            try:
-                print(f"Processing file: {file}")
-                self.receipts_scans_repository.set_status(file, ReceiptsScanStatus.PROCESSING)
-                preprocessed_image_path = self.preprocessing_service.preprocess_image(file)
-
-                # Upload preprocessed image to MinIO
-                scan_id = self.receipts_scans_repository.get_scan_id_by_filename(file)
-                with open(preprocessed_image_path, "rb") as f:
-                    image_data = f.read()
-                object_key = f"receipts/{scan_id}_{_os_top.path.basename(file)}"
-                self.minio_service.upload_image(image_data, object_key)
-                self.receipts_scans_repository.set_minio_key(file, object_key)
-
-                ocr_result = self.ocr_service.process_image(preprocessed_image_path)
-                self.receipts_scans_repository.set_result(file, ocr_result)
-                self.receipts_scans_repository.set_status(file, ReceiptsScanStatus.PROCESSED)
-                print(f"File {file} processed successfully.")
-
-                transaction_model = TransactionModel(**ocr_result)
-
-                vendor_mapping = self.vendors_service.process_vendor(transaction_model.vendor)
-                self.vendors_repository.process_vendor_mapping(vendor_mapping)
-                transaction_model = transaction_model.model_copy(
-                    update={"vendor": vendor_mapping.vendor_name}
-                )
-
-                product_mappings = self.products_service.process_products(transaction_model.products)
-                self.products_repository.process_product_mappings(product_mappings.products)
-
-                category_candidates = self.categories_service.assign_category_candidates(transaction_model)
-                self.receipts_scans_repository.set_category_candidates(file, category_candidates)
-
-                if on_progress:
-                    on_progress(index=index, total=total, filename=file, status="done")
-
-            except Exception as e:
-                print(f"Error processing file {file}: {e}")
-                self.receipts_scans_repository.set_status(file, ReceiptsScanStatus.FAILED, e)
-                if on_progress:
-                    on_progress(index=index, total=total, filename=file, status="failed")
+            success = self._process_single_file(file)
+            if on_progress:
+                on_progress(index=index, total=total, filename=file, status="done" if success else "failed")
 
     async def _run_production_async(self, on_progress=None):
         """Async version of _run_production: processes receipts in parallel (up to 5 at a time)."""
@@ -306,7 +269,7 @@ class App(ABC):
                     async with db_lock:
                         await asyncio.to_thread(
                             self.receipts_scans_repository.set_status,
-                            file, ReceiptsScanStatus.FAILED, e,
+                            file, ReceiptsScanStatus.FAILED, str(e),
                         )
                     status = "failed"
 
@@ -332,17 +295,32 @@ class App(ABC):
         """Get a ground truth entry by ID."""
         return self.ground_truth_service.get(entry_id)
 
-    def list_ground_truth(self) -> list[GroundTruthResponse]:
-        """List all ground truth entries."""
-        return self.ground_truth_service.list()
+    def list_ground_truth(
+        self, limit: int = 50, offset: int = 0, sort_by: str = "id", sort_dir: str = "desc"
+    ) -> tuple[list[GroundTruthResponse], int]:
+        """List ground truth entries, paginated."""
+        return self.ground_truth_service.list(limit=limit, offset=offset, sort_by=sort_by, sort_dir=sort_dir)
 
     # ------------------------------------------------------------------
     # Receipts review / confirm API methods
     # ------------------------------------------------------------------
 
-    def get_all_receipts(self) -> list[ReceiptScanListItem]:
-        """Return all receipt scans, newest first."""
-        return self.receipts_scans_repository.get_all()
+    def get_all_receipts(
+        self,
+        status: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+        sort_by: str = "id",
+        sort_dir: str = "desc",
+    ) -> tuple[list[ReceiptScanListItem], int]:
+        """Return receipt scans, paginated, optionally filtered by status."""
+        return self.receipts_scans_repository.get_all(
+            status=status, limit=limit, offset=offset, sort_by=sort_by, sort_dir=sort_dir
+        )
+
+    def get_receipt_status_counts(self) -> dict[str, int]:
+        """Return count of receipt scans per status."""
+        return self.receipts_scans_repository.get_status_counts()
 
     def get_receipt_by_id(self, scan_id: int) -> ReceiptScanDetail | None:
         """Return full scan detail, including confirmed transaction if present."""
@@ -373,6 +351,35 @@ class App(ABC):
         if detail is None or detail.minio_object_key is None:
             return None
         return self.minio_service.download_image(detail.minio_object_key)
+
+    def reupload_receipt_image(self, scan_id: int) -> bool:
+        """
+        Re-preprocess the source image from the input directory and re-upload it
+        to MinIO, then update minio_object_key in the DB.
+
+        Useful when the MinIO object is missing or was never stored (e.g. the
+        scan was created but preprocessing failed mid-way).
+
+        Returns True on success, False if the scan or source file was not found.
+        """
+        detail = self.receipts_scans_repository.get_by_id(scan_id)
+        if detail is None:
+            return False
+        try:
+            preprocessed_path = self.preprocessing_service.preprocess_image(detail.filename)
+        except Exception as e:
+            print(f"reupload_receipt_image: preprocessing failed for {detail.filename}: {e}")
+            return False
+        object_key = f"receipts/{scan_id}_{_os_top.path.basename(detail.filename)}"
+        try:
+            with open(preprocessed_path, "rb") as f:
+                image_data = f.read()
+            self.minio_service.upload_image(image_data, object_key)
+        except Exception as e:
+            print(f"reupload_receipt_image: MinIO upload failed: {e}")
+            return False
+        self.receipts_scans_repository.set_minio_key(detail.filename, object_key)
+        return True
 
     def get_ground_truth_image_bytes(self, entry_id: int) -> bytes | None:
         """Download the ground truth receipt image from MinIO."""
@@ -495,6 +502,87 @@ class App(ABC):
         self.receipts_scans_repository.set_status_to_confirm_by_id(scan_id)
         return self.get_receipt_by_id(scan_id)
 
+    def delete_receipt(self, scan_id: int) -> bool:
+        """
+        Permanently delete a receipt scan.
+
+        Removes the confirmed transaction rows (and their bank links / items via
+        ON DELETE CASCADE), the MinIO preprocessed image, and finally the
+        receipts_scans row itself.
+        """
+        detail = self.receipts_scans_repository.get_by_id(scan_id)
+        if detail is None:
+            return False
+        # Remove confirmed transaction rows (cascades to items and bank links)
+        self.transactions_repository.delete_by_scan_id(scan_id)
+        # Remove preprocessed image from object storage
+        if detail.minio_object_key:
+            self.minio_service.delete_image(detail.minio_object_key)
+        # Remove the scan row itself
+        return self.receipts_scans_repository.delete_scan_by_id(scan_id)
+
+    def retry_receipt(self, scan_id: int) -> bool:
+        """
+        Re-run the full OCR pipeline for a single receipt.
+
+        Resets the scan state to 'pending' and re-processes the source file from
+        the input directory through preprocessing, OCR, vendor/product
+        normalisation and category candidate assignment.
+        Returns True on success, False if the scan was not found or the source
+        file is missing.
+        """
+        filename = self.receipts_scans_repository.reset_for_retry(scan_id)
+        if filename is None:
+            return False
+        self._process_single_file(filename)
+        return True
+
+    def _process_single_file(self, filename: str) -> bool:
+        """
+        Run the production processing pipeline for one specific file.
+
+        Unlike _run_production this method does NOT call add_receipt — the
+        receipts_scans row must already exist.  Used by both _run_production
+        (batch loop) and retry_receipt (single-scan retry).
+
+        Returns True on success, False on failure (status set to FAILED).
+        """
+        try:
+            print(f"Processing file: {filename}")
+            self.receipts_scans_repository.set_status(filename, ReceiptsScanStatus.PROCESSING)
+            preprocessed_image_path = self.preprocessing_service.preprocess_image(filename)
+
+            scan_id = self.receipts_scans_repository.get_scan_id_by_filename(filename)
+            object_key = f"receipts/{scan_id}_{_os_top.path.basename(filename)}"
+            with open(preprocessed_image_path, "rb") as f:
+                image_data = f.read()
+            self.minio_service.upload_image(image_data, object_key)
+            self.receipts_scans_repository.set_minio_key(filename, object_key)
+
+            ocr_result = self.ocr_service.process_image(preprocessed_image_path)
+            self.receipts_scans_repository.set_result(filename, ocr_result)
+            self.receipts_scans_repository.set_status(filename, ReceiptsScanStatus.PROCESSED)
+            print(f"File {filename} processed successfully.")
+
+            transaction_model = TransactionModel(**ocr_result)
+
+            vendor_mapping = self.vendors_service.process_vendor(transaction_model.vendor)
+            self.vendors_repository.process_vendor_mapping(vendor_mapping)
+            transaction_model = transaction_model.model_copy(
+                update={"vendor": vendor_mapping.vendor_name}
+            )
+
+            product_mappings = self.products_service.process_products(transaction_model.products)
+            self.products_repository.process_product_mappings(product_mappings.products)
+
+            category_candidates = self.categories_service.assign_category_candidates(transaction_model)
+            self.receipts_scans_repository.set_category_candidates(filename, category_candidates)
+            return True
+        except Exception as e:
+            print(f"Error processing file {filename}: {e}")
+            self.receipts_scans_repository.set_status(filename, ReceiptsScanStatus.FAILED, str(e))
+            return False
+
     def get_all_expense_categories(self) -> list[CategoryItem]:
         """Return all expense categories."""
         return self.categories_repository.get_all_expense_categories()
@@ -507,9 +595,13 @@ class App(ABC):
         """Create a new expense category."""
         return self.categories_repository.create_category(name, group_name, parent_id)
 
-    def get_all_evaluation_runs(self) -> list[EvaluationRunListItem]:
-        """Return all evaluation runs, newest first."""
-        return self.evaluations_repository.get_all_runs()
+    def get_all_evaluation_runs(
+        self, limit: int = 50, offset: int = 0, sort_by: str = "id", sort_dir: str = "desc"
+    ) -> tuple[list[EvaluationRunListItem], int]:
+        """Return evaluation runs, paginated, newest first."""
+        return self.evaluations_repository.get_all_runs(
+            limit=limit, offset=offset, sort_by=sort_by, sort_dir=sort_dir
+        )
 
     def get_evaluation_run(self, run_id: int) -> EvaluationRunDetail | None:
         """Return a single evaluation run with all per-file results."""
@@ -548,9 +640,16 @@ class App(ABC):
                 print(f"LLM categorization failed for bank_transaction {tx_id}: {e}")
 
     def get_all_bank_transactions(
-        self, status: str | None = None
-    ) -> list[BankTransactionListItem]:
-        return self.bank_transactions_repository.get_list(status)
+        self, status: str | None = None, limit: int = 50, offset: int = 0,
+        sort_by: str = "booking_date", sort_dir: str = "desc"
+    ) -> tuple[list[BankTransactionListItem], int]:
+        return self.bank_transactions_repository.get_list(
+            status=status, limit=limit, offset=offset, sort_by=sort_by, sort_dir=sort_dir
+        )
+
+    def get_bank_transaction_status_counts(self) -> dict[str, int]:
+        """Return count of bank transactions per status."""
+        return self.bank_transactions_repository.get_status_counts()
 
     def get_bank_transaction_by_id(self, tx_id: int) -> BankTransactionDetail | None:
         detail = self.bank_transactions_repository.get_by_id(tx_id)

@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getReceipt, listCategories, confirmReceipt, reopenReceipt, getBankTxCandidates, linkBankToReceipt, unlinkBankTransaction } from "@/lib/api";
+import { getReceipt, listReceipts, listCategories, confirmReceipt, reopenReceipt, deleteReceipt, retryReceipt, reuployReceiptImage, getBankTxCandidates, linkBankToReceipt, unlinkBankTransaction } from "@/lib/api";
+import { useRouter } from "next/navigation";
 import { ReceiptImageViewer } from "@/components/ReceiptImageViewer";
 import { ProductCategoryRow } from "@/components/ProductCategoryRow";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -32,6 +33,7 @@ export default function ReceiptReviewPage({
 }) {
   const scanId = Number(params.id);
   const queryClient = useQueryClient();
+  const router = useRouter();
 
   const { data: scan, isLoading: scanLoading } = useQuery({
     queryKey: ["receipt", scanId],
@@ -42,6 +44,21 @@ export default function ReceiptReviewPage({
     queryKey: ["categories"],
     queryFn: listCategories,
   });
+
+  const { data: allReceipts } = useQuery({
+    queryKey: ["receipts", "all", "nav"],
+    queryFn: () => listReceipts({ limit: 1000 }),
+  });
+
+  const { prevReceiptId, nextReceiptId } = (() => {
+    if (!allReceipts) return { prevReceiptId: null, nextReceiptId: null };
+    const ids = allReceipts.items.map((r) => r.id).sort((a, b) => a - b);
+    const idx = ids.indexOf(scanId);
+    return {
+      prevReceiptId: idx > 0 ? ids[idx - 1] : null,
+      nextReceiptId: idx !== -1 && idx < ids.length - 1 ? ids[idx + 1] : null,
+    };
+  })();
 
   // Map: raw_product_name → selected category_id
   const [selections, setSelections] = useState<Record<string, number>>({});
@@ -59,6 +76,32 @@ export default function ReceiptReviewPage({
   // the value being reformatted on every keystroke (type="text" + toFixed in value
   // would reset the cursor after each character).
   const [priceInputs, setPriceInputs] = useState<Array<{ unit: string; total: string }>>([])
+  const [openMenuIndex, setOpenMenuIndex] = useState<number | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
+  const headerMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (openMenuIndex === null) return;
+    function handleClick(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setOpenMenuIndex(null);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [openMenuIndex]);
+
+  useEffect(() => {
+    if (!headerMenuOpen) return;
+    function handleClick(e: MouseEvent) {
+      if (headerMenuRef.current && !headerMenuRef.current.contains(e.target as Node)) {
+        setHeaderMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [headerMenuOpen]);
 
   useEffect(() => {
     if (scan?.result) {
@@ -137,6 +180,28 @@ export default function ReceiptReviewPage({
     },
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteReceipt(scanId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["receipts"] });
+      router.push("/receipts");
+    },
+  });
+
+  const retryMutation = useMutation({
+    mutationFn: () => retryReceipt(scanId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["receipt", scanId] });
+      queryClient.invalidateQueries({ queryKey: ["receipts"] });
+    },
+  });
+
+  const [imageRefreshKey, setImageRefreshKey] = useState(0);
+  const handleReuloadImage = async () => {
+    await reuployReceiptImage(scanId);
+    setImageRefreshKey((k) => k + 1);
+  };
+
   if (scanLoading) {
     return (
       <div className="text-sm text-gray-400 py-16 text-center">Ładowanie…</div>
@@ -180,6 +245,12 @@ export default function ReceiptReviewPage({
   };
 
   const products = editedProducts.length > 0 ? editedProducts : (scan.result?.products ?? []);
+
+  // Calculated total from product prices
+  const calculatedTotal = editedProducts.reduce((sum, p) => sum + (p.price || 0), 0);
+  const parsedTotal = parseFloat(editedTotal) || 0;
+  const totalsMatch = Math.abs(calculatedTotal - parsedTotal) < 0.005;
+
   const allSelected = products.every(
     (p) => getSelection(p.name) !== undefined
   );
@@ -208,10 +279,34 @@ export default function ReceiptReviewPage({
     }
   };
 
+  const addProduct = () => {
+    const newProduct: ProductItem = { name: "", quantity: 1, price: 0, unit_price: null };
+    setEditedProducts((prev) => [...prev, newProduct]);
+    setPriceInputs((prev) => [...prev, { unit: "", total: "0.00" }]);
+  };
+
+  const removeProduct = (index: number) => {
+    const removedName = editedProducts[index]?.name;
+    setEditedProducts((prev) => prev.filter((_, i) => i !== index));
+    setPriceInputs((prev) => prev.filter((_, i) => i !== index));
+    if (removedName) {
+      setSelections((prev) => {
+        const next = { ...prev };
+        delete next[removedName];
+        return next;
+      });
+      setEditedNormalizedProducts((prev) => {
+        const next = { ...prev };
+        delete next[removedName];
+        return next;
+      });
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-4 flex-wrap">
         <Link
           href="/receipts"
           className="text-sm text-gray-500 hover:text-gray-700"
@@ -222,11 +317,73 @@ export default function ReceiptReviewPage({
           {scan.filename}
         </h1>
         <StatusBadge status={scan.status} />
+        <div className="flex items-center gap-1">
+          {prevReceiptId !== null ? (
+            <Link
+              href={`/receipts/${prevReceiptId}`}
+              className="text-sm px-2.5 py-1.5 rounded-lg border border-gray-300 bg-white text-gray-600 hover:bg-gray-50"
+              title="Poprzedni paragon"
+            >
+              &#8592;
+            </Link>
+          ) : (
+            <span className="text-sm px-2.5 py-1.5 rounded-lg border border-gray-200 bg-gray-50 text-gray-300 cursor-not-allowed">&#8592;</span>
+          )}
+          {nextReceiptId !== null ? (
+            <Link
+              href={`/receipts/${nextReceiptId}`}
+              className="text-sm px-2.5 py-1.5 rounded-lg border border-gray-300 bg-white text-gray-600 hover:bg-gray-50"
+              title="Następny paragon"
+            >
+              &#8594;
+            </Link>
+          ) : (
+            <span className="text-sm px-2.5 py-1.5 rounded-lg border border-gray-200 bg-gray-50 text-gray-300 cursor-not-allowed">&#8594;</span>
+          )}
+        </div>
+        {["new", "processing", "processed", "failed"].includes(scan.status) && (
+          <button
+            onClick={() => retryMutation.mutate()}
+            disabled={retryMutation.isPending}
+            className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+          >
+            {retryMutation.isPending ? "Ponawiam…" : "Ponów przetwarzanie"}
+          </button>
+        )}
+        <div className="relative" ref={headerMenuRef}>
+          <button
+            onClick={() => setHeaderMenuOpen((v) => !v)}
+            className="text-sm px-2.5 py-1.5 rounded-lg border border-gray-300 bg-white text-gray-600 hover:bg-gray-50"
+            title="Więcej opcji"
+          >
+            &#8943;
+          </button>
+          {headerMenuOpen && (
+            <div className="absolute right-0 top-full mt-1 z-20 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[160px]">
+              <button
+                onClick={() => {
+                  setHeaderMenuOpen(false);
+                  if (window.confirm("Czy na pewno chcesz usunąć ten paragon? Tej operacji nie można cofnąć.")) {
+                    deleteMutation.mutate();
+                  }
+                }}
+                disabled={deleteMutation.isPending}
+                className="w-full text-left text-sm px-4 py-2 text-red-600 hover:bg-red-50 disabled:opacity-50"
+              >
+                {deleteMutation.isPending ? "Usuwam…" : "Usuń paragon"}
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Receipt image */}
-        <ReceiptImageViewer scanId={scanId} />
+        <ReceiptImageViewer
+          scanId={scanId}
+          refreshKey={imageRefreshKey}
+          onReuploadImage={handleReuloadImage}
+        />
 
         {/* Review panel */}
         <div className="flex flex-col gap-4 overflow-y-auto max-h-[calc(100vh-10rem)] pr-1">
@@ -245,12 +402,29 @@ export default function ReceiptReviewPage({
               </div>
 
               <div className="rounded-xl border border-gray-200 p-4 space-y-1">
-                <div className="flex items-start justify-between gap-2">
-                  <p className="font-semibold text-gray-900">
-                    {scan.transaction.normalized_vendor_name ?? scan.transaction.raw_vendor_name}
-                  </p>
-                  <p className="font-bold text-gray-900 shrink-0">{scan.transaction.total.toFixed(2)} PLN</p>
-                </div>
+                {(() => {
+                  const confirmedCalc = scan.transaction.items.reduce((s, i) => s + i.price, 0);
+                  const confirmedMatch = Math.abs(confirmedCalc - scan.transaction.total) < 0.005;
+                  const diff = scan.transaction.total - confirmedCalc;
+                  return (
+                    <>
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="font-semibold text-gray-900">
+                          {scan.transaction.normalized_vendor_name ?? scan.transaction.raw_vendor_name}
+                        </p>
+                        <div className="flex flex-col items-end gap-0.5 shrink-0">
+                          <span className="font-bold text-gray-900">{scan.transaction.total.toFixed(2)} PLN</span>
+                          <span className="text-xs text-gray-400">z produktów: {confirmedCalc.toFixed(2)} PLN</span>
+                          {confirmedMatch ? (
+                            <span className="inline-flex items-center text-[10px] font-semibold text-green-700 bg-green-100 px-1.5 py-0.5 rounded-full" title="Sumy się zgadzają">✓ zgodne</span>
+                          ) : (
+                            <span className="inline-flex items-center text-[10px] font-semibold text-red-600 bg-red-100 px-1.5 py-0.5 rounded-full" title="Sumy się nie zgadzają">✗ różnica {diff > 0 ? "+" : ""}{diff.toFixed(2)} PLN</span>
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  );
+                })()}
                 {scan.transaction.normalized_vendor_name && scan.transaction.normalized_vendor_name !== scan.transaction.raw_vendor_name && (
                   <p className="text-xs text-gray-400">Raw: {scan.transaction.raw_vendor_name}</p>
                 )}
@@ -406,31 +580,100 @@ export default function ReceiptReviewPage({
                     className="mt-1 w-full text-sm border border-gray-200 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-[#635bff]"
                   />
                 </label>
-                <label className="block text-xs text-gray-600">
+                <div className="block text-xs text-gray-600">
                   Suma (PLN)
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={editedTotal}
-                    onChange={(e) => setEditedTotal(e.target.value)}
-                    className="mt-1 w-full text-sm border border-gray-200 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-[#635bff]"
-                  />
-                </label>
+                  <div className="flex flex-col gap-1.5 mt-1">
+                    <div>
+                      <p className="text-[10px] text-gray-400 mb-0.5">Z paragonu (edytowalna)</p>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={editedTotal}
+                        onChange={(e) => setEditedTotal(e.target.value)}
+                        className="w-full text-sm border border-gray-200 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-[#635bff]"
+                      />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <p className="text-[10px] text-gray-400">Z produktów (wyliczona)</p>
+                        {totalsMatch ? (
+                          <span
+                            className="inline-flex items-center gap-1 text-[10px] font-semibold text-green-700 bg-green-100 px-1.5 py-0.5 rounded-full"
+                            title="Sumy się zgadzają"
+                          >
+                            ✓ zgodne
+                          </span>
+                        ) : (
+                          <span
+                            className="inline-flex items-center gap-1 text-[10px] font-semibold text-red-600 bg-red-100 px-1.5 py-0.5 rounded-full"
+                            title="Sumy się nie zgadzają"
+                          >
+                            ✗ różnica {parsedTotal - calculatedTotal > 0 ? "+" : ""}{(parsedTotal - calculatedTotal).toFixed(2)} PLN
+                          </span>
+                        )}
+                      </div>
+                      <div className="w-full text-sm border border-gray-100 bg-gray-50 rounded-md px-2 py-1 text-gray-700 select-none">
+                        {calculatedTotal.toFixed(2)}
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
+
+              <button
+                disabled={!allSelected || confirmMutation.isPending}
+                onClick={() => {
+                  const resolved: Record<string, number> = {};
+                  for (const p of products) {
+                    const sel = getSelection(p.name);
+                    if (sel !== undefined) resolved[p.name] = sel;
+                  }
+                  confirmMutation.mutate(resolved);
+                }}
+                className="w-full py-2.5 rounded-md bg-[#635bff] text-white font-medium text-sm hover:bg-[#5248db] disabled:opacity-50 transition-colors"
+              >
+                {confirmMutation.isPending ? "Zapisywanie…" : "Potwierdź paragon"}
+              </button>
 
               <div className="space-y-2">
                 <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
                   Przypisz kategorie
                 </h2>
                 {products.map((product, index) => (
-                  <div key={product.name} className="rounded-lg border border-gray-200 bg-white">
+                  <div key={index} className="rounded-lg border border-gray-200 bg-white">
                     {/* Product name + price — always visible at the top */}
                     <div className="px-3 pt-3 pb-2 min-w-0">
                       <div className="flex items-start justify-between gap-2">
-                        <p className="text-sm font-medium text-gray-900">{product.name}</p>
-                        <p className="text-sm font-semibold text-gray-900 shrink-0">{product.price.toFixed(2)} PLN</p>
+                        <input
+                          type="text"
+                          value={product.name}
+                          onChange={(e) => updateEditedProduct(index, { name: e.target.value })}
+                          placeholder="Nazwa produktu"
+                          className="flex-1 text-sm font-medium text-gray-900 border border-gray-200 rounded-md px-2 py-0.5 focus:outline-none focus:ring-2 focus:ring-[#635bff] min-w-0"
+                        />
+                        <div className="relative shrink-0 ml-2" ref={openMenuIndex === index ? menuRef : undefined}>
+                          <button
+                            type="button"
+                            onClick={() => setOpenMenuIndex(openMenuIndex === index ? null : index)}
+                            className="p-1 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors leading-none"
+                            title="Opcje"
+                          >
+                            ⋯
+                          </button>
+                          {openMenuIndex === index && (
+                            <div className="absolute right-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[130px]">
+                              <button
+                                type="button"
+                                onClick={() => { removeProduct(index); setOpenMenuIndex(null); }}
+                                className="w-full text-left px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                              >
+                                Usuń produkt
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                      <p className="text-xs text-gray-500">
+                      <p className="text-xs text-gray-500 mt-1">
                         {product.quantity} × {(product.unit_price ?? product.price).toFixed(2)} PLN
                       </p>
                     </div>
@@ -509,6 +752,14 @@ export default function ReceiptReviewPage({
                   </div>
                 ))}
               </div>
+
+              <button
+                type="button"
+                onClick={addProduct}
+                className="w-full py-2 rounded-md border border-dashed border-gray-300 text-sm text-gray-500 hover:border-[#635bff] hover:text-[#635bff] transition-colors"
+              >
+                + Dodaj produkt
+              </button>
 
               <button
                 disabled={!allSelected || confirmMutation.isPending}
