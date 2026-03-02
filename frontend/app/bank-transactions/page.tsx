@@ -10,6 +10,7 @@ import {
   getReceiptCandidates,
   linkBankToReceipt,
   unlinkBankTransaction,
+  getBankTransactionCounts,
 } from "@/lib/api";
 import {
   BankTransactionListItem,
@@ -322,7 +323,11 @@ function ExpandedRowContent({ tx }: ExpandedRowProps) {
 
 export default function BankTransactionsPage() {
   const queryClient = useQueryClient();
+  const PAGE_SIZE = 50;
+  const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [sortBy, setSortBy] = useState("booking_date");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [importResult, setImportResult] = useState<BankImportResult | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const [progress, setProgress] = useState<{ index: number; total: number } | null>(null);
@@ -338,15 +343,26 @@ export default function BankTransactionsPage() {
     };
   }, []);
 
-  const { data: allTransactions = [], isLoading } = useQuery({
-    queryKey: ["bank-transactions"],
-    queryFn: () => listBankTransactions(),
+  const { data, isLoading } = useQuery({
+    queryKey: ["bank-transactions", page, statusFilter, sortBy, sortDir],
+    queryFn: () => listBankTransactions({
+      page,
+      limit: PAGE_SIZE,
+      status: statusFilter !== "all" ? statusFilter : undefined,
+      sort_by: sortBy,
+      sort_dir: sortDir,
+    }),
+    staleTime: 30_000,
   });
+  const transactions = data?.items ?? [];
+  const total = data?.total ?? 0;
 
-  const transactions =
-    statusFilter === "all"
-      ? allTransactions
-      : allTransactions.filter((t) => t.status === statusFilter);
+  const { data: statusCounts = {} } = useQuery({
+    queryKey: ["bank-transactions-counts"],
+    queryFn: getBankTransactionCounts,
+    staleTime: 30_000,
+  });
+  const totalAll = Object.values(statusCounts).reduce<number>((sum, v) => sum + v, 0);
 
   const importMutation = useMutation({
     mutationFn: importBankCsv,
@@ -379,6 +395,7 @@ export default function BankTransactionsPage() {
             channel.unbind_all();
             channel.unsubscribe();
             queryClient.invalidateQueries({ queryKey: ["bank-transactions"] });
+            queryClient.invalidateQueries({ queryKey: ["bank-transactions-counts"] });
           }
         );
 
@@ -417,7 +434,7 @@ export default function BankTransactionsPage() {
     {
       header: "Data",
       accessor: "booking_date",
-      sortValue: (t) => t.booking_date,
+      serverSortKey: "booking_date",
       className: "whitespace-nowrap text-gray-700",
     },
     {
@@ -434,7 +451,7 @@ export default function BankTransactionsPage() {
           )}
         </div>
       ),
-      sortValue: (t) => t.counterparty ?? "",
+      serverSortKey: "counterparty",
     },
     {
       header: "Typ operacji",
@@ -443,7 +460,7 @@ export default function BankTransactionsPage() {
           {t.operation_type || "—"}
         </span>
       ),
-      sortValue: (t) => t.operation_type ?? "",
+      serverSortKey: "operation_type",
     },
     {
       header: "Kwota",
@@ -454,7 +471,7 @@ export default function BankTransactionsPage() {
           {formatAmount(t.amount, t.currency)}
         </span>
       ),
-      sortValue: (t) => t.amount,
+      serverSortKey: "amount",
       className: "text-right",
     },
     {
@@ -467,12 +484,12 @@ export default function BankTransactionsPage() {
         ) : (
           <span className="text-gray-400 italic text-xs">Nie przypisano</span>
         ),
-      sortValue: (t) => t.category_name ?? "",
+      serverSortKey: "category_name",
     },
     {
       header: "Status",
       accessor: (t) => <StatusBadge status={t.status} />,
-      sortValue: (t) => t.status,
+      serverSortKey: "status",
     },
   ];
 
@@ -543,7 +560,7 @@ export default function BankTransactionsPage() {
         {STATUS_FILTERS.map((f) => (
           <button
             key={f}
-            onClick={() => setStatusFilter(f)}
+            onClick={() => { setStatusFilter(f); setPage(1); }}
             className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
               statusFilter === f
                 ? "border-[#635bff] text-[#635bff]"
@@ -552,9 +569,7 @@ export default function BankTransactionsPage() {
           >
             {f === "all" ? "Wszystkie" : f === "to_confirm" ? "Do potwierdzenia" : "Potwierdzone"}
             <span className="ml-1.5 text-xs bg-gray-100 text-gray-600 rounded-full px-1.5 py-0.5">
-              {f === "all"
-                ? allTransactions.length
-                : allTransactions.filter((t) => t.status === f).length}
+              {f === "all" ? totalAll : (statusCounts[f] ?? 0)}
             </span>
           </button>
         ))}
@@ -568,10 +583,13 @@ export default function BankTransactionsPage() {
           columns={columns}
           rows={transactions}
           emptyMessage="Brak transakcji. Zaimportuj plik CSV z banku."
-          defaultSortCol="Data"
-          defaultSortDir="desc"
           renderExpandedRow={(tx) => <ExpandedRowContent tx={tx} />}
           className="flex-1 min-h-0"
+          pagination={{
+            page, pageSize: PAGE_SIZE, total, onPageChange: setPage,
+            sortBy, sortDir,
+            onSortChange: (key, dir) => { setSortBy(key); setSortDir(dir); setPage(1); },
+          }}
         />
       )}
     </div>

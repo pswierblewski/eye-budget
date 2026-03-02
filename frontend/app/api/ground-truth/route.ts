@@ -1,7 +1,9 @@
 import { backendUrl, proxyGet } from "@/lib/proxy";
 
-export async function GET() {
-  return proxyGet("/ground-truth");
+export async function GET(req: Request) {
+  const { searchParams } = new URL(req.url);
+  const qs = searchParams.toString();
+  return proxyGet(`/ground-truth${qs ? `?${qs}` : ""}`);
 }
 
 export async function POST(req: Request) {

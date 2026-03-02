@@ -151,30 +151,50 @@ class GroundTruthRepository(ABC):
             print(f"Failed to get ground truth entry: {e}")
             return None
 
-    def get_all(self) -> list[GroundTruthEntry]:
+    def get_all(
+        self,
+        limit: int = 50,
+        offset: int = 0,
+        sort_by: str = "id",
+        sort_dir: str = "desc",
+    ) -> tuple[list[GroundTruthEntry], int]:
         """
-        Get all ground truth entries.
-        
+        Get all ground truth entries, paginated.
+
         Returns:
-            List of all GroundTruthEntry records
+            Tuple of (entries, total_count)
         """
+        _SORT_COLS: dict[str, str] = {
+            "id": "id",
+            "filename": "filename",
+            "created_at": "created_at",
+            "vendor": "ground_truth->>'vendor'",
+            "date": "ground_truth->>'date'",
+            "total": "(ground_truth->>'total')::numeric",
+        }
+        order_expr = _SORT_COLS.get(sort_by, "id")
+        direction = "ASC" if sort_dir.lower() == "asc" else "DESC"
         if not self.conn:
             print("No database connection available.")
-            return []
+            return [], 0
         try:
             with self.conn.cursor() as cursor:
                 cursor.execute(
-                    """
-                    SELECT id, filename, minio_object_key, ground_truth, created_at, updated_at
+                    f"""
+                    SELECT id, filename, minio_object_key, ground_truth, created_at, updated_at,
+                           COUNT(*) OVER () AS total_count
                     FROM evaluation_ground_truth
-                    ORDER BY id
-                    """
+                    ORDER BY {order_expr} {direction} NULLS LAST
+                    LIMIT %s OFFSET %s
+                    """,
+                    (limit, offset),
                 )
                 rows = cursor.fetchall()
-                return [self._row_to_entry(row) for row in rows]
+                total = int(rows[0][6]) if rows else 0
+                return [self._row_to_entry(row) for row in rows], total
         except Exception as e:
             print(f"Failed to get ground truth entries: {e}")
-            return []
+            return [], 0
 
     def _row_to_entry(self, row) -> GroundTruthEntry:
         """Convert a database row to a GroundTruthEntry."""

@@ -129,20 +129,43 @@ class EvaluationsRepository(ABC):
     # New methods for the evaluations list/detail API
     # ------------------------------------------------------------------
 
-    def get_all_runs(self) -> list[EvaluationRunListItem]:
+    def get_all_runs(
+        self,
+        limit: int = 50,
+        offset: int = 0,
+        sort_by: str = "id",
+        sort_dir: str = "desc",
+    ) -> tuple[list[EvaluationRunListItem], int]:
+        _SORT_COLS: dict[str, str] = {
+            "id": "id",
+            "run_timestamp": "run_timestamp",
+            "model_used": "model_used",
+            "total_files": "total_files",
+            "success_rate": "success_rate",
+            "avg_field_completeness": "avg_field_completeness",
+            "avg_consistency_rate": "avg_consistency_rate",
+            "avg_processing_time_ms": "avg_processing_time_ms",
+        }
+        order_expr = _SORT_COLS.get(sort_by, "id")
+        direction = "ASC" if sort_dir.lower() == "asc" else "DESC"
         if not self.conn:
-            return []
+            return [], 0
         try:
             with self.conn.cursor() as cursor:
                 cursor.execute(
-                    """
+                    f"""
                     SELECT id, run_timestamp, model_used, total_files, successful, failed,
-                           success_rate, avg_processing_time_ms, avg_field_completeness, avg_consistency_rate, config
+                           success_rate, avg_processing_time_ms, avg_field_completeness,
+                           avg_consistency_rate, config,
+                           COUNT(*) OVER () AS total_count
                     FROM evaluation_runs
-                    ORDER BY id DESC
-                    """
+                    ORDER BY {order_expr} {direction} NULLS LAST
+                    LIMIT %s OFFSET %s
+                    """,
+                    (limit, offset),
                 )
                 rows = cursor.fetchall()
+                total = int(rows[0][11]) if rows else 0
                 return [
                     EvaluationRunListItem(
                         id=r[0],
@@ -158,10 +181,10 @@ class EvaluationsRepository(ABC):
                         config=r[10],
                     )
                     for r in rows
-                ]
+                ], total
         except Exception as e:
             print("Failed to fetch evaluation runs:", e)
-            return []
+            return [], 0
 
     def get_run_with_results(self, run_id: int) -> EvaluationRunDetail | None:
         if not self.conn:

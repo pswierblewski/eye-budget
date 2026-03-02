@@ -9,17 +9,24 @@ import Link from "next/link";
 
 export default function GroundTruthPage() {
   const queryClient = useQueryClient();
+  const PAGE_SIZE = 50;
+  const [page, setPage] = useState(1);
+  const [sortBy, setSortBy] = useState("created_at");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
-  const { data: entries = [], isLoading } = useQuery({
-    queryKey: ["ground-truth"],
-    queryFn: listGroundTruth,
+  const { data, isLoading } = useQuery({
+    queryKey: ["ground-truth", page, sortBy, sortDir],
+    queryFn: () => listGroundTruth({ page, limit: PAGE_SIZE, sort_by: sortBy, sort_dir: sortDir }),
+    staleTime: 30_000,
   });
+  const entries = data?.items ?? [];
+  const total = data?.total ?? 0;
 
   const columns: Column<GroundTruthEntry>[] = [
-    { header: "ID", accessor: "id", className: "w-16 text-gray-400 font-mono", sortValue: (r) => r.id },
+    { header: "ID", accessor: "id", className: "w-16 text-gray-400 font-mono", serverSortKey: "id" },
     {
       header: "Plik",
       accessor: (r) => (
@@ -30,19 +37,19 @@ export default function GroundTruthPage() {
           {r.filename}
         </Link>
       ),
-      sortValue: (r) => r.filename,
+      serverSortKey: "filename",
     },
     {
       header: "Sklep",
       accessor: (r) =>
         r.ground_truth.vendor ?? <span className="text-gray-400">—</span>,
-      sortValue: (r) => r.ground_truth.vendor ?? "",
+      serverSortKey: "vendor",
     },
     {
       header: "Data",
       accessor: (r) =>
         r.ground_truth.date ?? <span className="text-gray-400">—</span>,
-      sortValue: (r) => r.ground_truth.date ?? "",
+      serverSortKey: "date",
     },
     {
       header: "Suma",
@@ -51,12 +58,12 @@ export default function GroundTruthPage() {
           ? `${r.ground_truth.total.toFixed(2)} PLN`
           : "—",
       className: "text-right",
-      sortValue: (r) => r.ground_truth.total ?? -Infinity,
+      serverSortKey: "total",
     },
     {
       header: "Dodano",
       accessor: (r) => r.created_at.slice(0, 10),
-      sortValue: (r) => r.created_at,
+      serverSortKey: "created_at",
     },
   ];
 
@@ -122,8 +129,11 @@ export default function GroundTruthPage() {
           rows={entries}
           emptyMessage="Brak danych wzorcowych."
           className="flex-1 min-h-0"
-          defaultSortCol="Dodano"
-          defaultSortDir="desc"
+          pagination={{
+            page, pageSize: PAGE_SIZE, total, onPageChange: setPage,
+            sortBy, sortDir,
+            onSortChange: (key, dir) => { setSortBy(key); setSortDir(dir); setPage(1); },
+          }}
         />
       )}
     </div>
