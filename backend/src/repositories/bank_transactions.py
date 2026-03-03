@@ -135,6 +135,7 @@ class BankTransactionsRepository:
         offset: int = 0,
         sort_by: str = "booking_date",
         sort_dir: str = "desc",
+        tag: Optional[str] = None,
     ) -> tuple[list[BankTransactionListItem], int]:
         """Return transactions (optionally filtered by status), paginated."""
         _SORT_COLS: dict[str, str] = {
@@ -155,13 +156,21 @@ class BankTransactionsRepository:
             return [], 0
         try:
             with self.conn.cursor() as cur:
-                where = "WHERE bt.status = %s" if status else ""
-                params: list = [status] if status else []
+                conditions: list[str] = []
+                params: list = []
+                if status:
+                    conditions.append("bt.status = %s")
+                    params.append(status)
+                if tag:
+                    conditions.append("%s = ANY(bt.tags)")
+                    params.append(tag)
+                where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
                 cur.execute(
                     f"""
                     SELECT bt.id, bt.reference_number, bt.booking_date,
                            bt.counterparty, bt.description, bt.amount, bt.currency,
                            bt.operation_type, bt.status, bt.category_id, c.name,
+                           bt.tags,
                            COUNT(*) OVER () AS total_count
                     FROM bank_transactions bt
                     LEFT JOIN categories c ON c.id = bt.category_id
@@ -172,7 +181,7 @@ class BankTransactionsRepository:
                     params + [limit, offset],
                 )
                 rows = cur.fetchall()
-            total = int(rows[0][11]) if rows else 0
+            total = int(rows[0][12]) if rows else 0
             return [
                 BankTransactionListItem(
                     id=r[0],
@@ -186,6 +195,7 @@ class BankTransactionsRepository:
                     status=r[8],
                     category_id=r[9],
                     category_name=r[10],
+                    tags=list(r[11]) if r[11] else [],
                 )
                 for r in rows
             ], total
@@ -218,7 +228,7 @@ class BankTransactionsRepository:
                            bt.counterparty, bt.counterparty_address, bt.source_account,
                            bt.target_account, bt.description, bt.amount, bt.currency,
                            bt.operation_type, bt.status, bt.category_id, c.name,
-                           bt.category_candidates, bt.vendor_id
+                           bt.category_candidates, bt.vendor_id, bt.tags
                     FROM bank_transactions bt
                     LEFT JOIN categories c ON c.id = bt.category_id
                     WHERE bt.id = %s
@@ -246,6 +256,7 @@ class BankTransactionsRepository:
                 category_name=r[14],
                 category_candidates=r[15],
                 vendor_id=r[16],
+                tags=list(r[17]) if r[17] else [],
             )
         except Exception as e:
             print(f"BankTransactionsRepository.get_by_id error: {e}")
@@ -312,3 +323,34 @@ class BankTransactionsRepository:
 
     def dispose(self) -> None:
         pass
+
+    def update_tags(self, tx_id: int, tags: list[str]) -> bool:
+        if not self.conn:
+            return False
+        try:
+            with self.conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE bank_transactions SET tags = %s WHERE id = %s",
+                    (tags, tx_id),
+                )
+            self.conn.commit()
+            return True
+        except Exception as e:
+            print(f"BankTransactionsRepository.update_tags error: {e}")
+            self.conn.rollback()
+            return False
+
+    def get_tags_for_tx(self, tx_id: int) -> list[str]:
+        if not self.conn:
+            return []
+        try:
+            with self.conn.cursor() as cur:
+                cur.execute(
+                    "SELECT tags FROM bank_transactions WHERE id = %s",
+                    (tx_id,),
+                )
+                row = cur.fetchone()
+                return list(row[0]) if row and row[0] else []
+        except Exception as e:
+            print(f"BankTransactionsRepository.get_tags_for_tx error: {e}")
+            return []

@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback, memo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { listReceipts, processReceipts, deleteReceipt, retryReceipt, getReceiptCounts } from "@/lib/api";
+import { listReceipts, processReceipts, deleteReceipt, retryReceipt, getReceiptCounts, getAllTags } from "@/lib/api";
 import { ReceiptScanListItem } from "@/lib/types";
 import { DataTable, Column } from "@/components/DataTable";
 import { StatusBadge } from "@/components/StatusBadge";
 import { getPusher } from "@/lib/pusher";
+import { Info, SlidersHorizontal, X } from "lucide-react";
 import Link from "next/link";
 
 const STATUS_FILTERS = [
@@ -17,6 +18,15 @@ const STATUS_FILTERS = [
   "done",
   "failed",
 ] as const;
+
+const FILTER_LABELS: Record<string, string> = {
+  all: "Wszystkie",
+  pending: "Oczekujące",
+  processing: "Przetwarzanie",
+  to_confirm: "Do potwierdzenia",
+  done: "Gotowe",
+  failed: "Błąd",
+};
 
 type ProgressState = {
   index: number;
@@ -35,6 +45,155 @@ const STATUS_LEGEND = [
   { status: "failed", description: "Przetwarzanie nie powiodło się — sprawdź plik i spróbuj ponownie." },
 ] as const;
 
+function useDebounce<T>(value: T, delay: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(timer);
+  }, [value, delay]);
+  return debounced;
+}
+
+type FilterValues = {
+  search: string;
+  vendor: string;
+  product: string;
+  dateFrom: string;
+  dateTo: string;
+  totalMin: string;
+  totalMax: string;
+  tag: string;
+};
+
+const EMPTY_FILTERS: FilterValues = {
+  search: "",
+  vendor: "",
+  product: "",
+  dateFrom: "",
+  dateTo: "",
+  totalMin: "",
+  totalMax: "",
+  tag: "",
+};
+
+function countActive(f: FilterValues): number {
+  return Object.values(f).filter(Boolean).length;
+}
+
+/* ------------------------------------------------------------------ */
+/*  FilterPanel — isolated component, owns its own input state        */
+/* ------------------------------------------------------------------ */
+
+const FilterPanel = memo(function FilterPanel({
+  onChange,
+  onCountChange,
+  allTags = [],
+}: {
+  onChange: (f: FilterValues) => void;
+  onCountChange: (n: number) => void;
+  allTags?: string[];
+}) {
+  const [local, setLocal] = useState<FilterValues>(EMPTY_FILTERS);
+
+  const dSearch = useDebounce(local.search, 300);
+  const dVendor = useDebounce(local.vendor, 300);
+  const dProduct = useDebounce(local.product, 300);
+
+  // Merge debounced text fields with instant date/number fields
+  const applied: FilterValues = {
+    search: dSearch,
+    vendor: dVendor,
+    product: dProduct,
+    dateFrom: local.dateFrom,
+    dateTo: local.dateTo,
+    totalMin: local.totalMin,
+    totalMax: local.totalMax,
+    tag: local.tag,
+  };
+
+  const appliedRef = useRef(applied);
+  useEffect(() => {
+    const prev = appliedRef.current;
+    if (
+      prev.search !== applied.search ||
+      prev.vendor !== applied.vendor ||
+      prev.product !== applied.product ||
+      prev.dateFrom !== applied.dateFrom ||
+      prev.dateTo !== applied.dateTo ||
+      prev.totalMin !== applied.totalMin ||
+      prev.totalMax !== applied.totalMax ||
+      prev.tag !== applied.tag
+    ) {
+      appliedRef.current = applied;
+      onChange(applied);
+      onCountChange(countActive(applied));
+    }
+  }, [applied, onChange, onCountChange]);
+
+  // Also report initial count (0)
+  useEffect(() => { onCountChange(0); }, [onCountChange]);
+
+  const set = <K extends keyof FilterValues>(key: K, value: FilterValues[K]) =>
+    setLocal((prev) => ({ ...prev, [key]: value }));
+
+  const clear = () => setLocal(EMPTY_FILTERS);
+
+  const hasAny = Object.values(local).some(Boolean);
+
+  const INPUT = "w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-[#635bff] focus:ring-1 focus:ring-[#635bff] outline-none transition-colors";
+
+  return (
+    <div className="flex-shrink-0 rounded-lg border border-gray-200 bg-white p-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div>
+          <label className="block text-xs font-medium text-gray-500 mb-1">Nazwa paragonu</label>
+          <input type="text" value={local.search} onChange={(e) => set("search", e.target.value)} placeholder="Szukaj po nazwie pliku lub sklepie…" className={INPUT} />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-500 mb-1">Sklep</label>
+          <input type="text" value={local.vendor} onChange={(e) => set("vendor", e.target.value)} placeholder="Nazwa raw lub znormalizowana…" className={INPUT} />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-500 mb-1">Produkt</label>
+          <input type="text" value={local.product} onChange={(e) => set("product", e.target.value)} placeholder="Nazwa raw lub znormalizowana…" className={INPUT} />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-500 mb-1">Data od</label>
+          <input type="date" value={local.dateFrom} onChange={(e) => set("dateFrom", e.target.value)} className={INPUT} />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-500 mb-1">Data do</label>
+          <input type="date" value={local.dateTo} onChange={(e) => set("dateTo", e.target.value)} className={INPUT} />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-500 mb-1">Tag</label>
+          <input type="text" value={local.tag} onChange={(e) => set("tag", e.target.value)} placeholder="Filtruj po tagu…" list="filter-tags-datalist" className={INPUT} />
+          {allTags.length > 0 && (
+            <datalist id="filter-tags-datalist">
+              {allTags.map((t) => <option key={t} value={t} />)}
+            </datalist>
+          )}
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Suma od</label>
+            <input type="number" step="0.01" min="0" value={local.totalMin} onChange={(e) => set("totalMin", e.target.value)} placeholder="0.00" className={INPUT} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Suma do</label>
+            <input type="number" step="0.01" min="0" value={local.totalMax} onChange={(e) => set("totalMax", e.target.value)} placeholder="999.99" className={INPUT} />
+          </div>
+        </div>
+      </div>
+      {hasAny && (
+        <button onClick={clear} className="mt-3 inline-flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors">
+          <X size={12} /> Wyczyść filtry
+        </button>
+      )}
+    </div>
+  );
+});
+
 export default function ReceiptsPage() {
   const queryClient = useQueryClient();
   const PAGE_SIZE = 50;
@@ -49,6 +208,19 @@ export default function ReceiptsPage() {
   const [bulkPending, setBulkPending] = useState<"delete" | "retry" | null>(null);
   const [bulkMenuOpen, setBulkMenuOpen] = useState(false);
   const bulkMenuRef = useRef<HTMLDivElement>(null);
+  const legendRef = useRef<HTMLDivElement>(null);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [appliedFilters, setAppliedFilters] = useState<FilterValues>(EMPTY_FILTERS);
+  const [activeFilterCount, setActiveFilterCount] = useState(0);
+
+  const handleFiltersChange = useCallback((f: FilterValues) => {
+    setAppliedFilters(f);
+    setPage(1);
+  }, []);
+
+  const handleFilterCountChange = useCallback((n: number) => {
+    setActiveFilterCount(n);
+  }, []);
 
   // Cleanup Pusher subscription on unmount
   useEffect(() => {
@@ -68,6 +240,17 @@ export default function ReceiptsPage() {
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
   }, [bulkMenuOpen]);
+
+  useEffect(() => {
+    if (!legendOpen) return;
+    function handleClick(e: MouseEvent) {
+      if (legendRef.current && !legendRef.current.contains(e.target as Node)) {
+        setLegendOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [legendOpen]);
 
   const processMutation = useMutation({
     mutationFn: processReceipts,
@@ -121,13 +304,21 @@ export default function ReceiptsPage() {
   };
 
   const { data, isLoading } = useQuery({
-    queryKey: ["receipts", page, statusFilter, sortBy, sortDir],
+    queryKey: ["receipts", page, statusFilter, sortBy, sortDir, appliedFilters],
     queryFn: () => listReceipts({
       page,
       limit: PAGE_SIZE,
       status: statusFilter !== "all" ? statusFilter : undefined,
       sort_by: sortBy,
       sort_dir: sortDir,
+      search: appliedFilters.search || undefined,
+      vendor: appliedFilters.vendor || undefined,
+      product: appliedFilters.product || undefined,
+      date_from: appliedFilters.dateFrom || undefined,
+      date_to: appliedFilters.dateTo || undefined,
+      total_min: appliedFilters.totalMin ? parseFloat(appliedFilters.totalMin) : undefined,
+      total_max: appliedFilters.totalMax ? parseFloat(appliedFilters.totalMax) : undefined,
+      tag: appliedFilters.tag || undefined,
     }),
     staleTime: 30_000,
   });
@@ -140,6 +331,12 @@ export default function ReceiptsPage() {
     staleTime: 30_000,
   });
   const totalAll = Object.values(statusCounts).reduce<number>((sum, v) => sum + v, 0);
+
+  const { data: allTags = [] } = useQuery({
+    queryKey: ["tags"],
+    queryFn: getAllTags,
+    staleTime: 60_000,
+  });
 
   const filtered = receipts;
 
@@ -225,6 +422,19 @@ export default function ReceiptsPage() {
       serverSortKey: "total",
     },
     {
+      header: "Tagi",
+      accessor: (r) =>
+        r.tags && r.tags.length > 0 ? (
+          <div className="flex flex-wrap gap-1">
+            {r.tags.map((tag) => (
+              <span key={tag} className="inline-block bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-full text-xs px-2 py-0.5 font-medium">
+                {tag}
+              </span>
+            ))}
+          </div>
+        ) : null,
+    },
+    {
       header: "Status",
       accessor: (r) => <StatusBadge status={r.status} />,
       serverSortKey: "status",
@@ -247,7 +457,31 @@ export default function ReceiptsPage() {
     <div className="flex flex-col flex-1 min-h-0 gap-6">
       <div className="flex items-center justify-between flex-shrink-0">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Paragony</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-gray-900">Paragony</h1>
+            <div ref={legendRef} className="relative">
+              <button
+                onClick={() => setLegendOpen((o) => !o)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+                aria-label="Legenda statusów"
+              >
+                <Info size={18} />
+              </button>
+              {legendOpen && (
+                <div className="absolute left-0 top-full mt-2 z-50 w-96 rounded-lg border border-gray-200 bg-white shadow-lg p-4">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Legenda statusów</p>
+                  <div className="grid grid-cols-1 gap-y-2">
+                    {STATUS_LEGEND.map(({ status, description }) => (
+                      <div key={status} className="flex items-start gap-2.5">
+                        <StatusBadge status={status} />
+                        <span className="text-xs text-gray-500 leading-5">{description}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
           <p className="text-sm text-gray-500 mt-1">
             Wszystkie zeskanowane paragony i ich status przetwarzania.
           </p>
@@ -259,27 +493,6 @@ export default function ReceiptsPage() {
         >
           {processMutation.isPending || progress?.status === "running" ? "Przetwarzanie…" : "Przetwórz paragony"}
         </button>
-      </div>
-
-      {/* Status legend */}
-      <div className="flex-shrink-0 rounded-lg border border-gray-200 bg-white overflow-hidden">
-        <button
-          onClick={() => setLegendOpen((o) => !o)}
-          className="w-full flex items-center justify-between px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
-        >
-          <span>Legenda statusów</span>
-          <span className={`transition-transform duration-200 ${legendOpen ? "rotate-180" : ""}`}>▾</span>
-        </button>
-        {legendOpen && (
-          <div className="border-t border-gray-100 px-4 py-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-2">
-            {STATUS_LEGEND.map(({ status, description }) => (
-              <div key={status} className="flex items-start gap-2.5 py-1">
-                <StatusBadge status={status} />
-                <span className="text-xs text-gray-500 leading-5">{description}</span>
-              </div>
-            ))}
-          </div>
-        )}
       </div>
 
       {/* Live progress bar */}
@@ -325,10 +538,39 @@ export default function ReceiptsPage() {
             }`}
           >
             {s === "all"
-              ? `Wszystkie (${totalAll})`
-              : `${s} (${statusCounts[s] ?? 0})`}
+              ? `${FILTER_LABELS.all} (${totalAll})`
+              : `${FILTER_LABELS[s] ?? s} (${statusCounts[s] ?? 0})`}
           </button>
         ))}
+
+        <div className="w-px h-5 bg-gray-200 mx-1" />
+
+        <button
+          onClick={() => setFiltersOpen((o) => !o)}
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+            filtersOpen || activeFilterCount > 0
+              ? "bg-[#635bff] text-white"
+              : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+          }`}
+        >
+          <SlidersHorizontal size={13} />
+          Filtry
+          {activeFilterCount > 0 && (
+            <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-white/25 text-[10px] font-bold leading-none">
+              {activeFilterCount}
+            </span>
+          )}
+        </button>
+
+        {activeFilterCount > 0 && (
+          <button
+            onClick={() => setFiltersOpen(true)}
+            className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors"
+          >
+            <X size={12} />
+            Wyczyść filtry
+          </button>
+        )}
 
         {selectedIds.size > 0 && (
           <>
@@ -375,6 +617,11 @@ export default function ReceiptsPage() {
           </>
         )}
       </div>
+
+      {/* Advanced filters panel */}
+      {filtersOpen && (
+        <FilterPanel onChange={handleFiltersChange} onCountChange={handleFilterCountChange} allTags={allTags} />
+      )}
 
       {isLoading ? (
         <div className="text-sm text-gray-400 py-8 text-center">Ładowanie…</div>

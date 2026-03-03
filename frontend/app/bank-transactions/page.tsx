@@ -11,6 +11,8 @@ import {
   linkBankToReceipt,
   unlinkBankTransaction,
   getBankTransactionCounts,
+  updateBankTransactionTags,
+  getAllTags,
 } from "@/lib/api";
 import {
   BankTransactionListItem,
@@ -19,6 +21,7 @@ import {
 } from "@/lib/types";
 import { CategoryDropdown } from "@/components/CategoryDropdown";
 import { StatusBadge } from "@/components/StatusBadge";
+import TagsEditor from "@/components/TagsEditor";
 import { getPusher } from "@/lib/pusher";
 import { Upload } from "lucide-react";
 import { DataTable, Column } from "@/components/DataTable";
@@ -81,9 +84,10 @@ function MatchBadge({ score }: { score: number }) {
 
 type ExpandedRowProps = {
   tx: BankTransactionListItem;
+  allTags?: string[];
 };
 
-function ExpandedRowContent({ tx }: ExpandedRowProps) {
+function ExpandedRowContent({ tx, allTags = [] }: ExpandedRowProps) {
   const queryClient = useQueryClient();
   const [selectedCategory, setSelectedCategory] = useState<number | undefined>(
     tx.category_id ?? undefined
@@ -130,6 +134,15 @@ function ExpandedRowContent({ tx }: ExpandedRowProps) {
     mutationFn: () => unlinkBankTransaction(tx.id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["bank-transaction", tx.id] });
+    },
+  });
+
+  const tagsMutation = useMutation({
+    mutationFn: (tags: string[]) => updateBankTransactionTags(tx.id, tags),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["bank-transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["bank-transaction", tx.id] });
+      queryClient.invalidateQueries({ queryKey: ["tags"] });
     },
   });
 
@@ -242,6 +255,16 @@ function ExpandedRowContent({ tx }: ExpandedRowProps) {
           </div>
         </div>
 
+        {/* Tags section */}
+        <div className="mt-4 pt-4 border-t border-gray-200">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Tagi</p>
+          <TagsEditor
+            tags={detail?.tags ?? tx.tags ?? []}
+            onChange={(tags) => tagsMutation.mutate(tags)}
+            allTags={allTags}
+          />
+        </div>
+
         {/* Linked receipt section */}
         <div className="mt-4 pt-4 border-t border-gray-200">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
@@ -317,6 +340,16 @@ function ExpandedRowContent({ tx }: ExpandedRowProps) {
             </button>
           )}
     </div>
+
+        {/* Tags section */}
+        <div className="mt-4 pt-4 border-t border-gray-200">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Tagi</p>
+          <TagsEditor
+            tags={detail?.tags ?? tx.tags ?? []}
+            onChange={(tags) => tagsMutation.mutate(tags)}
+            allTags={allTags}
+          />
+        </div>
     </>
   );
 }
@@ -363,6 +396,12 @@ export default function BankTransactionsPage() {
     staleTime: 30_000,
   });
   const totalAll = Object.values(statusCounts).reduce<number>((sum, v) => sum + v, 0);
+
+  const { data: allTags = [] } = useQuery({
+    queryKey: ["tags"],
+    queryFn: getAllTags,
+    staleTime: 60_000,
+  });
 
   const importMutation = useMutation({
     mutationFn: importBankCsv,
@@ -487,6 +526,19 @@ export default function BankTransactionsPage() {
       serverSortKey: "category_name",
     },
     {
+      header: "Tagi",
+      accessor: (t) =>
+        t.tags && t.tags.length > 0 ? (
+          <div className="flex flex-wrap gap-1">
+            {t.tags.map((tag) => (
+              <span key={tag} className="inline-block bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-full text-xs px-2 py-0.5 font-medium">
+                {tag}
+              </span>
+            ))}
+          </div>
+        ) : null,
+    },
+    {
       header: "Status",
       accessor: (t) => <StatusBadge status={t.status} />,
       serverSortKey: "status",
@@ -567,7 +619,7 @@ export default function BankTransactionsPage() {
                 : "border-transparent text-gray-500 hover:text-gray-700"
             }`}
           >
-            {f === "all" ? "Wszystkie" : f === "to_confirm" ? "Do potwierdzenia" : "Potwierdzone"}
+            {f === "all" ? "Wszystkie" : f === "to_confirm" ? "Do potwierdzenia" : "Potwierdzone"}
             <span className="ml-1.5 text-xs bg-gray-100 text-gray-600 rounded-full px-1.5 py-0.5">
               {f === "all" ? totalAll : (statusCounts[f] ?? 0)}
             </span>
@@ -583,7 +635,7 @@ export default function BankTransactionsPage() {
           columns={columns}
           rows={transactions}
           emptyMessage="Brak transakcji. Zaimportuj plik CSV z banku."
-          renderExpandedRow={(tx) => <ExpandedRowContent tx={tx} />}
+          renderExpandedRow={(tx) => <ExpandedRowContent tx={tx} allTags={allTags} />}
           className="flex-1 min-h-0"
           pagination={{
             page, pageSize: PAGE_SIZE, total, onPageChange: setPage,

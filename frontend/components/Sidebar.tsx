@@ -8,12 +8,14 @@ import {
   BookMarked,
   FlaskConical,
   Landmark,
+  Wallet,
 } from "lucide-react";
 
 const navItems = [
   { href: "/", label: "Panel główny", icon: LayoutDashboard },
   { href: "/receipts", label: "Paragony", icon: ReceiptText },
   { href: "/bank-transactions", label: "Transakcje bankowe", icon: Landmark },
+  { href: "/cash-transactions", label: "Transakcje gotówkowe", icon: Wallet },
   { href: "/ground-truth", label: "Dane wzorcowe", icon: BookMarked },
   { href: "/evaluations", label: "Ewaluacje", icon: FlaskConical },
 ];

@@ -2,14 +2,15 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getReceipt, listReceipts, listCategories, confirmReceipt, reopenReceipt, deleteReceipt, retryReceipt, reuployReceiptImage, getBankTxCandidates, linkBankToReceipt, unlinkBankTransaction } from "@/lib/api";
+import { getReceipt, listReceipts, listCategories, confirmReceipt, reopenReceipt, deleteReceipt, retryReceipt, reuployReceiptImage, getBankTxCandidates, linkBankToReceipt, unlinkBankTransaction, updateReceiptTags, getAllTags, createCashFromReceipt, getCashTxCandidatesForReceipt, linkCashToReceipt, unlinkCashTransaction } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import { ReceiptImageViewer } from "@/components/ReceiptImageViewer";
 import { ProductCategoryRow } from "@/components/ProductCategoryRow";
 import { StatusBadge } from "@/components/StatusBadge";
 import { VendorDropdown } from "@/components/VendorDropdown";
 import { ProductDropdown } from "@/components/ProductDropdown";
-import { BankTxCandidateItem, ProductItem } from "@/lib/types";
+import TagsEditor from "@/components/TagsEditor";
+import { BankTxCandidateItem, CashTxCandidateItem, ProductItem } from "@/lib/types";
 import Link from "next/link";
 
 /** Convert YYYY-MM-DD (backend) → DD-MM-YYYY (display) */
@@ -180,6 +181,38 @@ export default function ReceiptReviewPage({
     },
   });
 
+  const [showCashCandidates, setShowCashCandidates] = useState(false);
+
+  const { data: cashCandidates = [], isFetching: cashCandidatesLoading } = useQuery<CashTxCandidateItem[]>({
+    queryKey: ["receipt-cash-candidates", scanId],
+    queryFn: () => getCashTxCandidatesForReceipt(scanId),
+    enabled: showCashCandidates,
+  });
+
+  const createCashMutation = useMutation({
+    mutationFn: () => createCashFromReceipt(scanId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["receipt", scanId] });
+    },
+  });
+
+  const linkCashMutation = useMutation({
+    mutationFn: (cashTxId: number) =>
+      linkCashToReceipt(cashTxId, scan!.transaction!.id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["receipt", scanId] });
+      queryClient.invalidateQueries({ queryKey: ["receipt-cash-candidates", scanId] });
+      setShowCashCandidates(false);
+    },
+  });
+
+  const unlinkCashMutation = useMutation({
+    mutationFn: (cashTxId: number) => unlinkCashTransaction(cashTxId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["receipt", scanId] });
+    },
+  });
+
   const deleteMutation = useMutation({
     mutationFn: () => deleteReceipt(scanId),
     onSuccess: () => {
@@ -193,6 +226,21 @@ export default function ReceiptReviewPage({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["receipt", scanId] });
       queryClient.invalidateQueries({ queryKey: ["receipts"] });
+    },
+  });
+
+  const { data: allTags = [] } = useQuery({
+    queryKey: ["tags"],
+    queryFn: getAllTags,
+    staleTime: 60_000,
+  });
+
+  const tagsMutation = useMutation({
+    mutationFn: (tags: string[]) => updateReceiptTags(scanId, tags),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(["receipt", scanId], updated);
+      queryClient.invalidateQueries({ queryKey: ["receipts"] });
+      queryClient.invalidateQueries({ queryKey: ["tags"] });
     },
   });
 
@@ -549,6 +597,95 @@ export default function ReceiptReviewPage({
                   </button>
                 )}
               </div>
+
+              {/* Cash transaction section */}
+              <div className="rounded-xl border border-gray-200 p-4 space-y-2">
+                <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
+                  Transakcja gotówkowa
+                </h2>
+
+                {scan.cash_link ? (
+                  <div className="flex items-center justify-between gap-4 rounded-lg border border-green-200 bg-green-50 px-3 py-2">
+                    <Link
+                      href="/cash-transactions"
+                      className="text-xs space-y-0.5 hover:underline min-w-0"
+                    >
+                      <p className="font-medium text-[#635bff]">
+                        {scan.cash_link.description ?? "Transakcja gotówkowa"}
+                      </p>
+                      <p className="text-gray-500">
+                        {scan.cash_link.booking_date} · {scan.cash_link.amount.toFixed(2)} PLN
+                      </p>
+                    </Link>
+                    <button
+                      disabled={unlinkCashMutation.isPending}
+                      onClick={() => unlinkCashMutation.mutate(scan.cash_link!.cash_transaction_id)}
+                      className="shrink-0 px-2 py-1 text-[10px] rounded-md border border-red-300
+                                 text-red-600 hover:bg-red-50 transition-colors disabled:opacity-40"
+                    >
+                      {unlinkCashMutation.isPending ? "…" : "Odepnij"}
+                    </button>
+                  </div>
+                ) : scan.transaction ? (
+                  <div className="space-y-2">
+                    <button
+                      onClick={() => createCashMutation.mutate()}
+                      disabled={createCashMutation.isPending}
+                      className="text-xs px-3 py-1.5 rounded-md bg-[#635bff] text-white
+                                 hover:bg-[#4b44cc] transition-colors disabled:opacity-40"
+                    >
+                      {createCashMutation.isPending ? "Tworzenie…" : "Utwórz transakcję gotówkową"}
+                    </button>
+                    {!showCashCandidates ? (
+                      <button
+                        onClick={() => setShowCashCandidates(true)}
+                        className="block text-xs px-3 py-1.5 rounded-md border border-[#635bff] text-[#635bff]
+                                   hover:bg-[#635bff]/10 transition-colors"
+                      >
+                        Powiąż z istniejącą transakcją gotówkową
+                      </button>
+                    ) : cashCandidatesLoading ? (
+                      <p className="text-xs text-gray-400 animate-pulse">Szukanie…</p>
+                    ) : cashCandidates.length === 0 ? (
+                      <p className="text-xs text-gray-400 italic">Brak pasujących transakcji.</p>
+                    ) : (
+                      <div className="space-y-1.5">
+                        {cashCandidates.map((c) => (
+                          <div key={c.cash_transaction_id}
+                               className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white px-3 py-2">
+                            <div className="text-xs space-y-0.5 min-w-0">
+                              <p className="font-medium text-gray-800">{c.description ?? "—"}</p>
+                              <p className="text-gray-500">{c.booking_date} · {c.amount.toFixed(2)} PLN</p>
+                            </div>
+                            <button
+                              disabled={linkCashMutation.isPending}
+                              onClick={() => linkCashMutation.mutate(c.cash_transaction_id)}
+                              className="shrink-0 px-2 py-1 text-[10px] rounded-md bg-[#635bff]
+                                         text-white hover:bg-[#4b44cc] transition-colors disabled:opacity-40"
+                            >
+                              {linkCashMutation.isPending ? "…" : "Powiąż"}
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-400 italic">
+                    Potwierdź paragon najpierw, aby powiązać z transakcją gotówkową.
+                  </p>
+                )}
+              </div>
+
+              {/* Tags section */}
+              <div className="rounded-xl border border-gray-200 p-4 space-y-2">
+                <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Tagi</h2>
+                <TagsEditor
+                  tags={scan.tags ?? []}
+                  onChange={(tags) => tagsMutation.mutate(tags)}
+                  allTags={allTags}
+                />
+              </div>
             </>
           ) : (
             /* Editable — assign categories (and optionally edit OCR fields) */
@@ -618,6 +755,16 @@ export default function ReceiptReviewPage({
                     </div>
                   </div>
                 </div>
+              </div>
+
+              {/* Tags section (editable view) */}
+              <div className="rounded-xl border border-gray-200 p-4 space-y-2">
+                <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Tagi</h2>
+                <TagsEditor
+                  tags={scan.tags ?? []}
+                  onChange={(tags) => tagsMutation.mutate(tags)}
+                  allTags={allTags}
+                />
               </div>
 
               <button

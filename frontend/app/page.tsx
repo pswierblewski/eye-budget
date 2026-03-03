@@ -124,7 +124,7 @@ export default function DashboardPage() {
       {/* Stat cards */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard label="Wszystkie paragony" value={total} />
-        <StatCard label="Do potwierdzenia" value={toConfirm} accent />
+        <StatCard label="Do potwierdzenia" value={toConfirm} accent />
         <StatCard label="Gotowe" value={done} />
         <StatCard label="Błąd" value={failed} />
       </div>
