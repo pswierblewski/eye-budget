@@ -13,7 +13,7 @@ const STATUS_LABELS: Record<string, string> = {
   pending: "Oczekujący",
   processing: "Przetwarzanie",
   processed: "Przetworzony",
-  to_confirm: "Do potwierdzenia",
+  to_confirm: "Do potwierdzenia",
   done: "Gotowe",
   failed: "Błąd",
 };

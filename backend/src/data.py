@@ -179,6 +179,7 @@ class ReceiptScanListItem(BaseModel):
     vendor: str | None = None
     date: str | None = None
     total: float | None = None
+    tags: list[str] = []
 
 
 class ReceiptTransactionItem(BaseModel):
@@ -214,9 +215,11 @@ class ReceiptScanDetail(BaseModel):
     minio_object_key: str | None = None
     transaction: ReceiptTransaction | None = None  # populated once confirmed
     bank_link: Optional['BankLinkInfo'] = None
+    cash_link: Optional['CashLinkInfo'] = None
     # Pre-fill suggestions: normalized names already known from DB for the raw OCR names
     vendor_normalization: str | None = None
     product_normalizations: dict[str, str | None] | None = None
+    tags: list[str] = []
 
 
 class CategoryItem(BaseModel):
@@ -297,6 +300,7 @@ class BankTransactionListItem(BaseModel):
     status: str
     category_id: int | None = None
     category_name: str | None = None
+    tags: list[str] = []
 
 
 class BankTransactionDetail(BaseModel):
@@ -319,6 +323,7 @@ class BankTransactionDetail(BaseModel):
     category_candidates: list | None = None  # list[CategoryCandidate]
     vendor_id: int | None = None
     receipt_link: Optional['ReceiptLinkInfo'] = None
+    tags: list[str] = []
 
 
 class BankImportResult(BaseModel):
@@ -327,6 +332,11 @@ class BankImportResult(BaseModel):
     duplicates: int
     errors: int
     task_id: str | None = None  # Celery task ID for background categorization
+
+
+class UpdateTagsRequest(BaseModel):
+    """Request body for updating tags on a receipt scan or bank transaction."""
+    tags: list[str]
 
 
 class ConfirmBankTransactionRequest(BaseModel):
@@ -387,3 +397,85 @@ class BankTxCandidateItem(BaseModel):
 class LinkReceiptRequest(BaseModel):
     """Request body for POST /bank-transactions/{id}/link."""
     receipt_transaction_id: int
+
+
+# ---------------------------------------------------------------------------
+# Cash transaction models
+# ---------------------------------------------------------------------------
+
+class CashTransactionListItem(BaseModel):
+    """Lightweight cash transaction for list views."""
+    id: int
+    booking_date: str
+    description: str | None = None
+    amount: float
+    currency: str
+    status: str
+    source: str  # manual | receipt
+    category_id: int | None = None
+    category_name: str | None = None
+    category_group_name: str | None = None
+    vendor_id: int | None = None
+    vendor_name: str | None = None
+    tags: list[str] = []
+    receipt_link: Optional['CashReceiptLinkInfo'] = None
+
+
+class CashTransactionDetail(CashTransactionListItem):
+    """Full cash transaction detail."""
+    receipt_scan_id: int | None = None
+
+
+class CashTransactionCreate(BaseModel):
+    """Request body for creating a cash transaction."""
+    booking_date: str           # ISO date string
+    amount: float
+    description: str | None = None
+    category_id: int | None = None
+    vendor_id: int | None = None
+
+
+class CashTransactionUpdate(BaseModel):
+    """Request body for partial update of a cash transaction."""
+    booking_date: str | None = None
+    amount: float | None = None
+    description: str | None = None
+    category_id: int | None = None
+    vendor_id: int | None = None
+
+
+class ConfirmCashTransactionRequest(BaseModel):
+    """Request body for confirming a cash transaction category."""
+    category_id: int
+
+
+class LinkCashReceiptRequest(BaseModel):
+    """Request body for POST /cash-transactions/{id}/link."""
+    receipt_transaction_id: int
+
+
+class CashReceiptLinkInfo(BaseModel):
+    """Info embedded in CashTransactionDetail when a receipt link exists."""
+    receipt_transaction_id: int
+    scan_id: int
+    scan_filename: str
+    vendor_name: str
+    date: str
+    total: float
+
+
+class CashLinkInfo(BaseModel):
+    """Info embedded in ReceiptScanDetail when a cash transaction link exists."""
+    cash_transaction_id: int
+    description: str | None = None
+    booking_date: str
+    amount: float
+
+
+class CashTxCandidateItem(BaseModel):
+    """A cash_transaction candidate for linking to a receipt."""
+    cash_transaction_id: int
+    description: str | None = None
+    booking_date: str
+    amount: float
+    match_score: int

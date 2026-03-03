@@ -224,6 +224,14 @@ class ReceiptsScansRepository(ABC):
         offset: int = 0,
         sort_by: str = "id",
         sort_dir: str = "desc",
+        search: str | None = None,
+        vendor: str | None = None,
+        product: str | None = None,
+        date_from: str | None = None,
+        date_to: str | None = None,
+        total_min: float | None = None,
+        total_max: float | None = None,
+        tag: str | None = None,
     ) -> tuple[list[ReceiptScanListItem], int]:
         _SORT_COLS: dict[str, str] = {
             "id": "id",
@@ -239,16 +247,87 @@ class ReceiptsScansRepository(ABC):
             return [], 0
         try:
             with self.conn.cursor() as cursor:
-                where = "WHERE status = %s" if status else ""
-                params: list = [status] if status else []
+                conditions: list[str] = []
+                params: list = []
+
+                if status:
+                    conditions.append("status = %s")
+                    params.append(status)
+
+                if search:
+                    conditions.append("(filename ILIKE %s OR result->>'vendor' ILIKE %s)")
+                    params.extend([f"%{search}%", f"%{search}%"])
+
+                if vendor:
+                    conditions.append(
+                        "(result->>'vendor' ILIKE %s"
+                        " OR EXISTS ("
+                        "   SELECT 1 FROM receipt_transactions rt"
+                        "   LEFT JOIN vendors v ON v.id = rt.vendor_id"
+                        "   WHERE rt.scan_id = rs.id"
+                        "     AND (rt.raw_vendor_name ILIKE %s OR v.name ILIKE %s)"
+                        " ))"
+                    )
+                    params.extend([f"%{vendor}%", f"%{vendor}%", f"%{vendor}%"])
+
+                if product:
+                    conditions.append(
+                        "(EXISTS ("
+                        "   SELECT 1 FROM jsonb_array_elements(rs.result->'products') AS p"
+                        "   WHERE p->>'name' ILIKE %s"
+                        " ) OR EXISTS ("
+                        "   SELECT 1 FROM receipt_transactions rt"
+                        "   JOIN receipt_transaction_items rti ON rti.transaction_id = rt.id"
+                        "   LEFT JOIN products pr ON pr.id = rti.product_id"
+                        "   WHERE rt.scan_id = rs.id"
+                        "     AND (rti.raw_product_name ILIKE %s OR pr.name ILIKE %s)"
+                        " ))"
+                    )
+                    params.extend([f"%{product}%", f"%{product}%", f"%{product}%"])
+
+                if date_from:
+                    conditions.append(
+                        "(result->>'date' >= %s"
+                        " OR EXISTS (SELECT 1 FROM receipt_transactions rt WHERE rt.scan_id = rs.id AND rt.date >= %s::date))"
+                    )
+                    params.extend([date_from, date_from])
+
+                if date_to:
+                    conditions.append(
+                        "(result->>'date' <= %s"
+                        " OR EXISTS (SELECT 1 FROM receipt_transactions rt WHERE rt.scan_id = rs.id AND rt.date <= %s::date))"
+                    )
+                    params.extend([date_to, date_to])
+
+                if total_min is not None:
+                    conditions.append(
+                        "((result->>'total')::numeric >= %s"
+                        " OR EXISTS (SELECT 1 FROM receipt_transactions rt WHERE rt.scan_id = rs.id AND rt.total >= %s))"
+                    )
+                    params.extend([total_min, total_min])
+
+                if total_max is not None:
+                    conditions.append(
+                        "((result->>'total')::numeric <= %s"
+                        " OR EXISTS (SELECT 1 FROM receipt_transactions rt WHERE rt.scan_id = rs.id AND rt.total <= %s))"
+                    )
+                    params.extend([total_max, total_max])
+
+                if tag:
+                    conditions.append("%s = ANY(rs.tags)")
+                    params.append(tag)
+
+                where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+
                 cursor.execute(
                     f"""
-                    SELECT id, filename, status,
-                           result->>'vendor',
-                           result->>'date',
-                           result->>'total',
+                    SELECT rs.id, rs.filename, rs.status,
+                           rs.result->>'vendor',
+                           rs.result->>'date',
+                           rs.result->>'total',
+                           rs.tags,
                            COUNT(*) OVER () AS total_count
-                    FROM {self.table}
+                    FROM {self.table} rs
                     {where}
                     ORDER BY {order_expr} {direction} NULLS LAST
                     LIMIT %s OFFSET %s
@@ -256,7 +335,7 @@ class ReceiptsScansRepository(ABC):
                     params + [limit, offset],
                 )
                 rows = cursor.fetchall()
-                total = int(rows[0][6]) if rows else 0
+                total = int(rows[0][7]) if rows else 0
                 return [
                     ReceiptScanListItem(
                         id=row[0],
@@ -265,6 +344,7 @@ class ReceiptsScansRepository(ABC):
                         vendor=row[3],
                         date=row[4],
                         total=float(row[5]) if row[5] is not None else None,
+                        tags=list(row[6]) if row[6] else [],
                     )
                     for row in rows
                 ], total
@@ -294,7 +374,7 @@ class ReceiptsScansRepository(ABC):
             with self.conn.cursor() as cursor:
                 cursor.execute(
                     """
-                    SELECT id, filename, status, result, categories_candidates, minio_object_key
+                    SELECT id, filename, status, result, categories_candidates, minio_object_key, tags
                     FROM """ + self.table + """
                     WHERE id = %s
                     """,
@@ -316,6 +396,7 @@ class ReceiptsScansRepository(ABC):
                     result=result_model,
                     categories_candidates=row[4],
                     minio_object_key=row[5],
+                    tags=list(row[6]) if row[6] else [],
                     transaction=None,  # populated by endpoint handler
                 )
         except Exception as e:
@@ -370,3 +451,34 @@ class ReceiptsScansRepository(ABC):
             print("Failed to reset scan for retry:", e)
             self.conn.rollback()
             return None
+
+    def update_tags(self, scan_id: int, tags: list[str]) -> bool:
+        if not self.conn:
+            return False
+        try:
+            with self.conn.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE " + self.table + " SET tags = %s WHERE id = %s",
+                    (tags, scan_id),
+                )
+                self.conn.commit()
+                return True
+        except Exception as e:
+            print("Failed to update tags:", e)
+            self.conn.rollback()
+            return False
+
+    def get_tags_for_scan(self, scan_id: int) -> list[str]:
+        if not self.conn:
+            return []
+        try:
+            with self.conn.cursor() as cursor:
+                cursor.execute(
+                    "SELECT tags FROM " + self.table + " WHERE id = %s",
+                    (scan_id,),
+                )
+                row = cursor.fetchone()
+                return list(row[0]) if row and row[0] else []
+        except Exception as e:
+            print("Failed to get tags for scan:", e)
+            return []

@@ -312,5 +312,27 @@ class BankReceiptLinksRepository:
             print(f"BankReceiptLinksRepository.get_bank_link_info error: {e}")
             return None
 
+    def get_bank_tx_id_for_scan(self, scan_id: int) -> int | None:
+        """Return the linked bank_transaction_id for the given scan, or None."""
+        if not self.conn:
+            return None
+        try:
+            with self.conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT rbl.bank_transaction_id
+                    FROM receipt_bank_links rbl
+                    JOIN receipt_transactions rt ON rt.id = rbl.receipt_transaction_id
+                    WHERE rt.scan_id = %s
+                    LIMIT 1
+                    """,
+                    (scan_id,),
+                )
+                r = cur.fetchone()
+            return r[0] if r else None
+        except Exception as e:
+            print(f"BankReceiptLinksRepository.get_bank_tx_id_for_scan error: {e}")
+            return None
+
     def dispose(self) -> None:
         pass

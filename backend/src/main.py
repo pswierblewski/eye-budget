@@ -27,7 +27,15 @@ from src.data import (
     ReceiptCandidateItem,
     BankTxCandidateItem,
     LinkReceiptRequest,
+    CashTransactionListItem,
+    CashTransactionDetail,
+    CashTransactionCreate,
+    CashTransactionUpdate,
+    ConfirmCashTransactionRequest,
+    LinkCashReceiptRequest,
+    CashTxCandidateItem,
     PaginatedResponse,
+    UpdateTagsRequest,
 )
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.responses import StreamingResponse
@@ -95,12 +103,24 @@ def list_receipts(
     offset: int = 0,
     sort_by: str = "id",
     sort_dir: str = "desc",
+    search: str | None = None,
+    vendor: str | None = None,
+    product: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    total_min: float | None = None,
+    total_max: float | None = None,
+    tag: str | None = None,
 ) -> PaginatedResponse[ReceiptScanListItem]:
-    """List receipt scans, paginated, optionally filtered by status."""
+    """List receipt scans, paginated, with optional filters."""
     my_app = App()
     try:
         items, total = my_app.get_all_receipts(
-            status=status, limit=limit, offset=offset, sort_by=sort_by, sort_dir=sort_dir
+            status=status, limit=limit, offset=offset, sort_by=sort_by, sort_dir=sort_dir,
+            search=search, vendor=vendor, product=product,
+            date_from=date_from, date_to=date_to,
+            total_min=total_min, total_max=total_max,
+            tag=tag,
         )
         return PaginatedResponse(items=items, total=total, limit=limit, offset=offset)
     finally:
@@ -505,12 +525,14 @@ def list_bank_transactions(
     offset: int = 0,
     sort_by: str = "booking_date",
     sort_dir: str = "desc",
+    tag: str | None = None,
 ) -> PaginatedResponse[BankTransactionListItem]:
     """List bank transactions, paginated, optionally filtered by status."""
     my_app = App()
     try:
         items, total = my_app.get_all_bank_transactions(
-            status=status, limit=limit, offset=offset, sort_by=sort_by, sort_dir=sort_dir
+            status=status, limit=limit, offset=offset, sort_by=sort_by, sort_dir=sort_dir,
+            tag=tag,
         )
         return PaginatedResponse(items=items, total=total, limit=limit, offset=offset)
     finally:
@@ -582,6 +604,16 @@ def get_bank_tx_candidates(scan_id: int) -> list[BankTxCandidateItem]:
         my_app.dispose()
 
 
+@app.get("/receipts/{scan_id}/cash-transaction-candidates", response_model=list[CashTxCandidateItem])
+def get_cash_tx_candidates(scan_id: int) -> list[CashTxCandidateItem]:
+    """Return cash_transaction candidates that could be linked to this receipt scan."""
+    my_app = App()
+    try:
+        return my_app.get_cash_tx_candidates_for_receipt(scan_id)
+    finally:
+        my_app.dispose()
+
+
 @app.post("/bank-transactions/{tx_id}/link", response_model=BankTransactionDetail)
 def link_bank_to_receipt(tx_id: int, request: LinkReceiptRequest) -> BankTransactionDetail:
     """Link a bank transaction to a receipt transaction."""
@@ -606,6 +638,231 @@ def unlink_bank_transaction(tx_id: int) -> BankTransactionDetail:
         result = my_app.unlink_bank_transaction(tx_id)
         if result is None:
             raise HTTPException(status_code=404, detail=f"Bank transaction {tx_id} not found")
+        return result
+    finally:
+        my_app.dispose()
+
+
+# ------------------------------------------------------------------
+# Tags
+# ------------------------------------------------------------------
+
+@app.get("/tags", response_model=list[str])
+def get_all_tags() -> list[str]:
+    """Return all distinct tags used across receipts and bank transactions."""
+    my_app = App()
+    try:
+        return my_app.get_all_tags()
+    finally:
+        my_app.dispose()
+
+
+@app.patch("/receipts/{scan_id}/tags", response_model=ReceiptScanDetail)
+def update_receipt_tags(scan_id: int, request: UpdateTagsRequest) -> ReceiptScanDetail:
+    """Replace the tags on a receipt scan and propagate to any linked bank transaction."""
+    my_app = App()
+    try:
+        my_app.update_receipt_tags(scan_id, request.tags)
+        result = my_app.get_receipt_by_id(scan_id)
+        if result is None:
+            raise HTTPException(status_code=404, detail=f"Receipt scan {scan_id} not found")
+        return result
+    finally:
+        my_app.dispose()
+
+
+@app.patch("/bank-transactions/{tx_id}/tags", response_model=BankTransactionDetail)
+def update_bank_transaction_tags(tx_id: int, request: UpdateTagsRequest) -> BankTransactionDetail:
+    """Replace the tags on a bank transaction and propagate to any linked receipt."""
+    my_app = App()
+    try:
+        my_app.update_bank_transaction_tags(tx_id, request.tags)
+        result = my_app.get_bank_transaction_by_id(tx_id)
+        if result is None:
+            raise HTTPException(status_code=404, detail=f"Bank transaction {tx_id} not found")
+        return result
+    finally:
+        my_app.dispose()
+
+
+# ------------------------------------------------------------------
+# Cash Transactions
+# ------------------------------------------------------------------
+
+@app.get("/cash-transactions/counts")
+def get_cash_transaction_counts() -> dict[str, int]:
+    """Return count of cash transactions per status."""
+    my_app = App()
+    try:
+        return my_app.get_cash_transaction_status_counts()
+    finally:
+        my_app.dispose()
+
+
+@app.get("/cash-transactions", response_model=PaginatedResponse[CashTransactionListItem])
+def list_cash_transactions(
+    status: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+    sort_by: str = "booking_date",
+    sort_dir: str = "desc",
+    tag: str | None = None,
+) -> PaginatedResponse[CashTransactionListItem]:
+    """List cash transactions, paginated, optionally filtered by status."""
+    my_app = App()
+    try:
+        items, total = my_app.get_all_cash_transactions(
+            status=status, limit=limit, offset=offset, sort_by=sort_by, sort_dir=sort_dir,
+            tag=tag,
+        )
+        return PaginatedResponse(items=items, total=total, limit=limit, offset=offset)
+    finally:
+        my_app.dispose()
+
+
+@app.post("/cash-transactions", response_model=CashTransactionDetail, status_code=201)
+def create_cash_transaction(data: CashTransactionCreate) -> CashTransactionDetail:
+    """Create a new manual cash transaction."""
+    my_app = App()
+    try:
+        result = my_app.create_cash_transaction(data)
+        if result is None:
+            raise HTTPException(status_code=500, detail="Failed to create cash transaction")
+        return result
+    finally:
+        my_app.dispose()
+
+
+@app.post("/cash-transactions/from-receipt/{scan_id}", response_model=CashTransactionDetail, status_code=201)
+def create_cash_transaction_from_receipt(scan_id: int) -> CashTransactionDetail:
+    """Auto-create a cash transaction from a confirmed receipt scan."""
+    my_app = App()
+    try:
+        result = my_app.create_cash_transaction_from_receipt(scan_id)
+        if result is None:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Receipt scan {scan_id} has no confirmed transaction or cash transaction already exists.",
+            )
+        return result
+    finally:
+        my_app.dispose()
+
+
+@app.get("/cash-transactions/{tx_id}", response_model=CashTransactionDetail)
+def get_cash_transaction(tx_id: int) -> CashTransactionDetail:
+    """Get full detail for a single cash transaction."""
+    my_app = App()
+    try:
+        result = my_app.get_cash_transaction_by_id(tx_id)
+        if result is None:
+            raise HTTPException(status_code=404, detail=f"Cash transaction {tx_id} not found")
+        return result
+    finally:
+        my_app.dispose()
+
+
+@app.put("/cash-transactions/{tx_id}", response_model=CashTransactionDetail)
+def update_cash_transaction(tx_id: int, data: CashTransactionUpdate) -> CashTransactionDetail:
+    """Update fields of an existing cash transaction."""
+    my_app = App()
+    try:
+        result = my_app.update_cash_transaction(tx_id, data)
+        if result is None:
+            raise HTTPException(status_code=404, detail=f"Cash transaction {tx_id} not found")
+        return result
+    finally:
+        my_app.dispose()
+
+
+@app.delete("/cash-transactions/{tx_id}", status_code=204)
+def delete_cash_transaction(tx_id: int) -> None:
+    """Delete a cash transaction."""
+    my_app = App()
+    try:
+        ok = my_app.delete_cash_transaction(tx_id)
+        if not ok:
+            raise HTTPException(status_code=404, detail=f"Cash transaction {tx_id} not found")
+    finally:
+        my_app.dispose()
+
+
+@app.post("/cash-transactions/{tx_id}/confirm", response_model=CashTransactionDetail)
+def confirm_cash_transaction(
+    tx_id: int, request: ConfirmCashTransactionRequest
+) -> CashTransactionDetail:
+    """Confirm a category for a cash transaction and mark it as done."""
+    my_app = App()
+    try:
+        result = my_app.confirm_cash_transaction(tx_id, request)
+        if result is None:
+            raise HTTPException(status_code=404, detail=f"Cash transaction {tx_id} not found")
+        return result
+    finally:
+        my_app.dispose()
+
+
+@app.post("/cash-transactions/{tx_id}/reopen", response_model=CashTransactionDetail)
+def reopen_cash_transaction(tx_id: int) -> CashTransactionDetail:
+    """Reset a cash transaction back to to_confirm."""
+    my_app = App()
+    try:
+        result = my_app.reopen_cash_transaction(tx_id)
+        if result is None:
+            raise HTTPException(status_code=404, detail=f"Cash transaction {tx_id} not found")
+        return result
+    finally:
+        my_app.dispose()
+
+
+@app.get("/cash-transactions/{tx_id}/receipt-candidates", response_model=list[ReceiptCandidateItem])
+def get_cash_receipt_candidates(tx_id: int) -> list[ReceiptCandidateItem]:
+    """Return receipt_transaction candidates that could be linked to this cash transaction."""
+    my_app = App()
+    try:
+        return my_app.get_receipt_candidates_for_cash_tx(tx_id)
+    finally:
+        my_app.dispose()
+
+
+@app.post("/cash-transactions/{tx_id}/link", response_model=CashTransactionDetail)
+def link_cash_to_receipt(tx_id: int, request: LinkCashReceiptRequest) -> CashTransactionDetail:
+    """Link a cash transaction to a receipt transaction."""
+    my_app = App()
+    try:
+        result = my_app.link_cash_to_receipt(tx_id, request)
+        if result is None:
+            raise HTTPException(
+                status_code=409,
+                detail="Link already exists or the receipt_transaction_id is already linked to another cash transaction.",
+            )
+        return result
+    finally:
+        my_app.dispose()
+
+
+@app.delete("/cash-transactions/{tx_id}/link", response_model=CashTransactionDetail)
+def unlink_cash_transaction(tx_id: int) -> CashTransactionDetail:
+    """Remove the link between a cash transaction and a receipt."""
+    my_app = App()
+    try:
+        result = my_app.unlink_cash_transaction(tx_id)
+        if result is None:
+            raise HTTPException(status_code=404, detail=f"Cash transaction {tx_id} not found")
+        return result
+    finally:
+        my_app.dispose()
+
+
+@app.patch("/cash-transactions/{tx_id}/tags", response_model=CashTransactionDetail)
+def update_cash_transaction_tags(tx_id: int, request: UpdateTagsRequest) -> CashTransactionDetail:
+    """Replace the tags on a cash transaction."""
+    my_app = App()
+    try:
+        my_app.update_cash_transaction_tags(tx_id, request.tags)
+        result = my_app.get_cash_transaction_by_id(tx_id)
+        if result is None:
+            raise HTTPException(status_code=404, detail=f"Cash transaction {tx_id} not found")
         return result
     finally:
         my_app.dispose()
