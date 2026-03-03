@@ -147,7 +147,7 @@ class ReceiptsScansRepository(ABC):
             return []
 
     def dispose(self):
-        print("ReceiptsScansRepository disposed.")
+        pass
 
     # ------------------------------------------------------------------
     # New methods for the review/confirm API

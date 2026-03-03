@@ -189,5 +189,4 @@ class GroundTruthService:
             print(f"[ground-truth] Created entry {entry_id} for '{filename}'.")
 
     def dispose(self):
-        """Cleanup resources."""
-        print("GroundTruthService disposed.")
+        pass

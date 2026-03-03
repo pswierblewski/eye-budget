@@ -27,10 +27,7 @@ class ProductsService(ABC):
         )
 
     def dispose(self):
-        """
-        Dispose of the service resources.
-        """
-        print("ProductsService disposed.")
+        pass
 
     def process_products(self, products: List[ProductItem]) -> ProductMappings:
         """

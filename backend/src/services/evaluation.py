@@ -415,5 +415,4 @@ class EvaluationService:
         )
 
     def dispose(self):
-        """Cleanup resources."""
-        print("EvaluationService disposed.")
+        pass

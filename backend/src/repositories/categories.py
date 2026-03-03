@@ -107,4 +107,4 @@ class CategoriesRepository(ABC):
             return []
 
     def dispose(self):
-        print("CategoriesRepository disposed.")
+        pass

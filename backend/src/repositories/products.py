@@ -209,8 +209,5 @@ class ProductsRepository(ABC):
         return success
 
     def dispose(self):
-        """
-        Dispose of the repository resources.
-        """
-        print("ProductsRepository disposed.")
+        pass
 
