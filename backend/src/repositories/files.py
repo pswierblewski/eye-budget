@@ -10,11 +10,7 @@ class FilesRepository(ABC):
         self.attachment_dir = os.getenv("MY_MONEY_ATTACHMENTS_DIR", "attachment/")
         
     def dispose(self):
-        """
-        Dispose of the repository resources.
-        This method is a placeholder for any cleanup operations needed.
-        """
-        print("FilesRepository disposed.")
+        pass
         
     def list_input_files(self):
         return [f for f in os.listdir(self.input_dir) if os.path.isfile(os.path.join(self.input_dir, f))]

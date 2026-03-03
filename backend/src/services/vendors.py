@@ -29,10 +29,7 @@ class VendorsService(ABC):
         )
 
     def dispose(self):
-        """
-        Dispose of the service resources.
-        """
-        print("VendorsService disposed.")
+        pass
 
     def process_vendor(self, vendor_name: str) -> VendorMapping:
         """

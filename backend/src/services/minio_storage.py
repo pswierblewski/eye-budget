@@ -127,5 +127,4 @@ class MinioStorageService:
             return False
     
     def dispose(self):
-        """Cleanup resources."""
-        print("MinioStorageService disposed.")
+        pass

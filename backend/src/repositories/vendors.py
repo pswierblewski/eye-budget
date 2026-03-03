@@ -212,8 +212,5 @@ class VendorsRepository(ABC):
             return []
 
     def dispose(self):
-        """
-        Dispose of the repository resources.
-        """
-        print("VendorsRepository disposed.")
+        pass
 

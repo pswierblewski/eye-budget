@@ -242,5 +242,4 @@ class GroundTruthRepository(ABC):
             return False
 
     def dispose(self):
-        """Cleanup resources."""
-        print("GroundTruthRepository disposed.")
+        pass

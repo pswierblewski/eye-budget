@@ -182,4 +182,4 @@ class TransactionsRepository(ABC):
             return False
 
     def dispose(self):
-        print("TransactionsRepository disposed.")
+        pass

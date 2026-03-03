@@ -123,7 +123,7 @@ class EvaluationsRepository(ABC):
             return False
 
     def dispose(self):
-        print("EvaluationsRepository disposed.")
+        pass
 
     # ------------------------------------------------------------------
     # New methods for the evaluations list/detail API

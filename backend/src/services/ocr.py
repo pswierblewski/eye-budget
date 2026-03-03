@@ -32,11 +32,7 @@ class OCRService(ABC):
         self.model = os.getenv("MODEL", "gpt-5.2")
         
     def dispose(self):
-        """
-        Dispose of the service resources.
-        This method is a placeholder for any cleanup operations needed.
-        """
-        print("OCRService disposed.")
+        pass
 
     def _encode_image(self, image_path: str) -> str:
         with open(image_path, "rb") as image_file:
