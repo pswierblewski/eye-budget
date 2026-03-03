@@ -254,6 +254,18 @@ class ConfirmReceiptRequest(BaseModel):
     normalized_products: dict[str, str] | None = None  # {raw_product_name: normalized_name}
 
 
+class UpdateTransactionItemRequest(BaseModel):
+    """Request body for updating a single confirmed receipt transaction item.
+
+    All fields are optional — only supplied fields will be updated (PATCH semantics).
+    """
+    category_id: int | None = None
+    product_id: int | None = None
+    quantity: float | None = None
+    unit_price: float | None = None
+    price: float | None = None
+
+
 # ---------------------------------------------------------------------------
 # Evaluation list/detail models (lighter than EvaluationRunSummary)
 # ---------------------------------------------------------------------------

@@ -46,6 +46,12 @@ To run in the background:
 docker compose up --build -d
 ```
 
+To rebuild and force recreate:
+
+```bash
+docker compose up --build -d --force-recreate
+```
+
 ### 3. Run database migrations
 
 On first run (or after pulling new migrations):

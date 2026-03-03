@@ -5,6 +5,7 @@
         "npm install": true,
         "npx tsc": true,
         "pip": true,
-        "/home/pawel/eye-budget/venv/bin/python": true
+        "/home/pawel/eye-budget/venv/bin/python": true,
+        "docker compose": true
     }
 }

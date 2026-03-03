@@ -13,9 +13,11 @@ from src.data import (
     TransactionModel,
     ReceiptScanListItem,
     ReceiptScanDetail,
+    ReceiptTransactionItem,
     CategoryItem,
     CreateCategoryRequest,
     ConfirmReceiptRequest,
+    UpdateTransactionItemRequest,
     EvaluationRunListItem,
     EvaluationRunDetail,
     VendorItem,
@@ -225,6 +227,47 @@ def reopen_receipt(scan_id: int) -> ReceiptScanDetail:
         if result is None:
             raise HTTPException(status_code=404, detail=f"Receipt scan {scan_id} not found")
         return result
+    finally:
+        my_app.dispose()
+
+
+@app.patch("/receipts/items/{item_id}", response_model=ReceiptTransactionItem)
+def update_transaction_item(
+    item_id: int, request: UpdateTransactionItemRequest
+) -> ReceiptTransactionItem:
+    """
+    Update individual fields on a confirmed receipt transaction item.
+
+    Accepts any combination of: category_id, product_id, quantity, unit_price, price.
+    Only supplied (non-null) fields are updated.
+    """
+    my_app = App()
+    try:
+        result = my_app.update_transaction_item(item_id, request)
+        if result is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Transaction item {item_id} not found or no fields to update",
+            )
+        return result
+    finally:
+        my_app.dispose()
+
+
+@app.delete("/receipts/items/{item_id}", status_code=200)
+def delete_transaction_item(item_id: int):
+    """
+    Delete a single confirmed receipt transaction item.
+    """
+    my_app = App()
+    try:
+        ok = my_app.delete_transaction_item(item_id)
+        if not ok:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Transaction item {item_id} not found",
+            )
+        return {"ok": True}
     finally:
         my_app.dispose()
 

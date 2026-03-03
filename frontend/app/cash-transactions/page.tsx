@@ -789,7 +789,7 @@ export default function CashTransactionsPage() {
         <DataTable
           columns={columns}
           rows={transactions}
-          emptyMessage="Brak transakcji gotówkowych. Kliknij „Dodaj transakcję" aby dodać pierwszą."
+          emptyMessage={'Brak transakcji gotówkowych. Kliknij \u201eDodaj transakcję\u201d aby dodać pierwszą.'}
           renderExpandedRow={(tx) => (
             <ExpandedRowContent tx={tx} allTags={allTags} />
           )}

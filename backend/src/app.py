@@ -32,8 +32,10 @@ from .data import (
     ReceiptScanListItem,
     ReceiptScanDetail,
     ReceiptTransaction,
+    ReceiptTransactionItem,
     CategoryItem,
     ConfirmReceiptRequest,
+    UpdateTransactionItemRequest,
     EvaluationRunListItem,
     EvaluationRunDetail,
     VendorItem,
@@ -536,6 +538,19 @@ class App(ABC):
         self.transactions_repository.delete_by_scan_id(scan_id)
         self.receipts_scans_repository.set_status_to_confirm_by_id(scan_id)
         return self.get_receipt_by_id(scan_id)
+
+    def update_transaction_item(
+        self, item_id: int, request: UpdateTransactionItemRequest
+    ) -> ReceiptTransactionItem | None:
+        """Update individual fields on a confirmed receipt transaction item."""
+        fields = request.model_dump(exclude_none=True)
+        if not fields:
+            return None
+        return self.transactions_repository.update_transaction_item(item_id, fields)
+
+    def delete_transaction_item(self, item_id: int) -> bool:
+        """Delete a single confirmed receipt transaction item."""
+        return self.transactions_repository.delete_transaction_item(item_id)
 
     def delete_receipt(self, scan_id: int) -> bool:
         """
