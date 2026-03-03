@@ -2,15 +2,16 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getReceipt, listReceipts, listCategories, confirmReceipt, reopenReceipt, deleteReceipt, retryReceipt, reuployReceiptImage, getBankTxCandidates, linkBankToReceipt, unlinkBankTransaction, updateReceiptTags, getAllTags, createCashFromReceipt, getCashTxCandidatesForReceipt, linkCashToReceipt, unlinkCashTransaction } from "@/lib/api";
+import { getReceipt, listReceipts, listCategories, listProducts, confirmReceipt, reopenReceipt, deleteReceipt, retryReceipt, reuployReceiptImage, getBankTxCandidates, linkBankToReceipt, unlinkBankTransaction, updateReceiptTags, getAllTags, createCashFromReceipt, getCashTxCandidatesForReceipt, linkCashToReceipt, unlinkCashTransaction, updateTransactionItem, deleteTransactionItem } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import { ReceiptImageViewer } from "@/components/ReceiptImageViewer";
 import { ProductCategoryRow } from "@/components/ProductCategoryRow";
+import { CategoryDropdown } from "@/components/CategoryDropdown";
 import { StatusBadge } from "@/components/StatusBadge";
 import { VendorDropdown } from "@/components/VendorDropdown";
 import { ProductDropdown } from "@/components/ProductDropdown";
 import TagsEditor from "@/components/TagsEditor";
-import { BankTxCandidateItem, CashTxCandidateItem, ProductItem } from "@/lib/types";
+import { BankTxCandidateItem, CashTxCandidateItem, ProductItem, ReceiptTransactionItem } from "@/lib/types";
 import Link from "next/link";
 
 /** Convert YYYY-MM-DD (backend) → DD-MM-YYYY (display) */
@@ -44,6 +45,20 @@ export default function ReceiptReviewPage({
   const { data: allCategories = [] } = useQuery({
     queryKey: ["categories"],
     queryFn: listCategories,
+  });
+
+  // Inline editing of a single product on a confirmed receipt
+  const [editingItemId, setEditingItemId] = useState<number | null>(null);
+  const [editItemCategoryId, setEditItemCategoryId] = useState<number | undefined>(undefined);
+  const [editItemNormalizedName, setEditItemNormalizedName] = useState("");
+  const [editItemQuantity, setEditItemQuantity] = useState("");
+  const [editItemUnitPrice, setEditItemUnitPrice] = useState("");
+  const [editItemPrice, setEditItemPrice] = useState("");
+
+  const { data: allProducts = [] } = useQuery({
+    queryKey: ["products"],
+    queryFn: listProducts,
+    enabled: editingItemId !== null,
   });
 
   const { data: allReceipts } = useQuery({
@@ -81,6 +96,52 @@ export default function ReceiptReviewPage({
   const menuRef = useRef<HTMLDivElement>(null);
   const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
   const headerMenuRef = useRef<HTMLDivElement>(null);
+  const [productSearch, setProductSearch] = useState("");
+  const [confirmedMenuItemId, setConfirmedMenuItemId] = useState<number | null>(null);
+  const [confirmDeleteItemId, setConfirmDeleteItemId] = useState<number | null>(null);
+  const confirmedMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close confirmed-item three-dot menu on outside click
+  useEffect(() => {
+    if (confirmedMenuItemId === null) return;
+    function handleClick(e: MouseEvent) {
+      if (confirmedMenuRef.current && !confirmedMenuRef.current.contains(e.target as Node)) {
+        setConfirmedMenuItemId(null);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [confirmedMenuItemId]);
+
+  const startEditingItem = (item: ReceiptTransactionItem) => {
+    setEditingItemId(item.id);
+    setEditItemCategoryId(item.category_id);
+    setEditItemNormalizedName(item.normalized_product_name ?? "");
+    setEditItemQuantity(String(item.quantity));
+    setEditItemUnitPrice(item.unit_price != null ? item.unit_price.toFixed(2) : "");
+    setEditItemPrice(item.price.toFixed(2));
+  };
+
+  const cancelEditingItem = () => {
+    setEditingItemId(null);
+  };
+
+  const updateItemMutation = useMutation({
+    mutationFn: (args: { itemId: number; data: Partial<{ category_id: number; product_id: number; quantity: number; unit_price: number; price: number }> }) =>
+      updateTransactionItem(args.itemId, args.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["receipt", scanId] });
+      setEditingItemId(null);
+    },
+  });
+
+  const deleteItemMutation = useMutation({
+    mutationFn: (itemId: number) => deleteTransactionItem(itemId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["receipt", scanId] });
+      setConfirmedMenuItemId(null);
+    },
+  });
 
   useEffect(() => {
     if (openMenuIndex === null) return;
@@ -106,6 +167,7 @@ export default function ReceiptReviewPage({
 
   useEffect(() => {
     if (scan?.result) {
+      setProductSearch("");
       setEditedVendor(scan.result.vendor);
       setEditedDate(toDisplayDate(scan.result.date));
       setEditedTotal(scan.result.total.toFixed(2));
@@ -146,11 +208,23 @@ export default function ReceiptReviewPage({
   });
 
   const reopenMutation = useMutation({
-    mutationFn: () => reopenReceipt(scanId),
-    onSuccess: (updated) => {
+    mutationFn: async () => {
+      // Capture confirmed categories BEFORE the backend deletes the transaction.
+      // This preserves both manually-added product categories (which have no entry
+      // in categories_candidates) and any user overrides of AI-suggested categories.
+      const confirmedSelections: Record<string, number> = {};
+      if (scan?.transaction?.items) {
+        for (const item of scan.transaction.items) {
+          confirmedSelections[item.raw_product_name] = item.category_id;
+        }
+      }
+      const updated = await reopenReceipt(scanId);
+      return { updated, confirmedSelections };
+    },
+    onSuccess: ({ updated, confirmedSelections }) => {
       queryClient.setQueryData(["receipt", scanId], updated);
       queryClient.invalidateQueries({ queryKey: ["receipts"] });
-      setSelections({});
+      setSelections(confirmedSelections);
       // useEffect above will re-init the edited fields from updated.result
     },
   });
@@ -364,6 +438,7 @@ export default function ReceiptReviewPage({
         <h1 className="text-xl font-bold text-gray-900 flex-1 truncate">
           {scan.filename}
         </h1>
+        <span className="text-xs text-gray-400 font-mono shrink-0">#{scanId}</span>
         <StatusBadge status={scan.status} />
         <div className="flex items-center gap-1">
           {prevReceiptId !== null ? (
@@ -480,19 +555,185 @@ export default function ReceiptReviewPage({
               </div>
 
               <div className="space-y-2">
-                <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Produkty</h2>
-                {scan.transaction.items.map((item) => {
+                <div className="flex items-center gap-3">
+                  <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Produkty</h2>
+                  {productSearch && (
+                    <span className="text-xs text-gray-400">
+                      {scan.transaction.items.filter((i) =>
+                        [i.normalized_product_name, i.raw_product_name]
+                          .filter(Boolean)
+                          .some((n) => n!.toLowerCase().includes(productSearch.toLowerCase()))
+                      ).length}{" / "}{scan.transaction.items.length}
+                    </span>
+                  )}
+                </div>
+                {scan.transaction.items.length > 5 && (
+                  <input
+                    type="search"
+                    value={productSearch}
+                    onChange={(e) => setProductSearch(e.target.value)}
+                    placeholder="Szukaj produktu…"
+                    className="w-full text-sm border border-gray-200 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-[#635bff]"
+                  />
+                )}
+                {scan.transaction.items
+                  .filter((i) =>
+                    !productSearch ||
+                    [i.normalized_product_name, i.raw_product_name]
+                      .filter(Boolean)
+                      .some((n) => n!.toLowerCase().includes(productSearch.toLowerCase()))
+                  )
+                  .map((item) => {
                   const cat = allCategories.find((c) => c.id === item.category_id);
                   const catLabel = cat
                     ? [cat.group_name, cat.parent_name, cat.name].filter(Boolean).join(" / ")
                     : `Category #${item.category_id}`;
+
+                  if (editingItemId === item.id) {
+                    return (
+                      <div key={item.id} className="flex flex-col gap-2 rounded-lg border-2 border-[#635bff] p-3 bg-indigo-50/30">
+                        {/* Product name (read-only raw name) */}
+                        <p className="text-sm font-medium text-gray-900">
+                          {item.normalized_product_name ?? item.raw_product_name}
+                        </p>
+                        {item.normalized_product_name && item.normalized_product_name !== item.raw_product_name && (
+                          <p className="text-xs text-gray-400">Raw: {item.raw_product_name}</p>
+                        )}
+
+                        {/* Normalized product (ProductDropdown) */}
+                        <div>
+                          <label className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Produkt znormalizowany</label>
+                          <ProductDropdown
+                            value={editItemNormalizedName}
+                            onChange={(name) => setEditItemNormalizedName(name)}
+                          />
+                        </div>
+
+                        {/* Category */}
+                        <div>
+                          <label className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Kategoria</label>
+                          <CategoryDropdown
+                            value={editItemCategoryId}
+                            onChange={(id) => setEditItemCategoryId(id)}
+                          />
+                        </div>
+
+                        {/* Quantity / Unit price / Total price */}
+                        <div className="grid grid-cols-3 gap-2">
+                          <div>
+                            <label className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Ilość</label>
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              value={editItemQuantity}
+                              onChange={(e) => setEditItemQuantity(e.target.value)}
+                              className="w-full text-sm border border-gray-200 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-[#635bff]"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Cena jedn.</label>
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              value={editItemUnitPrice}
+                              onChange={(e) => setEditItemUnitPrice(e.target.value)}
+                              className="w-full text-sm border border-gray-200 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-[#635bff]"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Cena</label>
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              value={editItemPrice}
+                              onChange={(e) => setEditItemPrice(e.target.value)}
+                              className="w-full text-sm border border-gray-200 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-[#635bff]"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Save / Cancel */}
+                        <div className="flex gap-2 pt-1">
+                          <button
+                            onClick={cancelEditingItem}
+                            className="flex-1 px-3 py-1.5 text-xs rounded-md border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors"
+                          >
+                            Anuluj
+                          </button>
+                          <button
+                            disabled={updateItemMutation.isPending}
+                            onClick={() => {
+                              const data: Partial<{ category_id: number; product_id: number; quantity: number; unit_price: number; price: number }> = {};
+                              if (editItemCategoryId !== undefined && editItemCategoryId !== item.category_id) {
+                                data.category_id = editItemCategoryId;
+                              }
+                              // Resolve normalized product name to product_id
+                              const currentNormName = item.normalized_product_name ?? "";
+                              if (editItemNormalizedName !== currentNormName) {
+                                const matched = allProducts.find(
+                                  (p) => p.name.toLowerCase() === editItemNormalizedName.trim().toLowerCase()
+                                );
+                                if (matched) data.product_id = matched.id;
+                              }
+                              const q = parseFloat(editItemQuantity.replace(",", "."));
+                              if (!isNaN(q) && q !== item.quantity) data.quantity = q;
+                              const up = parseFloat(editItemUnitPrice.replace(",", "."));
+                              if (!isNaN(up) && up !== item.unit_price) data.unit_price = up;
+                              const p = parseFloat(editItemPrice.replace(",", "."));
+                              if (!isNaN(p) && p !== item.price) data.price = p;
+                              if (Object.keys(data).length === 0) {
+                                cancelEditingItem();
+                                return;
+                              }
+                              updateItemMutation.mutate({ itemId: item.id, data });
+                            }}
+                            className="flex-1 px-3 py-1.5 text-xs rounded-md bg-[#635bff] text-white font-medium hover:bg-[#4b44cc] transition-colors disabled:opacity-50"
+                          >
+                            {updateItemMutation.isPending ? "Zapisywanie…" : "Zapisz"}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  }
+
                   return (
                     <div key={item.id} className="flex flex-col gap-1 rounded-lg border border-gray-200 p-3 bg-white">
                       <div className="flex items-start justify-between gap-2">
                         <p className="text-sm font-medium text-gray-900">
                           {item.normalized_product_name ?? item.raw_product_name}
                         </p>
-                        <p className="text-sm font-semibold text-gray-900 shrink-0">{item.price.toFixed(2)} PLN</p>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <p className="text-sm font-semibold text-gray-900">{item.price.toFixed(2)} PLN</p>
+                          <div className="relative" ref={confirmedMenuItemId === item.id ? confirmedMenuRef : undefined}>
+                            <button
+                              type="button"
+                              onClick={() => setConfirmedMenuItemId(confirmedMenuItemId === item.id ? null : item.id)}
+                              className="p-1 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors leading-none"
+                              title="Opcje"
+                            >
+                              ⋯
+                            </button>
+                            {confirmedMenuItemId === item.id && (
+                              <div className="absolute right-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[150px]">
+                                <button
+                                  type="button"
+                                  onClick={() => { startEditingItem(item); setConfirmedMenuItemId(null); }}
+                                  className="w-full text-left px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                                >
+                                  Edytuj produkt
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={deleteItemMutation.isPending}
+                                  onClick={() => { setConfirmedMenuItemId(null); setConfirmDeleteItemId(item.id); }}
+                                  className="w-full text-left px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
+                                >
+                                  Usuń produkt
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
                       </div>
                       {item.normalized_product_name && item.normalized_product_name !== item.raw_product_name && (
                         <p className="text-xs text-gray-400">Raw: {item.raw_product_name}</p>
@@ -505,6 +746,44 @@ export default function ReceiptReviewPage({
                   );
                 })}
               </div>
+
+              {/* Delete product confirmation dialog */}
+              {confirmDeleteItemId !== null && (() => {
+                const delItem = scan.transaction.items.find((i) => i.id === confirmDeleteItemId);
+                return (
+                  <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40">
+                    <div className="bg-white rounded-xl shadow-xl p-5 max-w-sm w-full mx-4 space-y-3">
+                      <h3 className="text-sm font-semibold text-gray-900">Usunąć produkt?</h3>
+                      {delItem && (
+                        <p className="text-sm text-gray-600">
+                          <span className="font-medium">{delItem.normalized_product_name ?? delItem.raw_product_name}</span>
+                          {" — "}{delItem.price.toFixed(2)} PLN
+                        </p>
+                      )}
+                      <p className="text-xs text-gray-400">Tej operacji nie można cofnąć.</p>
+                      <div className="flex gap-2 pt-1">
+                        <button
+                          onClick={() => setConfirmDeleteItemId(null)}
+                          className="flex-1 px-3 py-1.5 text-sm rounded-md border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors"
+                        >
+                          Anuluj
+                        </button>
+                        <button
+                          disabled={deleteItemMutation.isPending}
+                          onClick={() => {
+                            deleteItemMutation.mutate(confirmDeleteItemId, {
+                              onSuccess: () => setConfirmDeleteItemId(null),
+                            });
+                          }}
+                          className="flex-1 px-3 py-1.5 text-sm rounded-md bg-red-600 text-white font-medium hover:bg-red-700 transition-colors disabled:opacity-50"
+                        >
+                          {deleteItemMutation.isPending ? "Usuwanie…" : "Usuń"}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Bank transaction link section */}
               <div className="rounded-xl border border-gray-200 p-4 space-y-2">
@@ -783,10 +1062,36 @@ export default function ReceiptReviewPage({
               </button>
 
               <div className="space-y-2">
-                <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
-                  Przypisz kategorie
-                </h2>
-                {products.map((product, index) => (
+                <div className="flex items-center gap-3">
+                  <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
+                    Przypisz kategorie
+                  </h2>
+                  {productSearch && (
+                    <span className="text-xs text-gray-400">
+                      {products.filter((p) =>
+                        p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
+                        (editedNormalizedProducts[p.name] ?? "").toLowerCase().includes(productSearch.toLowerCase())
+                      ).length}{" / "}{products.length}
+                    </span>
+                  )}
+                </div>
+                {products.length > 5 && (
+                  <input
+                    type="search"
+                    value={productSearch}
+                    onChange={(e) => setProductSearch(e.target.value)}
+                    placeholder="Szukaj produktu…"
+                    className="w-full text-sm border border-gray-200 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-[#635bff]"
+                  />
+                )}
+                {products
+                  .map((product, index) => ({ product, index }))
+                  .filter(({ product }) =>
+                    !productSearch ||
+                    product.name.toLowerCase().includes(productSearch.toLowerCase()) ||
+                    (editedNormalizedProducts[product.name] ?? "").toLowerCase().includes(productSearch.toLowerCase())
+                  )
+                  .map(({ product, index }) => (
                   <div key={index} className="rounded-lg border border-gray-200 bg-white">
                     {/* Product name + price — always visible at the top */}
                     <div className="px-3 pt-3 pb-2 min-w-0">

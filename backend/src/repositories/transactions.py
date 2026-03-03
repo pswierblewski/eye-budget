@@ -156,6 +156,78 @@ class TransactionsRepository(ABC):
             print("Failed to fetch transaction by scan id:", e)
             return None
 
+    def update_transaction_item(
+        self, item_id: int, fields: dict
+    ) -> ReceiptTransactionItem | None:
+        """Update selected columns on a receipt_transaction_item and return the updated row."""
+        if not self.conn or not fields:
+            return None
+        allowed = {"category_id", "product_id", "quantity", "unit_price", "price"}
+        updates = {k: v for k, v in fields.items() if k in allowed and v is not None}
+        if not updates:
+            return None
+        set_clause = ", ".join(f"{col} = %s" for col in updates)
+        values = list(updates.values()) + [item_id]
+        try:
+            with self.conn.cursor() as cursor:
+                cursor.execute(
+                    f"UPDATE receipt_transaction_items SET {set_clause} WHERE id = %s",
+                    values,
+                )
+                if cursor.rowcount == 0:
+                    self.conn.rollback()
+                    return None
+                self.conn.commit()
+                # Re-fetch the item with normalised product name
+                cursor.execute(
+                    """
+                    SELECT rti.id, rti.product_id, rti.raw_product_name, rti.category_id,
+                           rti.quantity, rti.unit_price, rti.price,
+                           p.name AS normalized_product_name
+                    FROM receipt_transaction_items rti
+                    LEFT JOIN products p ON rti.product_id = p.id
+                    WHERE rti.id = %s
+                    """,
+                    (item_id,),
+                )
+                r = cursor.fetchone()
+                if r is None:
+                    return None
+                return ReceiptTransactionItem(
+                    id=r[0],
+                    product_id=r[1],
+                    raw_product_name=r[2],
+                    category_id=r[3],
+                    quantity=float(r[4]),
+                    unit_price=float(r[5]) if r[5] is not None else None,
+                    price=float(r[6]),
+                    normalized_product_name=r[7],
+                )
+        except Exception as e:
+            print("Failed to update transaction item:", e)
+            self.conn.rollback()
+            return None
+
+    def delete_transaction_item(self, item_id: int) -> bool:
+        """Delete a single receipt_transaction_item by its ID."""
+        if not self.conn:
+            return False
+        try:
+            with self.conn.cursor() as cursor:
+                cursor.execute(
+                    "DELETE FROM receipt_transaction_items WHERE id = %s",
+                    (item_id,),
+                )
+                if cursor.rowcount == 0:
+                    self.conn.rollback()
+                    return False
+                self.conn.commit()
+                return True
+        except Exception as e:
+            print("Failed to delete transaction item:", e)
+            self.conn.rollback()
+            return False
+
     def delete_by_scan_id(self, scan_id: int) -> bool:
         if not self.conn:
             return False
