@@ -210,7 +210,7 @@ class App(ABC):
                     def _upload():
                         with open(preprocessed_image_path, "rb") as f:
                             image_data = f.read()
-                        self.minio_service.upload_image(image_data, object_key)
+                        self.minio_service.upload_image(image_data, object_key, content_type="image/jpeg")
 
                     await asyncio.to_thread(_upload)
                     async with db_lock:
@@ -352,6 +352,13 @@ class App(ABC):
             return None
         return self.minio_service.download_image(detail.minio_object_key)
 
+    def get_receipt_image_url(self, scan_id: int, expires_sec: int = 3600) -> str | None:
+        """Return a presigned MinIO URL for the receipt image (direct browser access)."""
+        detail = self.receipts_scans_repository.get_by_id(scan_id)
+        if detail is None or detail.minio_object_key is None:
+            return None
+        return self.minio_service.get_presigned_url(detail.minio_object_key, expires_sec=expires_sec)
+
     def reupload_receipt_image(self, scan_id: int) -> bool:
         """
         Re-preprocess the source image from the input directory and re-upload it
@@ -374,7 +381,7 @@ class App(ABC):
         try:
             with open(preprocessed_path, "rb") as f:
                 image_data = f.read()
-            self.minio_service.upload_image(image_data, object_key)
+            self.minio_service.upload_image(image_data, object_key, content_type="image/jpeg")
         except Exception as e:
             print(f"reupload_receipt_image: MinIO upload failed: {e}")
             return False
@@ -556,7 +563,7 @@ class App(ABC):
             object_key = f"receipts/{scan_id}_{_os_top.path.basename(filename)}"
             with open(preprocessed_image_path, "rb") as f:
                 image_data = f.read()
-            self.minio_service.upload_image(image_data, object_key)
+            self.minio_service.upload_image(image_data, object_key, content_type="image/jpeg")
             self.receipts_scans_repository.set_minio_key(filename, object_key)
 
             ocr_result = self.ocr_service.process_image(preprocessed_image_path)

@@ -33,8 +33,15 @@ from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 import io
+import threading
+from cachetools import TTLCache
 
 app = FastAPI()
+
+# Cache preprocessed image bytes in memory. Entries expire after 1 h to match
+# the browser Cache-Control header and the presigned-URL TTL.
+_image_cache: TTLCache = TTLCache(maxsize=256, ttl=3600)
+_image_cache_lock = threading.Lock()
 
 
 class TaskResponse(BaseModel):
@@ -115,13 +122,31 @@ def get_receipt(scan_id: int) -> ReceiptScanDetail:
 
 @app.get("/receipts/{scan_id}/image")
 def get_receipt_image(scan_id: int) -> StreamingResponse:
-    """Proxy the preprocessed receipt image stored in MinIO."""
+    """Proxy the preprocessed receipt image stored in MinIO (with in-process cache)."""
+    with _image_cache_lock:
+        if scan_id in _image_cache:
+            return StreamingResponse(io.BytesIO(_image_cache[scan_id]), media_type="image/jpeg")
     my_app = App()
     try:
         image_bytes = my_app.get_receipt_image_bytes(scan_id)
         if image_bytes is None:
             raise HTTPException(status_code=404, detail=f"Image for scan {scan_id} not found")
-        return StreamingResponse(io.BytesIO(image_bytes), media_type="image/png")
+        with _image_cache_lock:
+            _image_cache[scan_id] = image_bytes
+        return StreamingResponse(io.BytesIO(image_bytes), media_type="image/jpeg")
+    finally:
+        my_app.dispose()
+
+
+@app.get("/receipts/{scan_id}/image-url")
+def get_receipt_image_url(scan_id: int, expires: int = 3600):
+    """Return a presigned MinIO URL so the browser can fetch the image directly."""
+    my_app = App()
+    try:
+        url = my_app.get_receipt_image_url(scan_id, expires_sec=expires)
+        if url is None:
+            raise HTTPException(status_code=404, detail=f"Image for scan {scan_id} not found")
+        return {"url": url, "expires_in": expires}
     finally:
         my_app.dispose()
 
@@ -138,6 +163,8 @@ def reupload_receipt_image(scan_id: int):
         ok = my_app.reupload_receipt_image(scan_id)
         if not ok:
             raise HTTPException(status_code=404, detail=f"Could not reupload image for scan {scan_id} — source file may be missing")
+        with _image_cache_lock:
+            _image_cache.pop(scan_id, None)
         return {"ok": True}
     finally:
         my_app.dispose()
