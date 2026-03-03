@@ -1,5 +1,7 @@
 import os
 import tempfile
+import urllib.parse
+from datetime import timedelta
 from io import BytesIO
 
 from minio import Minio
@@ -108,6 +110,31 @@ class MinioStorageService:
         
         return temp_path
     
+    def get_presigned_url(self, object_name: str, expires_sec: int = 3600) -> str:
+        """
+        Generate a presigned GET URL for the given object.
+
+        If ``MINIO_PUBLIC_ENDPOINT`` is set the scheme+host of the generated URL
+        is replaced with that value so the browser can reach MinIO directly
+        (e.g. when MinIO is exposed on ``localhost:9000`` while the internal
+        Docker service address is ``minio:9000``).
+        """
+        url = self.client.presigned_get_object(
+            self.bucket,
+            object_name,
+            expires=timedelta(seconds=expires_sec),
+        )
+        public_endpoint = os.getenv("MINIO_PUBLIC_ENDPOINT")
+        if public_endpoint:
+            parsed = urllib.parse.urlparse(url)
+            pub = urllib.parse.urlparse(
+                public_endpoint
+                if "://" in public_endpoint
+                else f"http://{public_endpoint}"
+            )
+            url = parsed._replace(scheme=pub.scheme, netloc=pub.netloc).geturl()
+        return url
+
     def delete_image(self, object_name: str) -> bool:
         """
         Delete image from MinIO.
