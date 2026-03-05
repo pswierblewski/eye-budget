@@ -390,10 +390,11 @@ export default function ReceiptsPage() {
     { header: "ID", accessor: "id", className: "w-16 text-gray-400 font-mono", serverSortKey: "id" },
     {
       header: "Plik",
+      className: "w-48",
       accessor: (r) => (
         <Link
           href={`/receipts/${r.id}`}
-          className="text-accent hover:underline font-medium"
+          className="text-accent hover:underline font-medium truncate block"
         >
           {r.filename}
         </Link>
@@ -402,13 +403,19 @@ export default function ReceiptsPage() {
     },
     {
       header: "Sklep",
-      accessor: (r) => r.vendor ?? <span className="text-gray-400">—</span>,
+      className: "w-48",
+      accessor: (r) => (
+        <span className="truncate block">
+          {r.vendor ?? <span className="text-gray-400">—</span>}
+        </span>
+      ),
       serverSortKey: "vendor",
     },
     {
       header: "Data",
+      className: "w-28 whitespace-nowrap",
       accessor: (r) => r.date
-        ? <span className="font-mono text-xs text-gray-600">{isoToDisplay(r.date)}</span>
+        ? <span className="font-mono text-xs text-gray-600 whitespace-nowrap">{isoToDisplay(r.date)}</span>
         : <span className="text-gray-400">—</span>,
       serverSortKey: "date",
     },
@@ -420,11 +427,12 @@ export default function ReceiptsPage() {
         ) : (
           <span className="text-gray-400">—</span>
         ),
-      className: "text-right",
+      className: "text-right whitespace-nowrap w-28",
       serverSortKey: "total",
     },
     {
       header: "Tagi",
+      className: "w-40",
       accessor: (r) =>
         r.tags && r.tags.length > 0 ? (
           <div className="flex flex-wrap gap-1">
@@ -436,11 +444,13 @@ export default function ReceiptsPage() {
     },
     {
       header: "Status",
+      className: "w-36",
       accessor: (r) => <StatusBadge status={r.status} />,
       serverSortKey: "status",
     },
     {
       header: "",
+      className: "w-24",
       accessor: (r) =>
         r.status === "to_confirm" ? (
           <NavLink
@@ -457,11 +467,9 @@ export default function ReceiptsPage() {
   return (
     <div className="flex flex-col flex-1 min-h-0 gap-6">
       <PageHeader
-        title="Paragony"
-        variant="list"
-        subtitle="Wszystkie zeskanowane paragony i ich status przetwarzania."
-        actions={
-          <div className="flex items-center gap-2">
+        title={
+          <span className="inline-flex items-center gap-2">
+            Paragony
             <div ref={legendRef} className="relative">
               <button
                 onClick={() => setLegendOpen((o) => !o)}
@@ -471,7 +479,7 @@ export default function ReceiptsPage() {
                 <Info size={18} />
               </button>
               {legendOpen && (
-                <div className="absolute right-0 top-full mt-2 z-50 w-96 rounded-lg border border-gray-200 bg-white shadow-lg p-4">
+                <div className="absolute left-0 top-full mt-2 z-50 w-96 rounded-lg border border-gray-200 bg-white shadow-lg p-4">
                   <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Legenda statusów</p>
                   <div className="grid grid-cols-1 gap-y-2">
                     {STATUS_LEGEND.map(({ status, description }) => (
@@ -484,15 +492,19 @@ export default function ReceiptsPage() {
                 </div>
               )}
             </div>
-            <Button
-              variant="primary"
-              size="md"
-              onClick={() => processMutation.mutate()}
-              disabled={processMutation.isPending || progress?.status === "running"}
-            >
-              {processMutation.isPending || progress?.status === "running" ? "Przetwarzanie…" : "Przetwórz paragony"}
-            </Button>
-          </div>
+          </span>
+        }
+        variant="list"
+        subtitle="Wszystkie zeskanowane paragony i ich status przetwarzania."
+        actions={
+          <Button
+            variant="primary"
+            size="md"
+            onClick={() => processMutation.mutate()}
+            disabled={processMutation.isPending || progress?.status === "running"}
+          >
+            {processMutation.isPending || progress?.status === "running" ? "Przetwarzanie…" : "Przetwórz paragony"}
+          </Button>
         }
       />
 

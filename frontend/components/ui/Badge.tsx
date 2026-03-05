@@ -1,5 +1,6 @@
 import React from "react";
 import { clsx } from "clsx";
+import { SOURCE_CONFIG, SOURCE_FALLBACK } from "@/lib/sourceConfig";
 
 // ---- Status Badge ----
 
@@ -28,7 +29,7 @@ export function StatusBadge({ status }: { status: string }) {
   const label = STATUS_LABELS[status] ?? status;
   return (
     <span
-      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${style}`}
+      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium whitespace-nowrap ${style}`}
     >
       {label}
     </span>
@@ -37,29 +38,23 @@ export function StatusBadge({ status }: { status: string }) {
 
 // ---- Source Badge ----
 
-const SOURCE_STYLES: Record<string, string> = {
-  bank: "bg-blue-50 text-blue-700",
-  cash: "bg-green-50 text-green-700",
-  receipt: "bg-orange-50 text-orange-700",
-};
-
-const SOURCE_LABELS: Record<string, string> = {
-  bank: "Bank",
-  cash: "Gotówka",
-  receipt: "Paragon",
-};
-
-export function SourceBadge({ source }: { source: string }) {
-  const style = SOURCE_STYLES[source] ?? "bg-gray-100 text-gray-500";
-  const label = SOURCE_LABELS[source] ?? source;
+export function SourceBadge({ source, showLabel = false }: { source: string; showLabel?: boolean }) {
+  const cfg = SOURCE_CONFIG[source as keyof typeof SOURCE_CONFIG];
+  const style = cfg?.style ?? SOURCE_FALLBACK.style;
+  const label = cfg?.label ?? source;
+  const Icon = cfg?.icon;
   return (
     <span
       className={clsx(
-        "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold",
+        "inline-flex items-center gap-1 rounded-full",
+        showLabel ? "px-2 py-0.5" : "p-1 justify-center",
         style
       )}
+      title={!showLabel ? label : undefined}
     >
-      {label}
+      {Icon ? <Icon size={12} /> : null}
+      {showLabel && <span className="text-[10px] font-semibold">{label}</span>}
+      {!Icon && !showLabel && label}
     </span>
   );
 }
