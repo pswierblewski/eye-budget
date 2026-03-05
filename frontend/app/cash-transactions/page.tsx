@@ -17,6 +17,7 @@ import {
   getAllTags,
   listVendors,
 } from "@/lib/api";
+import { isoToDisplay } from "@/lib/utils";
 import {
   CashTransactionListItem,
   CashTransactionCreate,
@@ -44,6 +45,7 @@ import {
   Modal,
   ThreeDotsMenu,
   ConfirmDeleteModal,
+  DateInput,
 } from "@/components/ui";
 
 const STATUS_FILTERS = ["all", "to_confirm", "done"] as const;
@@ -114,12 +116,11 @@ function AddTransactionModal({
             <label className="block text-xs font-medium text-gray-600 mb-1">
               Data
             </label>
-            <input
-              type="date"
-              required
+            <DateInput
               value={date}
-              onChange={(e) => setDate(e.target.value)}
-              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus-ring"
+              onChange={setDate}
+              inputSize="md"
+              className="w-full"
             />
           </div>
 
@@ -328,11 +329,11 @@ function ExpandedRowContent({ tx, allTags = [] }: ExpandedRowProps) {
             <div className="flex gap-3">
               <div className="flex-1">
                 <label className="block text-xs font-medium text-gray-500 mb-1">Data</label>
-                <input
-                  type="date"
+                <DateInput
                   value={editDate}
-                  onChange={(e) => setEditDate(e.target.value)}
-                  className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm"
+                  onChange={setEditDate}
+                  inputSize="sm"
+                  className="w-full"
                 />
               </div>
               <div className="flex-1">
@@ -534,7 +535,7 @@ function ExpandedRowContent({ tx, allTags = [] }: ExpandedRowProps) {
                   {receiptLink.scan_filename}
                 </Link>
                 <div className="text-gray-500 mt-0.5">
-                  {receiptLink.vendor_name} · {receiptLink.date} ·{" "}
+                  {receiptLink.vendor_name} · {isoToDisplay(receiptLink.date)} ·{" "}
                   {receiptLink.total.toFixed(2)} PLN
                 </div>
               </div>
@@ -576,7 +577,7 @@ function ExpandedRowContent({ tx, allTags = [] }: ExpandedRowProps) {
                           {c.vendor_name}
                         </span>
                         <span className="text-gray-400 ml-2">
-                          {c.date} · {c.total.toFixed(2)} PLN
+                          {isoToDisplay(c.date)} · {c.total.toFixed(2)} PLN
                         </span>
                         <MatchBadge score={c.match_score} />
                       </div>
@@ -650,9 +651,11 @@ export default function CashTransactionsPage() {
   const columns: Column<CashTransactionListItem>[] = [
     {
       header: "Data",
-      accessor: "booking_date",
+      accessor: (t) => (
+        <span className="font-mono text-xs text-gray-600">{isoToDisplay(t.booking_date)}</span>
+      ),
       serverSortKey: "booking_date",
-      className: "whitespace-nowrap text-gray-700",
+      className: "whitespace-nowrap",
     },
     {
       header: "Opis / sklep",

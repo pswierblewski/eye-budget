@@ -20,6 +20,7 @@ import { ReceiptCandidateItem } from "@/lib/types";
 import { CategoryDropdown } from "@/components/CategoryDropdown";
 import TagsEditor from "@/components/TagsEditor";
 import { CandidateBar } from "@/components/BankHelpers";
+import { isoToDisplay } from "@/lib/utils";
 import {
   StatusBadge,
   MatchBadge,
@@ -239,8 +240,8 @@ export default function BankTransactionDetailPage({
         <Card padding="md" className="space-y-3">
           <SectionLabel>Szczegóły transakcji</SectionLabel>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            <Field label="Data księgowania" value={tx.booking_date} />
-            {tx.value_date && <Field label="Data waluty" value={tx.value_date} />}
+            <Field label="Data księgowania" value={isoToDisplay(tx.booking_date)} />
+            {tx.value_date && <Field label="Data waluty" value={isoToDisplay(tx.value_date)} />}
             {tx.counterparty && <Field label="Kontrahent" value={tx.counterparty} />}
             {tx.counterparty_address && (
               <Field label="Adres kontrahenta" value={tx.counterparty_address} />
@@ -359,7 +360,7 @@ export default function BankTransactionDetailPage({
               </div>
             </>
           )}
-        </Card>}
+        </Card>
         {/* Tags card */}
         <Card padding="md" className="space-y-3">
           <SectionLabel>Tagi</SectionLabel>
@@ -368,7 +369,7 @@ export default function BankTransactionDetailPage({
             onChange={(tags) => tagsMutation.mutate(tags)}
             allTags={allTags}
           />
-        </Card>}
+        </Card>
         {/* Receipt link card */}
         <Card padding="md" className="space-y-3">
           <SectionLabel>Powiązany paragon</SectionLabel>
@@ -381,7 +382,7 @@ export default function BankTransactionDetailPage({
               >
                 <p className="font-medium text-accent">{receiptLink.vendor_name}</p>
                 <p className="text-gray-500">
-                  {receiptLink.date} · {receiptLink.total.toFixed(2)} PLN
+                  {isoToDisplay(receiptLink.date)} · {receiptLink.total.toFixed(2)} PLN
                 </p>
                 <p className="text-gray-400 font-mono text-[10px]">
                   {receiptLink.scan_filename}
@@ -419,7 +420,7 @@ export default function BankTransactionDetailPage({
                         <MatchBadge score={c.match_score} />
                       </div>
                       <p className="text-gray-500">
-                        {c.date} · {c.total.toFixed(2)} PLN
+                        {isoToDisplay(c.date)} · {c.total.toFixed(2)} PLN
                       </p>
                       <p className="text-gray-400 font-mono text-[10px] truncate">
                         {c.scan_filename}

@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { listGroundTruth } from "@/lib/api";
 import { GroundTruthEntry } from "@/lib/types";
+import { isoToDisplay } from "@/lib/utils";
 import { DataTable, Column } from "@/components/DataTable";
 import Link from "next/link";
 
@@ -48,7 +49,9 @@ export default function GroundTruthPage() {
     {
       header: "Data",
       accessor: (r) =>
-        r.ground_truth.date ?? <span className="text-gray-400">—</span>,
+        r.ground_truth.date
+          ? <span className="font-mono text-xs text-gray-600">{isoToDisplay(r.ground_truth.date)}</span>
+          : <span className="text-gray-400">—</span>,
       serverSortKey: "date",
     },
     {

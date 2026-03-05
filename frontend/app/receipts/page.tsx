@@ -4,11 +4,12 @@ import { useState, useEffect, useRef, useCallback, memo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { listReceipts, processReceipts, deleteReceipt, retryReceipt, getReceiptCounts, getAllTags } from "@/lib/api";
 import { ReceiptScanListItem } from "@/lib/types";
+import { isoToDisplay } from "@/lib/utils";
 import { DataTable, Column } from "@/components/DataTable";
 import { getPusher } from "@/lib/pusher";
 import { Info, SlidersHorizontal, X } from "lucide-react";
 import Link from "next/link";
-import { StatusBadge, Pill, PageHeader, NavLink, Button } from "@/components/ui";
+import { StatusBadge, Pill, PageHeader, NavLink, Button, FilterTabs, DateInput } from "@/components/ui";
 
 const STATUS_FILTERS = [
   "all",
@@ -159,11 +160,11 @@ const FilterPanel = memo(function FilterPanel({
         </div>
         <div>
           <label className="block text-xs font-medium text-gray-500 mb-1">Data od</label>
-          <input type="date" value={local.dateFrom} onChange={(e) => set("dateFrom", e.target.value)} className={INPUT} />
+          <DateInput value={local.dateFrom} onChange={(iso) => set("dateFrom", iso)} />
         </div>
         <div>
           <label className="block text-xs font-medium text-gray-500 mb-1">Data do</label>
-          <input type="date" value={local.dateTo} onChange={(e) => set("dateTo", e.target.value)} className={INPUT} />
+          <DateInput value={local.dateTo} onChange={(iso) => set("dateTo", iso)} />
         </div>
         <div>
           <label className="block text-xs font-medium text-gray-500 mb-1">Tag</label>
@@ -382,6 +383,7 @@ export default function ReceiptsPage() {
           }
           onClick={(e) => e.stopPropagation()}
           className="rounded border-gray-300 text-accent focus:ring-accent cursor-pointer"
+        />
       ),
       className: "w-10",
     },
@@ -405,7 +407,9 @@ export default function ReceiptsPage() {
     },
     {
       header: "Data",
-      accessor: (r) => r.date ?? <span className="text-gray-400">—</span>,
+      accessor: (r) => r.date
+        ? <span className="font-mono text-xs text-gray-600">{isoToDisplay(r.date)}</span>
+        : <span className="text-gray-400">—</span>,
       serverSortKey: "date",
     },
     {
@@ -523,37 +527,30 @@ export default function ReceiptsPage() {
       )}
 
       {/* Filter tabs + bulk actions — same row */}
-      <div className="flex items-center gap-2 flex-wrap flex-shrink-0">
-        {STATUS_FILTERS.map((s) => (
-          <button
-            key={s}
-            onClick={() => { setStatusFilter(s); setPage(1); setSelectedIds(new Set()); }}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-              statusFilter === s
-                ? "bg-accent text-white"
-                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-            }`}
-          >
-            {s === "all"
-              ? `${FILTER_LABELS.all} (${totalAll})`
-              : `${FILTER_LABELS[s] ?? s} (${statusCounts[s] ?? 0})`}
-          </button>
-        ))}
-
-        <div className="w-px h-5 bg-gray-200 mx-1" />
+      <div className="flex items-center gap-2 mt-4 mb-4 flex-wrap flex-shrink-0">
+        <FilterTabs
+          tabs={STATUS_FILTERS.map((s) => ({
+            value: s,
+            label: s === "all"
+              ? <span>{FILTER_LABELS.all} <span className="ml-1 text-xs bg-gray-100 text-gray-600 rounded-full px-1.5 py-0.5">{totalAll}</span></span>
+              : <span>{FILTER_LABELS[s] ?? s} <span className="ml-1 text-xs bg-gray-100 text-gray-600 rounded-full px-1.5 py-0.5">{statusCounts[s] ?? 0}</span></span>,
+          }))}
+          value={statusFilter}
+          onChange={(v) => { setStatusFilter(v); setPage(1); setSelectedIds(new Set()); }}
+        />
 
         <button
           onClick={() => setFiltersOpen((o) => !o)}
-          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+          className={`flex items-center gap-1.5 px-3 py-1.5 text-xs border rounded-lg transition-colors ${
             filtersOpen || activeFilterCount > 0
-              ? "bg-accent text-white"
-              : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              ? "border-accent text-accent bg-accent/5"
+              : "border-gray-200 text-gray-600 bg-white hover:bg-gray-50"
           }`}
         >
           <SlidersHorizontal size={13} />
           Filtry
           {activeFilterCount > 0 && (
-            <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-white/25 text-[10px] font-bold leading-none">
+            <span className="ml-0.5 inline-flex items-center justify-center w-4 h-4 rounded-full bg-accent/10 text-accent text-[10px] font-bold leading-none">
               {activeFilterCount}
             </span>
           )}
@@ -562,10 +559,10 @@ export default function ReceiptsPage() {
         {activeFilterCount > 0 && (
           <button
             onClick={() => setFiltersOpen(true)}
-            className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors"
+            className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700"
           >
             <X size={12} />
-            Wyczyść filtry
+            Wyczyść
           </button>
         )}
 
