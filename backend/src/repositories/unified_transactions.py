@@ -53,6 +53,7 @@ class UnifiedTransactionsRepository:
         search: Optional[str] = None,
         amount_min: Optional[float] = None,
         amount_max: Optional[float] = None,
+        direction: Optional[str] = None,   # 'expense' | 'income'
         sort_by: str = "date",
         sort_dir: str = "desc",
         limit: int = 50,
@@ -63,8 +64,8 @@ class UnifiedTransactionsRepository:
             return [], 0
 
         order_expr = _SORT_COLS.get(sort_by, "date")
-        direction = "ASC" if sort_dir.lower() == "asc" else "DESC"
-        order_clause = f"{order_expr} {direction} NULLS LAST" + (
+        sort_order = "ASC" if sort_dir.lower() == "asc" else "DESC"
+        order_clause = f"{order_expr} {sort_order} NULLS LAST" + (
             ", id DESC" if order_expr != "id" else ""
         )
 
@@ -101,6 +102,10 @@ class UnifiedTransactionsRepository:
         if amount_max is not None:
             conditions.append("amount <= %s")
             params.append(amount_max)
+        if direction == "expense":
+            conditions.append("amount < 0")
+        elif direction == "income":
+            conditions.append("amount > 0")
 
         where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
 

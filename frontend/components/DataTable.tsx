@@ -77,7 +77,7 @@ export function DataTable<T extends { id: number | string }>({
 
   return (
     <div className={`w-full overflow-auto rounded-xl border border-gray-200 ${className}`}>
-      <table className="w-full text-sm">
+      <table className="w-full text-sm table-fixed">
         <thead className="sticky top-0 z-10">
           <tr className="border-b border-gray-200 bg-[#f6f9fc]">
             {renderExpandedRow && <th className="w-8 px-3 py-3" />}

@@ -3,11 +3,11 @@
 import { useState, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
-  ReceiptIcon,
   Search,
   SlidersHorizontal,
   X,
 } from "lucide-react";
+import { SOURCE_CONFIG } from "@/lib/sourceConfig";
 import {
   listUnifiedTransactions,
   confirmBankTransaction,
@@ -77,7 +77,7 @@ function ExpandedRow({
           <div className="flex flex-col gap-1 text-sm text-gray-700">
             <span>
               <span className="font-medium text-gray-500">Źródło: </span>
-              <SourceBadge source={row.source_type} />
+              <SourceBadge source={row.source_type} showLabel />
             </span>
             {(row.vendor_name || row.description) && (
               <span>
@@ -190,6 +190,7 @@ const DATE_PRESETS = [
 type Filters = {
   source_type: string;
   status: string;
+  direction: string;
   search: string;
   date_from: string;
   date_to: string;
@@ -201,6 +202,7 @@ type Filters = {
 const defaultFilters: Filters = {
   source_type: "",
   status: "",
+  direction: "",
   search: "",
   date_from: "",
   date_to: "",
@@ -227,7 +229,7 @@ export default function TransactionsPage() {
   );
 
   // ── Date preset ───────────────────────────────────────────────
-  const [activePreset, setActivePreset] = useState("12m");
+  const [activePreset, setActivePreset] = useState("1m");
   function applyPreset(preset: string) {
     setActivePreset(preset);
     const range = dateRangeFor(preset);
@@ -247,6 +249,7 @@ export default function TransactionsPage() {
     sortDir,
     filters.source_type,
     filters.status,
+    filters.direction,
     filters.date_from,
     filters.date_to,
     filters.search,
@@ -266,6 +269,7 @@ export default function TransactionsPage() {
         sort_dir: sortDir,
         source_type: filters.source_type || undefined,
         status: filters.status || undefined,
+        direction: filters.direction || undefined,
         date_from: filters.date_from || undefined,
         date_to: filters.date_to || undefined,
         search: filters.search || undefined,
@@ -337,6 +341,7 @@ export default function TransactionsPage() {
   const hasActiveFilters =
     !!filters.source_type ||
     !!filters.status ||
+    !!filters.direction ||
     !!filters.search ||
     !!filters.date_from ||
     !!filters.date_to ||
@@ -355,28 +360,22 @@ export default function TransactionsPage() {
       className: "w-28",
     },
     {
-      header: "Opis / Sklep",
+      header: "Sklep",
       serverSortKey: "description",
+      className: "w-64",
       accessor: (r) => (
-        <div className="flex flex-col gap-0.5 min-w-0">
-          <div className="flex items-center gap-2 min-w-0">
-            <SourceBadge source={r.source_type} />
-            <span className="truncate text-gray-800 font-medium max-w-xs">
-              {r.description ?? <span className="text-gray-400">—</span>}
-            </span>
-          </div>
-          {r.vendor_name && r.vendor_name !== r.description && (
-            <span className="text-xs text-gray-400 pl-[52px]">
-              {r.vendor_name}
-            </span>
-          )}
+        <div className="flex items-center gap-2 min-w-0">
+          <SourceBadge source={r.source_type} />
+          <span className="truncate text-gray-800 font-medium">
+            {r.vendor_name ?? r.description}
+          </span>
         </div>
       ),
     },
     {
       header: "Kwota",
       serverSortKey: "amount",
-      className: "text-right w-36",
+      className: "text-right w-32 whitespace-nowrap",
       accessor: (r) => (
         <Amount value={r.amount} currency={r.currency} />
       ),
@@ -384,6 +383,7 @@ export default function TransactionsPage() {
     {
       header: "Kategoria",
       serverSortKey: "category_name",
+      className: "w-52",
       accessor: (r) => {
         if (r.has_receipt && r.receipt_category_name) {
           return (
@@ -411,6 +411,7 @@ export default function TransactionsPage() {
     },
     {
       header: "Tagi",
+      className: "w-40",
       accessor: (r) =>
         (r.tags ?? []).length > 0 ? (
           <div className="flex flex-wrap gap-1">
@@ -428,14 +429,17 @@ export default function TransactionsPage() {
       accessor: (r) => (
         <div className="flex items-center gap-1.5">
           <StatusBadge status={r.status} />
-          {r.has_receipt && (
-            <span title="Powiązany paragon" className="text-amber-500">
-              <ReceiptIcon className="h-3.5 w-3.5" />
-            </span>
-          )}
+          {r.has_receipt && (() => {
+            const { icon: Icon, style } = SOURCE_CONFIG.receipt;
+            return (
+              <span title="Powiązany paragon" className={`inline-flex rounded-full p-0.5 ${style}`}>
+                <Icon size={12} />
+              </span>
+            );
+          })()}
         </div>
       ),
-      className: "w-36",
+      className: "w-40",
     },
   ];
 
@@ -453,6 +457,12 @@ export default function TransactionsPage() {
     { label: "Gotowe", value: "done" },
   ];
 
+  const directionTabs = [
+    { label: "Wszystkie", value: "" },
+    { label: "Wydatki", value: "expense" },
+    { label: "Przychody", value: "income" },
+  ];
+
   const items = listData?.items ?? [];
   const total = listData?.total ?? 0;
 
@@ -461,7 +471,7 @@ export default function TransactionsPage() {
       {/* ── Page header ─────────────────────────────────────────── */}
       <PageHeader
         title="Transakcje"
-        subtitle="Zunifikowany widok wszystkich transakcji"
+        subtitle="Wszystkie transakcje"
         actions={
           /* Date preset pills */
           <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1 flex-wrap">
@@ -516,6 +526,11 @@ export default function TransactionsPage() {
             tabs={statusTabs}
             value={filters.status}
             onChange={(v) => { setFilter("status", v); setPage(1); }}
+          />
+          <FilterTabs
+            tabs={directionTabs}
+            value={filters.direction}
+            onChange={(v) => { setFilter("direction", v); setPage(1); }}
           />
 
           {/* Search */}

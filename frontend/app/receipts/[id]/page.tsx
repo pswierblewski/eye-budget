@@ -469,6 +469,195 @@ export default function ReceiptReviewPage({
                 </button>
               </div>
 
+              {/* Bank transaction link section */}
+              <div className="rounded-xl border border-gray-200 p-4 space-y-2">
+                <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
+                  Transakcja bankowa
+                </h2>
+
+                {scan.bank_link ? (
+                  /* Existing link */
+                  <div className="flex items-center justify-between gap-4 rounded-lg border border-green-200 bg-green-50 px-3 py-2">
+                    <Link
+                      href={`/bank-transactions/${scan.bank_link.bank_transaction_id}`}
+                      className="text-xs space-y-0.5 hover:underline min-w-0"
+                    >
+                      <p className="font-medium text-accent">
+                        {scan.bank_link.counterparty ?? "—"}
+                      </p>
+                      <p className="text-gray-500">
+                        {scan.bank_link.booking_date} · {scan.bank_link.amount.toFixed(2)} PLN
+                      </p>
+                    </Link>
+                    <button
+                      disabled={unlinkBankMutation.isPending}
+                      onClick={() => unlinkBankMutation.mutate(scan.bank_link!.bank_transaction_id)}
+                      className="shrink-0 px-2 py-1 text-[10px] rounded-md border border-red-300
+                                 text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
+                    >
+                      {unlinkBankMutation.isPending ? "…" : "Odepnij"}
+                    </button>
+                  </div>
+                ) : showBankCandidates ? (
+                  /* Candidate list */
+                  bankCandidatesLoading ? (
+                    <p className="text-xs text-gray-400 animate-pulse">Szukanie…</p>
+                  ) : bankCandidates.length === 0 ? (
+                    <p className="text-xs text-gray-400 italic">
+                      Nie znaleziono pasujących transakcji bankowych.
+                    </p>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {bankCandidates.map((c) => {
+                        const scoreLabel =
+                          c.match_score >= 3 ? "kwota + data + sklep" : "kwota + data";
+                        const scoreColor =
+                          c.match_score >= 3
+                            ? "bg-green-100 text-green-700"
+                            : "bg-yellow-100 text-yellow-700";
+                        return (
+                          <div
+                            key={c.bank_transaction_id}
+                            className="flex items-center justify-between gap-3 rounded-lg border
+                                       border-gray-200 bg-white px-3 py-2"
+                          >
+                            <div className="text-xs space-y-0.5 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <p className="font-medium text-gray-800 truncate">
+                                  {c.counterparty ?? "—"}
+                                </p>
+                                <span
+                                  className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${scoreColor}`}
+                                >
+                                  {scoreLabel}
+                                </span>
+                              </div>
+                              <p className="text-gray-500">
+                                {c.booking_date} · {c.amount.toFixed(2)} PLN
+                              </p>
+                            </div>
+                            <button
+                              disabled={linkBankMutation.isPending}
+                              onClick={() => linkBankMutation.mutate(c.bank_transaction_id)}
+                              className="shrink-0 px-2 py-1 text-[10px] rounded-md bg-accent
+                                         text-white hover:bg-accent-hover transition-colors disabled:opacity-50"
+                            >
+                              {linkBankMutation.isPending ? "…" : "Powiąż"}
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )
+                ) : scan.cash_link ? (
+                  <p className="text-xs text-gray-400 italic">
+                    Odepnij transakcję gotówkową, aby powiązać z transakcją bankową.
+                  </p>
+                ) : (
+                  /* Trigger button */
+                  <button
+                    onClick={() => setShowBankCandidates(true)}
+                    className="text-xs px-3 py-1.5 rounded-md border border-accent text-accent
+                               hover:bg-accent/10 transition-colors"
+                  >
+                    Znajdź pasującą transakcję bankową
+                  </button>
+                )}
+              </div>
+
+              {/* Cash transaction section */}
+              <div className="rounded-xl border border-gray-200 p-4 space-y-2">
+                <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
+                  Transakcja gotówkowa
+                </h2>
+
+                {scan.cash_link ? (
+                  <div className="flex items-center justify-between gap-4 rounded-lg border border-green-200 bg-green-50 px-3 py-2">
+                    <Link
+                      href="/cash-transactions"
+                      className="text-xs space-y-0.5 hover:underline min-w-0"
+                    >
+                      <p className="font-medium text-accent">
+                        {scan.cash_link.description ?? "Transakcja gotówkowa"}
+                      </p>
+                      <p className="text-gray-500">
+                        {scan.cash_link.booking_date} · {scan.cash_link.amount.toFixed(2)} PLN
+                      </p>
+                    </Link>
+                    <button
+                      disabled={unlinkCashMutation.isPending}
+                      onClick={() => unlinkCashMutation.mutate(scan.cash_link!.cash_transaction_id)}
+                      className="shrink-0 px-2 py-1 text-[10px] rounded-md border border-red-300
+                                 text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
+                    >
+                      {unlinkCashMutation.isPending ? "…" : "Odepnij"}
+                    </button>
+                  </div>
+                ) : scan.bank_link ? (
+                  <p className="text-xs text-gray-400 italic">
+                    Odepnij transakcję bankową, aby powiązać z transakcją gotówkową.
+                  </p>
+                ) : scan.transaction ? (
+                  <div className="space-y-2">
+                    <button
+                      onClick={() => createCashMutation.mutate()}
+                      disabled={createCashMutation.isPending}
+                      className="text-xs px-3 py-1.5 rounded-md bg-accent text-white
+                                 hover:bg-accent-hover transition-colors disabled:opacity-50"
+                    >
+                      {createCashMutation.isPending ? "Tworzenie…" : "Utwórz transakcję gotówkową"}
+                    </button>
+                    {!showCashCandidates ? (
+                      <button
+                        onClick={() => setShowCashCandidates(true)}
+                        className="block text-xs px-3 py-1.5 rounded-md border border-accent text-accent
+                                   hover:bg-accent/10 transition-colors"
+                      >
+                        Powiąż z istniejącą transakcją gotówkową
+                      </button>
+                    ) : cashCandidatesLoading ? (
+                      <p className="text-xs text-gray-400 animate-pulse">Szukanie…</p>
+                    ) : cashCandidates.length === 0 ? (
+                      <p className="text-xs text-gray-400 italic">Brak pasujących transakcji.</p>
+                    ) : (
+                      <div className="space-y-1.5">
+                        {cashCandidates.map((c) => (
+                          <div key={c.cash_transaction_id}
+                               className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white px-3 py-2">
+                            <div className="text-xs space-y-0.5 min-w-0">
+                              <p className="font-medium text-gray-800">{c.description ?? "—"}</p>
+                              <p className="text-gray-500">{c.booking_date} · {c.amount.toFixed(2)} PLN</p>
+                            </div>
+                            <button
+                              disabled={linkCashMutation.isPending}
+                              onClick={() => linkCashMutation.mutate(c.cash_transaction_id)}
+                              className="shrink-0 px-2 py-1 text-[10px] rounded-md bg-accent
+                                         text-white hover:bg-accent-hover transition-colors disabled:opacity-50"
+                            >
+                              {linkCashMutation.isPending ? "…" : "Powiąż"}
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-400 italic">
+                    Potwierdź paragon najpierw, aby powiązać z transakcją gotówkową.
+                  </p>
+                )}
+              </div>
+
+              {/* Tags section */}
+              <div className="rounded-xl border border-gray-200 p-4 space-y-2">
+                <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Tagi</h2>
+                <TagsEditor
+                  tags={scan.tags ?? []}
+                  onChange={(tags) => tagsMutation.mutate(tags)}
+                  allTags={allTags}
+                />
+              </div>
+
               <div className="rounded-xl border border-gray-200 p-4 space-y-1">
                 {(() => {
                   const confirmedCalc = scan.transaction.items.reduce((s, i) => s + i.price, 0);
@@ -730,186 +919,6 @@ export default function ReceiptReviewPage({
                 );
               })()}
 
-              {/* Bank transaction link section */}
-              <div className="rounded-xl border border-gray-200 p-4 space-y-2">
-                <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
-                  Transakcja bankowa
-                </h2>
-
-                {scan.bank_link ? (
-                  /* Existing link */
-                  <div className="flex items-center justify-between gap-4 rounded-lg border border-green-200 bg-green-50 px-3 py-2">
-                    <Link
-                      href={`/bank-transactions/${scan.bank_link.bank_transaction_id}`}
-                      className="text-xs space-y-0.5 hover:underline min-w-0"
-                    >
-                      <p className="font-medium text-accent">
-                        {scan.bank_link.counterparty ?? "—"}
-                      </p>
-                      <p className="text-gray-500">
-                        {scan.bank_link.booking_date} · {scan.bank_link.amount.toFixed(2)} PLN
-                      </p>
-                    </Link>
-                    <button
-                      disabled={unlinkBankMutation.isPending}
-                      onClick={() => unlinkBankMutation.mutate(scan.bank_link!.bank_transaction_id)}
-                      className="shrink-0 px-2 py-1 text-[10px] rounded-md border border-red-300
-                                 text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
-                    >
-                      {unlinkBankMutation.isPending ? "…" : "Odepnij"}
-                    </button>
-                  </div>
-                ) : showBankCandidates ? (
-                  /* Candidate list */
-                  bankCandidatesLoading ? (
-                    <p className="text-xs text-gray-400 animate-pulse">Szukanie…</p>
-                  ) : bankCandidates.length === 0 ? (
-                    <p className="text-xs text-gray-400 italic">
-                      Nie znaleziono pasujących transakcji bankowych.
-                    </p>
-                  ) : (
-                    <div className="space-y-1.5">
-                      {bankCandidates.map((c) => {
-                        const scoreLabel =
-                          c.match_score >= 3 ? "kwota + data + sklep" : "kwota + data";
-                        const scoreColor =
-                          c.match_score >= 3
-                            ? "bg-green-100 text-green-700"
-                            : "bg-yellow-100 text-yellow-700";
-                        return (
-                          <div
-                            key={c.bank_transaction_id}
-                            className="flex items-center justify-between gap-3 rounded-lg border
-                                       border-gray-200 bg-white px-3 py-2"
-                          >
-                            <div className="text-xs space-y-0.5 min-w-0">
-                              <div className="flex items-center gap-2">
-                                <p className="font-medium text-gray-800 truncate">
-                                  {c.counterparty ?? "—"}
-                                </p>
-                                <span
-                                  className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${scoreColor}`}
-                                >
-                                  {scoreLabel}
-                                </span>
-                              </div>
-                              <p className="text-gray-500">
-                                {c.booking_date} · {c.amount.toFixed(2)} PLN
-                              </p>
-                            </div>
-                            <button
-                              disabled={linkBankMutation.isPending}
-                              onClick={() => linkBankMutation.mutate(c.bank_transaction_id)}
-                              className="shrink-0 px-2 py-1 text-[10px] rounded-md bg-accent
-                                         text-white hover:bg-accent-hover transition-colors disabled:opacity-50"
-                            >
-                              {linkBankMutation.isPending ? "…" : "Powiąż"}
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )
-                ) : (
-                  /* Trigger button */
-                  <button
-                    onClick={() => setShowBankCandidates(true)}
-                    className="text-xs px-3 py-1.5 rounded-md border border-accent text-accent
-                               hover:bg-accent/10 transition-colors"
-                  >
-                    Znajdź pasującą transakcję bankową
-                  </button>
-                )}
-              </div>
-
-              {/* Cash transaction section */}
-              <div className="rounded-xl border border-gray-200 p-4 space-y-2">
-                <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
-                  Transakcja gotówkowa
-                </h2>
-
-                {scan.cash_link ? (
-                  <div className="flex items-center justify-between gap-4 rounded-lg border border-green-200 bg-green-50 px-3 py-2">
-                    <Link
-                      href="/cash-transactions"
-                      className="text-xs space-y-0.5 hover:underline min-w-0"
-                    >
-                      <p className="font-medium text-accent">
-                        {scan.cash_link.description ?? "Transakcja gotówkowa"}
-                      </p>
-                      <p className="text-gray-500">
-                        {scan.cash_link.booking_date} · {scan.cash_link.amount.toFixed(2)} PLN
-                      </p>
-                    </Link>
-                    <button
-                      disabled={unlinkCashMutation.isPending}
-                      onClick={() => unlinkCashMutation.mutate(scan.cash_link!.cash_transaction_id)}
-                      className="shrink-0 px-2 py-1 text-[10px] rounded-md border border-red-300
-                                 text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
-                    >
-                      {unlinkCashMutation.isPending ? "…" : "Odepnij"}
-                    </button>
-                  </div>
-                ) : scan.transaction ? (
-                  <div className="space-y-2">
-                    <button
-                      onClick={() => createCashMutation.mutate()}
-                      disabled={createCashMutation.isPending}
-                      className="text-xs px-3 py-1.5 rounded-md bg-accent text-white
-                                 hover:bg-accent-hover transition-colors disabled:opacity-50"
-                    >
-                      {createCashMutation.isPending ? "Tworzenie…" : "Utwórz transakcję gotówkową"}
-                    </button>
-                    {!showCashCandidates ? (
-                      <button
-                        onClick={() => setShowCashCandidates(true)}
-                        className="block text-xs px-3 py-1.5 rounded-md border border-accent text-accent
-                                   hover:bg-accent/10 transition-colors"
-                      >
-                        Powiąż z istniejącą transakcją gotówkową
-                      </button>
-                    ) : cashCandidatesLoading ? (
-                      <p className="text-xs text-gray-400 animate-pulse">Szukanie…</p>
-                    ) : cashCandidates.length === 0 ? (
-                      <p className="text-xs text-gray-400 italic">Brak pasujących transakcji.</p>
-                    ) : (
-                      <div className="space-y-1.5">
-                        {cashCandidates.map((c) => (
-                          <div key={c.cash_transaction_id}
-                               className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white px-3 py-2">
-                            <div className="text-xs space-y-0.5 min-w-0">
-                              <p className="font-medium text-gray-800">{c.description ?? "—"}</p>
-                              <p className="text-gray-500">{c.booking_date} · {c.amount.toFixed(2)} PLN</p>
-                            </div>
-                            <button
-                              disabled={linkCashMutation.isPending}
-                              onClick={() => linkCashMutation.mutate(c.cash_transaction_id)}
-                              className="shrink-0 px-2 py-1 text-[10px] rounded-md bg-accent
-                                         text-white hover:bg-accent-hover transition-colors disabled:opacity-50"
-                            >
-                              {linkCashMutation.isPending ? "…" : "Powiąż"}
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <p className="text-xs text-gray-400 italic">
-                    Potwierdź paragon najpierw, aby powiązać z transakcją gotówkową.
-                  </p>
-                )}
-              </div>
-
-              {/* Tags section */}
-              <div className="rounded-xl border border-gray-200 p-4 space-y-2">
-                <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Tagi</h2>
-                <TagsEditor
-                  tags={scan.tags ?? []}
-                  onChange={(tags) => tagsMutation.mutate(tags)}
-                  allTags={allTags}
-                />
-              </div>
             </>
           ) : (
             /* Editable — assign categories (and optionally edit OCR fields) */

@@ -27,7 +27,7 @@ export function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="fixed inset-y-0 left-0 w-56 flex flex-col border-r border-gray-200 bg-[#f6f9fc]">
+    <aside className="fixed inset-y-0 left-0 w-64 flex flex-col border-r border-gray-200 bg-[#f6f9fc]">
       <div className="flex items-center gap-2 px-6 h-16 border-b border-gray-200">
         <span className="text-[#635bff] font-bold text-lg tracking-tight">
           eye-budget
