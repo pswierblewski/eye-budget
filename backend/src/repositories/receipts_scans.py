@@ -234,12 +234,12 @@ class ReceiptsScansRepository(ABC):
         tag: str | None = None,
     ) -> tuple[list[ReceiptScanListItem], int]:
         _SORT_COLS: dict[str, str] = {
-            "id": "id",
-            "filename": "filename",
-            "vendor": "result->>'vendor'",
-            "date": "result->>'date'",
-            "total": "(result->>'total')::numeric",
-            "status": "status",
+            "id": "rs.id",
+            "filename": "rs.filename",
+            "vendor": "COALESCE(v.name, rs.result->>'vendor')",
+            "date": "rs.result->>'date'",
+            "total": "(rs.result->>'total')::numeric",
+            "status": "rs.status",
         }
         order_expr = _SORT_COLS.get(sort_by, "id")
         direction = "ASC" if sort_dir.lower() == "asc" else "DESC"
@@ -322,12 +322,14 @@ class ReceiptsScansRepository(ABC):
                 cursor.execute(
                     f"""
                     SELECT rs.id, rs.filename, rs.status,
-                           rs.result->>'vendor',
+                           COALESCE(v.name, rs.result->>'vendor'),
                            rs.result->>'date',
                            rs.result->>'total',
                            rs.tags,
                            COUNT(*) OVER () AS total_count
                     FROM {self.table} rs
+                    LEFT JOIN receipt_transactions rt ON rt.scan_id = rs.id
+                    LEFT JOIN vendors v ON v.id = rt.vendor_id
                     {where}
                     ORDER BY {order_expr} {direction} NULLS LAST
                     LIMIT %s OFFSET %s

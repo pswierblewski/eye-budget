@@ -2,14 +2,15 @@
 
 import { useState, useEffect, useRef, useCallback, memo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { listReceipts, processReceipts, deleteReceipt, retryReceipt, getReceiptCounts, getAllTags } from "@/lib/api";
+import { listReceipts, processReceipts, deleteReceipt, retryReceipt, getReceiptCounts, getAllTags, updateReceiptTags } from "@/lib/api";
 import { ReceiptScanListItem } from "@/lib/types";
 import { isoToDisplay } from "@/lib/utils";
 import { DataTable, Column } from "@/components/DataTable";
 import { getPusher } from "@/lib/pusher";
 import { Info, SlidersHorizontal, X } from "lucide-react";
 import Link from "next/link";
-import { StatusBadge, Pill, PageHeader, NavLink, Button, FilterTabs, DateInput } from "@/components/ui";
+import { StatusBadge, Pill, PageHeader, NavLink, Button, FilterTabs, DateInput, SectionLabel } from "@/components/ui";
+import TagsEditor from "@/components/TagsEditor";
 
 const STATUS_FILTERS = [
   "all",
@@ -79,6 +80,71 @@ const EMPTY_FILTERS: FilterValues = {
 
 function countActive(f: FilterValues): number {
   return Object.values(f).filter(Boolean).length;
+}
+
+/* ------------------------------------------------------------------ */
+/*  ExpandedReceiptRow                                                 */
+/* ------------------------------------------------------------------ */
+
+function ExpandedReceiptRow({
+  row,
+  allTags,
+  onTagsChange,
+}: {
+  row: ReceiptScanListItem;
+  allTags: string[];
+  onTagsChange: (row: ReceiptScanListItem, tags: string[]) => void;
+}) {
+  return (
+    <div>
+      <div className="flex gap-8">
+        {/* Details column */}
+        <div className="flex-1 space-y-1.5">
+          <SectionLabel>Szczegóły</SectionLabel>
+          <div className="flex flex-col gap-1 text-sm text-gray-700">
+            {row.vendor && (
+              <span>
+                <span className="font-medium text-gray-500">Sklep: </span>
+                {row.vendor}
+              </span>
+            )}
+            {row.date && (
+              <span>
+                <span className="font-medium text-gray-500">Data: </span>
+                {isoToDisplay(row.date)}
+              </span>
+            )}
+            {row.total != null && (
+              <span>
+                <span className="font-medium text-gray-500">Suma: </span>
+                {row.total.toFixed(2)} PLN
+              </span>
+            )}
+            <span className="flex items-center gap-1.5">
+              <span className="font-medium text-gray-500">Status: </span>
+              <StatusBadge status={row.status} />
+            </span>
+            <NavLink
+              href={`/receipts/${row.id}`}
+              label="Otwórz paragon"
+              variant="forward"
+              className="mt-1"
+            />
+          </div>
+        </div>
+
+        {/* Tags column */}
+        <div className="w-96 space-y-1.5">
+          <SectionLabel>Tagi</SectionLabel>
+          <TagsEditor
+            tags={row.tags ?? []}
+            allTags={allTags}
+            onChange={(tags) => onTagsChange(row, tags)}
+          />
+        </div>
+      </div>
+    </div>
+  );
 }
 
 /* ------------------------------------------------------------------ */
@@ -222,6 +288,22 @@ export default function ReceiptsPage() {
   const handleFilterCountChange = useCallback((n: number) => {
     setActiveFilterCount(n);
   }, []);
+
+  const tagsMutation = useMutation({
+    mutationFn: ({ id, tags }: { id: number; tags: string[] }) =>
+      updateReceiptTags(id, tags),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["receipts"] });
+      queryClient.invalidateQueries({ queryKey: ["tags"] });
+    },
+  });
+
+  const handleTagsChange = useCallback(
+    (row: ReceiptScanListItem, tags: string[]) => {
+      tagsMutation.mutate({ id: row.id, tags });
+    },
+    [tagsMutation]
+  );
 
   // Cleanup Pusher subscription on unmount
   useEffect(() => {
@@ -642,6 +724,9 @@ export default function ReceiptsPage() {
             sortBy, sortDir,
             onSortChange: (key, dir) => { setSortBy(key); setSortDir(dir); setPage(1); },
           }}
+          renderExpandedRow={(row) => (
+            <ExpandedReceiptRow row={row} allTags={allTags} onTagsChange={handleTagsChange} />
+          )}
         />
       )}
     </div>
