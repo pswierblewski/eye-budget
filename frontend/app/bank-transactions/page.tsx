@@ -20,67 +20,27 @@ import {
   ReceiptCandidateItem,
 } from "@/lib/types";
 import { CategoryDropdown } from "@/components/CategoryDropdown";
-import { StatusBadge } from "@/components/StatusBadge";
 import TagsEditor from "@/components/TagsEditor";
 import { getPusher } from "@/lib/pusher";
-import { Upload } from "lucide-react";
+import { Upload, ArrowRight } from "lucide-react";
 import { DataTable, Column } from "@/components/DataTable";
 import Link from "next/link";
+import { CandidateBar } from "@/components/BankHelpers";
+import {
+  StatusBadge,
+  MatchBadge,
+  CountBadge,
+  Pill,
+  PageHeader,
+  FilterTabs,
+  SectionLabel,
+  NavLink,
+  Button,
+  Amount,
+} from "@/components/ui";
 
 const STATUS_FILTERS = ["all", "to_confirm", "done"] as const;
 type StatusFilter = (typeof STATUS_FILTERS)[number];
-
-function formatAmount(amount: number, currency: string): string {
-  return new Intl.NumberFormat("pl-PL", {
-    style: "currency",
-    currency,
-    minimumFractionDigits: 2,
-  }).format(amount);
-}
-
-function CandidateBar({
-  name,
-  score,
-}: {
-  name: string;
-  score: number;
-}) {
-  const pct = Math.round(score * 100);
-  return (
-    <div className="flex items-center gap-2 text-xs">
-      <span className="w-48 truncate text-gray-600" title={name}>
-        {name}
-      </span>
-      <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
-        <div
-          className="h-2 rounded-full bg-[#635bff]"
-          style={{ width: `${pct}%` }}
-        />
-      </div>
-      <span className="w-10 text-right text-gray-500">{pct}%</span>
-    </div>
-  );
-}
-
-function MatchBadge({ score }: { score: number }) {
-  const labels: Record<number, string> = {
-    2: "kwota + data",
-    3: "kwota + data + sklep",
-  };
-  const colors: Record<number, string> = {
-    2: "bg-yellow-100 text-yellow-700",
-    3: "bg-green-100 text-green-700",
-  };
-  return (
-    <span
-      className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${
-        colors[score] ?? "bg-gray-100 text-gray-500"
-      }`}
-    >
-      {labels[score] ?? `score ${score}`}
-    </span>
-  );
-}
 
 type ExpandedRowProps = {
   tx: BankTransactionListItem;
@@ -107,7 +67,7 @@ function ExpandedRowContent({ tx, allTags = [] }: ExpandedRowProps) {
   });
 
   const confirmMutation = useMutation({
-    mutationFn: (categoryId: number) => confirmBankTransaction(tx.id, categoryId),
+    mutationFn: (categoryId: number | null) => confirmBankTransaction(tx.id, categoryId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["bank-transactions"] });
     },
@@ -204,9 +164,7 @@ function ExpandedRowContent({ tx, allTags = [] }: ExpandedRowProps) {
           {/* Middle: candidates */}
           {candidates2.length > 0 && (
             <div className="w-80 space-y-1">
-              <p className="text-xs font-medium text-gray-500 mb-2">
-                Propozycje kategorii
-              </p>
+              <SectionLabel className="mb-2">Propozycje kategorii</SectionLabel>
               {candidates2.map((c) => (
                 <CandidateBar
                   key={c.category_id}
@@ -220,36 +178,66 @@ function ExpandedRowContent({ tx, allTags = [] }: ExpandedRowProps) {
           {/* Right: category picker + actions */}
           <div className="w-96 space-y-3">
             <div>
-              <p className="text-xs font-medium text-gray-500 mb-1">Kategoria</p>
-              <CategoryDropdown
-                value={selectedCategory}
-                onChange={setSelectedCategory}
-                candidates={candidates2.map((c) => ({
-                  category_id: c.category_id,
-                  category_name: c.category_name,
-                  category_score: c.category_score,
-                }))}
-              />
+              <SectionLabel className="mb-1">Kategoria</SectionLabel>
+              {receiptLink ? (
+                /* Receipt-linked: categories derived from receipt items */
+                <div className="space-y-2">
+                  <div className="flex flex-col gap-1">
+                    {(detail?.receipt_categories ?? []).length > 0 ? (
+                      (detail?.receipt_categories ?? []).map((cat: { id: number; name: string; product_count: number }, idx: number) => (
+                        <Pill
+                          key={cat.id}
+                          variant={idx === 0 ? "category-primary" : "category-secondary"}
+                          size="sm"
+                        >
+                          {cat.name}
+                          <span className="ml-1 text-[10px] text-gray-400">({cat.product_count})</span>
+                        </Pill>
+                      ))
+                    ) : (
+                      <span className="text-xs text-gray-400 italic">Paragon bez potwierdzonych kategorii</span>
+                    )}
+                  </div>
+                  <NavLink
+                    href={`/receipts/${receiptLink.scan_id}`}
+                    label="Zarządzaj kategoriami w paragonie"
+                    variant="forward"
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                </div>
+              ) : (
+                <CategoryDropdown
+                  value={selectedCategory}
+                  onChange={setSelectedCategory}
+                  candidates={candidates2.map((c) => ({
+                    category_id: c.category_id,
+                    category_name: c.category_name,
+                    category_score: c.category_score,
+                  }))}
+                />
+              )}
             </div>
             <div className="flex gap-2">
               {tx.status === "to_confirm" ? (
-                <button
-                  disabled={!selectedCategory || confirmMutation.isPending}
-                  onClick={() => selectedCategory && confirmMutation.mutate(selectedCategory)}
-                  className="flex-1 px-3 py-1.5 rounded-md bg-[#635bff] text-white text-xs font-medium
-                             disabled:opacity-40 hover:bg-[#4b44cc] transition-colors"
+                <Button
+                  variant="primary"
+                  size="sm"
+                  disabled={(receiptLink ? false : !selectedCategory) || confirmMutation.isPending}
+                  onClick={() => confirmMutation.mutate(receiptLink ? null : (selectedCategory ?? null))}
+                  className="flex-1"
                 >
                   {confirmMutation.isPending ? "Zapisywanie…" : "Potwierdź"}
-                </button>
+                </Button>
               ) : (
-                <button
+                <Button
+                  variant="secondary"
+                  size="sm"
                   disabled={reopenMutation.isPending}
                   onClick={() => reopenMutation.mutate()}
-                  className="flex-1 px-3 py-1.5 rounded-md border border-gray-300 text-xs font-medium
-                             hover:bg-gray-50 transition-colors disabled:opacity-40"
+                  className="flex-1"
                 >
-                  {reopenMutation.isPending ? "…" : "Otwórz ponownie"}
-                </button>
+                  {reopenMutation.isPending ? "…" : "Cofnij potwierdzenie"}
+                </Button>
               )}
             </div>
           </div>
@@ -257,7 +245,7 @@ function ExpandedRowContent({ tx, allTags = [] }: ExpandedRowProps) {
 
         {/* Tags section */}
         <div className="mt-4 pt-4 border-t border-gray-200">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Tagi</p>
+          <SectionLabel className="mb-2">Tagi</SectionLabel>
           <TagsEditor
             tags={detail?.tags ?? tx.tags ?? []}
             onChange={(tags) => tagsMutation.mutate(tags)}
@@ -267,9 +255,7 @@ function ExpandedRowContent({ tx, allTags = [] }: ExpandedRowProps) {
 
         {/* Linked receipt section */}
         <div className="mt-4 pt-4 border-t border-gray-200">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-            Powiązany paragon
-          </p>
+          <SectionLabel className="mb-2">Powiązany paragon</SectionLabel>
 
           {receiptLink ? (
             /* Existing link */
@@ -279,20 +265,21 @@ function ExpandedRowContent({ tx, allTags = [] }: ExpandedRowProps) {
                 className="text-xs space-y-0.5 hover:underline min-w-0"
                 onClick={(e) => e.stopPropagation()}
               >
-                <p className="font-medium text-[#635bff]">{receiptLink.vendor_name}</p>
+                <p className="font-medium text-accent">{receiptLink.vendor_name}</p>
                 <p className="text-gray-500">
                   {receiptLink.date} · {receiptLink.total.toFixed(2)} PLN
                 </p>
                 <p className="text-gray-400 font-mono">{receiptLink.scan_filename}</p>
               </Link>
-              <button
+              <Button
+                variant="danger"
+                size="sm"
                 disabled={unlinkMutation.isPending}
                 onClick={() => unlinkMutation.mutate()}
-                className="shrink-0 px-2 py-1 text-[10px] rounded-md border border-red-300 text-red-600
-                           hover:bg-red-50 transition-colors disabled:opacity-40"
+                className="shrink-0"
               >
                 {unlinkMutation.isPending ? "…" : "Odepnij"}
-              </button>
+              </Button>
             </div>
           ) : showCandidates ? (
             /* Candidate list */
@@ -317,39 +304,31 @@ function ExpandedRowContent({ tx, allTags = [] }: ExpandedRowProps) {
                       </p>
                       <p className="text-gray-400 font-mono text-[10px] truncate">{c.scan_filename}</p>
                     </div>
-                    <button
+                    <Button
+                      variant="primary"
+                      size="sm"
                       disabled={linkMutation.isPending}
                       onClick={() => linkMutation.mutate(c.receipt_transaction_id)}
-                      className="shrink-0 px-2 py-1 text-[10px] rounded-md bg-[#635bff] text-white
-                                 hover:bg-[#4b44cc] transition-colors disabled:opacity-40"
+                      className="shrink-0"
                     >
                       {linkMutation.isPending ? "…" : "Powiąż"}
-                    </button>
+                    </Button>
                   </div>
                 ))}
               </div>
             )
           ) : (
             /* Button to trigger search */
-            <button
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={() => setShowCandidates(true)}
-              className="text-xs px-3 py-1.5 rounded-md border border-[#635bff] text-[#635bff]
-                         hover:bg-[#635bff]/10 transition-colors"
             >
               Znajdź pasujące paragony
-            </button>
+            </Button>
           )}
     </div>
 
-        {/* Tags section */}
-        <div className="mt-4 pt-4 border-t border-gray-200">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Tagi</p>
-          <TagsEditor
-            tags={detail?.tags ?? tx.tags ?? []}
-            onChange={(tags) => tagsMutation.mutate(tags)}
-            allTags={allTags}
-          />
-        </div>
     </>
   );
 }
@@ -504,25 +483,36 @@ export default function BankTransactionsPage() {
     {
       header: "Kwota",
       accessor: (t) => (
-        <span className={`font-mono font-medium whitespace-nowrap ${
-          t.amount < 0 ? "text-red-600" : "text-green-600"
-        }`}>
-          {formatAmount(t.amount, t.currency)}
-        </span>
+      <Amount value={t.amount} currency={t.currency} />
       ),
       serverSortKey: "amount",
       className: "text-right",
     },
     {
       header: "Kategoria",
-      accessor: (t) =>
-        t.category_name ? (
+      accessor: (t) => {
+        if (t.receipt_category_name) {
+          return (
+            <div className="flex items-center gap-1 flex-wrap">
+              <span className="text-xs text-gray-700">
+                {t.receipt_category_name}
+              </span>
+              {(t.receipt_category_count ?? 1) > 1 && (
+                <span className="text-[10px] bg-gray-100 text-gray-500 rounded-full px-1.5 py-0.5 font-medium shrink-0">
+                  +{t.receipt_category_count! - 1}
+                </span>
+              )}
+            </div>
+          );
+        }
+        return t.category_name ? (
           <span className="text-gray-700 text-xs truncate max-w-[160px] block">
             {t.category_name}
           </span>
         ) : (
           <span className="text-gray-400 italic text-xs">Nie przypisano</span>
-        ),
+        );
+      },
       serverSortKey: "category_name",
     },
     {
@@ -531,9 +521,7 @@ export default function BankTransactionsPage() {
         t.tags && t.tags.length > 0 ? (
           <div className="flex flex-wrap gap-1">
             {t.tags.map((tag) => (
-              <span key={tag} className="inline-block bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-full text-xs px-2 py-0.5 font-medium">
-                {tag}
-              </span>
+              <Pill key={tag} variant="tag" size="sm">{tag}</Pill>
             ))}
           </div>
         ) : null,
@@ -543,16 +531,30 @@ export default function BankTransactionsPage() {
       accessor: (t) => <StatusBadge status={t.status} />,
       serverSortKey: "status",
     },
+    {
+      header: "",
+      accessor: (t) => (
+        <Link
+          href={`/bank-transactions/${t.id}`}
+          onClick={(e) => e.stopPropagation()}
+          className="flex items-center justify-center p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-accent transition-colors"
+          title="Otwórz szczegóły"
+        >
+          <ArrowRight className="h-4 w-4" />
+        </Link>
+      ),
+      className: "w-8 text-center",
+    },
   ];
 
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-xl font-semibold text-gray-800">
-          Transakcje bankowe
-        </h1>
-        <div className="flex items-center gap-3">
+      <PageHeader
+        title="Transakcje bankowe"
+        variant="list"
+        actions={
+          <div className="flex items-center gap-3">
           {/* Import feedback */}
           {importMutation.isPending && (
             <span className="text-sm text-gray-500">Importowanie…</span>
@@ -565,12 +567,12 @@ export default function BankTransactionsPage() {
               </span>
               {progress && (
                 <div className="flex flex-col gap-0.5 min-w-[220px]">
-                  <span className="text-xs text-[#635bff] animate-pulse">
+                  <span className="text-xs text-accent animate-pulse">
                     Kategoryzacja… {progress.index}/{progress.total}
                   </span>
                   <div className="w-full bg-gray-100 rounded-full h-1.5">
                     <div
-                      className="h-1.5 rounded-full bg-[#635bff] transition-all duration-300"
+                      className="h-1.5 rounded-full bg-accent transition-all duration-300"
                       style={{ width: `${pct}%` }}
                     />
                   </div>
@@ -595,36 +597,30 @@ export default function BankTransactionsPage() {
             className="hidden"
             onChange={handleFileChange}
           />
-          <button
+          <Button
+            variant="primary"
+            size="md"
             onClick={() => fileRef.current?.click()}
             disabled={importMutation.isPending}
-            className="flex items-center gap-2 px-4 py-2 rounded-md bg-[#635bff] text-white
-                       text-sm font-medium hover:bg-[#4b44cc] transition-colors disabled:opacity-50"
           >
-            <Upload className="h-4 w-4" />
+            <Upload className="h-4 w-4 mr-2" />
             Import CSV
-          </button>
+          </Button>
         </div>
-      </div>
+        }
+      />
 
       {/* Status filter tabs */}
-      <div className="flex gap-1 mb-4 border-b border-gray-200">
-        {STATUS_FILTERS.map((f) => (
-          <button
-            key={f}
-            onClick={() => { setStatusFilter(f); setPage(1); }}
-            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
-              statusFilter === f
-                ? "border-[#635bff] text-[#635bff]"
-                : "border-transparent text-gray-500 hover:text-gray-700"
-            }`}
-          >
-            {f === "all" ? "Wszystkie" : f === "to_confirm" ? "Do potwierdzenia" : "Potwierdzone"}
-            <span className="ml-1.5 text-xs bg-gray-100 text-gray-600 rounded-full px-1.5 py-0.5">
-              {f === "all" ? totalAll : (statusCounts[f] ?? 0)}
-            </span>
-          </button>
-        ))}
+      <div className="flex items-center gap-2 mt-4 mb-4">
+        <FilterTabs
+          tabs={[
+            { value: "all", label: <span>Wszystkie <span className="ml-1 text-xs bg-gray-100 text-gray-600 rounded-full px-1.5 py-0.5">{totalAll}</span></span> },
+            { value: "to_confirm", label: <span>Do potwierdzenia <span className="ml-1 text-xs bg-gray-100 text-gray-600 rounded-full px-1.5 py-0.5">{statusCounts["to_confirm"] ?? 0}</span></span> },
+            { value: "done", label: <span>Potwierdzone <span className="ml-1 text-xs bg-gray-100 text-gray-600 rounded-full px-1.5 py-0.5">{statusCounts["done"] ?? 0}</span></span> },
+          ]}
+          value={statusFilter}
+          onChange={(v) => { setStatusFilter(v as StatusFilter); setPage(1); }}
+        />
       </div>
 
       {/* Table */}

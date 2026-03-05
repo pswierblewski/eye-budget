@@ -19,7 +19,7 @@ export default function RootLayout({
         <QueryProvider>
           <div className="flex min-h-screen">
             <Sidebar />
-            <main className="flex-1 ml-56 p-8 overflow-hidden flex flex-col h-screen">{children}</main>
+            <main className="flex-1 ml-56 p-8 overflow-y-auto flex flex-col h-screen">{children}</main>
           </div>
         </QueryProvider>
       </body>

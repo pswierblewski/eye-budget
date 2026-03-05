@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { ReceiptImageViewer } from "@/components/ReceiptImageViewer";
 import { ProductCategoryRow } from "@/components/ProductCategoryRow";
 import { CategoryDropdown } from "@/components/CategoryDropdown";
-import { StatusBadge } from "@/components/StatusBadge";
+import { StatusBadge, NavLink, Button, ConfirmDeleteModal, PrevNextNav, SectionLabel, Card, ThreeDotsMenu } from "@/components/ui";
 import { VendorDropdown } from "@/components/VendorDropdown";
 import { ProductDropdown } from "@/components/ProductDropdown";
 import TagsEditor from "@/components/TagsEditor";
@@ -94,8 +94,7 @@ export default function ReceiptReviewPage({
   const [priceInputs, setPriceInputs] = useState<Array<{ unit: string; total: string }>>([])
   const [openMenuIndex, setOpenMenuIndex] = useState<number | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
-  const headerMenuRef = useRef<HTMLDivElement>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [productSearch, setProductSearch] = useState("");
   const [confirmedMenuItemId, setConfirmedMenuItemId] = useState<number | null>(null);
   const [confirmDeleteItemId, setConfirmDeleteItemId] = useState<number | null>(null);
@@ -153,17 +152,6 @@ export default function ReceiptReviewPage({
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
   }, [openMenuIndex]);
-
-  useEffect(() => {
-    if (!headerMenuOpen) return;
-    function handleClick(e: MouseEvent) {
-      if (headerMenuRef.current && !headerMenuRef.current.contains(e.target as Node)) {
-        setHeaderMenuOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, [headerMenuOpen]);
 
   useEffect(() => {
     if (scan?.result) {
@@ -427,77 +415,47 @@ export default function ReceiptReviewPage({
 
   return (
     <div className="space-y-6">
+      {/* Confirm Delete Modal */}
+      <ConfirmDeleteModal
+        open={showDeleteModal}
+        onClose={() => setShowDeleteModal(false)}
+        onConfirm={() => deleteMutation.mutate()}
+        title="Usuń paragon"
+        description="Paragon i powiązane dane zostaną trwale usunięte."
+        loading={deleteMutation.isPending}
+      />
+
       {/* Header */}
-      <div className="flex items-center gap-4 flex-wrap">
-        <Link
-          href="/receipts"
-          className="text-sm text-gray-500 hover:text-gray-700"
-        >
-          ← Paragony
-        </Link>
+      <div className="flex items-center gap-3 flex-wrap">
+        <NavLink href="/receipts" label="Paragony" variant="back" size="xs" />
+        <span className="text-gray-300">/</span>
         <h1 className="text-xl font-bold text-gray-900 flex-1 truncate">
           {scan.filename}
         </h1>
         <span className="text-xs text-gray-400 font-mono shrink-0">#{scanId}</span>
         <StatusBadge status={scan.status} />
-        <div className="flex items-center gap-1">
-          {prevReceiptId !== null ? (
-            <Link
-              href={`/receipts/${prevReceiptId}`}
-              className="text-sm px-2.5 py-1.5 rounded-lg border border-gray-300 bg-white text-gray-600 hover:bg-gray-50"
-              title="Poprzedni paragon"
-            >
-              &#8592;
-            </Link>
-          ) : (
-            <span className="text-sm px-2.5 py-1.5 rounded-lg border border-gray-200 bg-gray-50 text-gray-300 cursor-not-allowed">&#8592;</span>
-          )}
-          {nextReceiptId !== null ? (
-            <Link
-              href={`/receipts/${nextReceiptId}`}
-              className="text-sm px-2.5 py-1.5 rounded-lg border border-gray-300 bg-white text-gray-600 hover:bg-gray-50"
-              title="Następny paragon"
-            >
-              &#8594;
-            </Link>
-          ) : (
-            <span className="text-sm px-2.5 py-1.5 rounded-lg border border-gray-200 bg-gray-50 text-gray-300 cursor-not-allowed">&#8594;</span>
-          )}
-        </div>
         {["new", "processing", "processed", "failed"].includes(scan.status) && (
-          <button
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={() => retryMutation.mutate()}
             disabled={retryMutation.isPending}
-            className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50"
           >
             {retryMutation.isPending ? "Ponawiam…" : "Ponów przetwarzanie"}
-          </button>
+          </Button>
         )}
-        <div className="relative" ref={headerMenuRef}>
-          <button
-            onClick={() => setHeaderMenuOpen((v) => !v)}
-            className="text-sm px-2.5 py-1.5 rounded-lg border border-gray-300 bg-white text-gray-600 hover:bg-gray-50"
-            title="Więcej opcji"
-          >
-            &#8943;
-          </button>
-          {headerMenuOpen && (
-            <div className="absolute right-0 top-full mt-1 z-20 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[160px]">
-              <button
-                onClick={() => {
-                  setHeaderMenuOpen(false);
-                  if (window.confirm("Czy na pewno chcesz usunąć ten paragon? Tej operacji nie można cofnąć.")) {
-                    deleteMutation.mutate();
-                  }
-                }}
-                disabled={deleteMutation.isPending}
-                className="w-full text-left text-sm px-4 py-2 text-red-600 hover:bg-red-50 disabled:opacity-50"
-              >
-                {deleteMutation.isPending ? "Usuwam…" : "Usuń paragon"}
-              </button>
-            </div>
-          )}
-        </div>
+        <PrevNextNav
+          hasPrev={prevReceiptId !== null}
+          hasNext={nextReceiptId !== null}
+          onPrev={() => prevReceiptId && router.push(`/receipts/${prevReceiptId}`)}
+          onNext={() => nextReceiptId && router.push(`/receipts/${nextReceiptId}`)}
+        />
+        <ThreeDotsMenu
+          variant="outlined"
+          items={[
+            { label: "Usuń paragon", variant: "danger", onClick: () => setShowDeleteModal(true) },
+          ]}
+        />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -573,7 +531,7 @@ export default function ReceiptReviewPage({
                     value={productSearch}
                     onChange={(e) => setProductSearch(e.target.value)}
                     placeholder="Szukaj produktu…"
-                    className="w-full text-sm border border-gray-200 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-[#635bff]"
+                    className="w-full text-sm border border-gray-200 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-accent"
                   />
                 )}
                 {scan.transaction.items
@@ -591,7 +549,7 @@ export default function ReceiptReviewPage({
 
                   if (editingItemId === item.id) {
                     return (
-                      <div key={item.id} className="flex flex-col gap-2 rounded-lg border-2 border-[#635bff] p-3 bg-indigo-50/30">
+                      <div key={item.id} className="flex flex-col gap-2 rounded-lg border-2 border-accent p-3 bg-indigo-50/30">
                         {/* Product name (read-only raw name) */}
                         <p className="text-sm font-medium text-gray-900">
                           {item.normalized_product_name ?? item.raw_product_name}
@@ -627,7 +585,7 @@ export default function ReceiptReviewPage({
                               inputMode="decimal"
                               value={editItemQuantity}
                               onChange={(e) => setEditItemQuantity(e.target.value)}
-                              className="w-full text-sm border border-gray-200 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-[#635bff]"
+                              className="w-full text-sm border border-gray-200 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-accent"
                             />
                           </div>
                           <div>
@@ -637,7 +595,7 @@ export default function ReceiptReviewPage({
                               inputMode="decimal"
                               value={editItemUnitPrice}
                               onChange={(e) => setEditItemUnitPrice(e.target.value)}
-                              className="w-full text-sm border border-gray-200 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-[#635bff]"
+                              className="w-full text-sm border border-gray-200 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-accent"
                             />
                           </div>
                           <div>
@@ -647,7 +605,7 @@ export default function ReceiptReviewPage({
                               inputMode="decimal"
                               value={editItemPrice}
                               onChange={(e) => setEditItemPrice(e.target.value)}
-                              className="w-full text-sm border border-gray-200 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-[#635bff]"
+                              className="w-full text-sm border border-gray-200 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-accent"
                             />
                           </div>
                         </div>
@@ -687,7 +645,7 @@ export default function ReceiptReviewPage({
                               }
                               updateItemMutation.mutate({ itemId: item.id, data });
                             }}
-                            className="flex-1 px-3 py-1.5 text-xs rounded-md bg-[#635bff] text-white font-medium hover:bg-[#4b44cc] transition-colors disabled:opacity-50"
+                            className="flex-1 px-3 py-1.5 text-xs rounded-md bg-accent text-white font-medium hover:bg-accent-hover transition-colors disabled:opacity-50"
                           >
                             {updateItemMutation.isPending ? "Zapisywanie…" : "Zapisz"}
                           </button>
@@ -741,7 +699,7 @@ export default function ReceiptReviewPage({
                       <p className="text-xs text-gray-500">
                         {item.quantity} × {(item.unit_price ?? item.price).toFixed(2)} PLN
                       </p>
-                      <p className="text-xs text-[#635bff] font-medium">{catLabel}</p>
+                      <p className="text-xs text-accent font-medium">{catLabel}</p>
                     </div>
                   );
                 })}
@@ -795,10 +753,10 @@ export default function ReceiptReviewPage({
                   /* Existing link */
                   <div className="flex items-center justify-between gap-4 rounded-lg border border-green-200 bg-green-50 px-3 py-2">
                     <Link
-                      href="/bank-transactions"
+                      href={`/bank-transactions/${scan.bank_link.bank_transaction_id}`}
                       className="text-xs space-y-0.5 hover:underline min-w-0"
                     >
-                      <p className="font-medium text-[#635bff]">
+                      <p className="font-medium text-accent">
                         {scan.bank_link.counterparty ?? "—"}
                       </p>
                       <p className="text-gray-500">
@@ -809,7 +767,7 @@ export default function ReceiptReviewPage({
                       disabled={unlinkBankMutation.isPending}
                       onClick={() => unlinkBankMutation.mutate(scan.bank_link!.bank_transaction_id)}
                       className="shrink-0 px-2 py-1 text-[10px] rounded-md border border-red-300
-                                 text-red-600 hover:bg-red-50 transition-colors disabled:opacity-40"
+                                 text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
                     >
                       {unlinkBankMutation.isPending ? "…" : "Odepnij"}
                     </button>
@@ -855,8 +813,8 @@ export default function ReceiptReviewPage({
                             <button
                               disabled={linkBankMutation.isPending}
                               onClick={() => linkBankMutation.mutate(c.bank_transaction_id)}
-                              className="shrink-0 px-2 py-1 text-[10px] rounded-md bg-[#635bff]
-                                         text-white hover:bg-[#4b44cc] transition-colors disabled:opacity-40"
+                              className="shrink-0 px-2 py-1 text-[10px] rounded-md bg-accent
+                                         text-white hover:bg-accent-hover transition-colors disabled:opacity-50"
                             >
                               {linkBankMutation.isPending ? "…" : "Powiąż"}
                             </button>
@@ -869,8 +827,8 @@ export default function ReceiptReviewPage({
                   /* Trigger button */
                   <button
                     onClick={() => setShowBankCandidates(true)}
-                    className="text-xs px-3 py-1.5 rounded-md border border-[#635bff] text-[#635bff]
-                               hover:bg-[#635bff]/10 transition-colors"
+                    className="text-xs px-3 py-1.5 rounded-md border border-accent text-accent
+                               hover:bg-accent/10 transition-colors"
                   >
                     Znajdź pasującą transakcję bankową
                   </button>
@@ -889,7 +847,7 @@ export default function ReceiptReviewPage({
                       href="/cash-transactions"
                       className="text-xs space-y-0.5 hover:underline min-w-0"
                     >
-                      <p className="font-medium text-[#635bff]">
+                      <p className="font-medium text-accent">
                         {scan.cash_link.description ?? "Transakcja gotówkowa"}
                       </p>
                       <p className="text-gray-500">
@@ -900,7 +858,7 @@ export default function ReceiptReviewPage({
                       disabled={unlinkCashMutation.isPending}
                       onClick={() => unlinkCashMutation.mutate(scan.cash_link!.cash_transaction_id)}
                       className="shrink-0 px-2 py-1 text-[10px] rounded-md border border-red-300
-                                 text-red-600 hover:bg-red-50 transition-colors disabled:opacity-40"
+                                 text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
                     >
                       {unlinkCashMutation.isPending ? "…" : "Odepnij"}
                     </button>
@@ -910,16 +868,16 @@ export default function ReceiptReviewPage({
                     <button
                       onClick={() => createCashMutation.mutate()}
                       disabled={createCashMutation.isPending}
-                      className="text-xs px-3 py-1.5 rounded-md bg-[#635bff] text-white
-                                 hover:bg-[#4b44cc] transition-colors disabled:opacity-40"
+                      className="text-xs px-3 py-1.5 rounded-md bg-accent text-white
+                                 hover:bg-accent-hover transition-colors disabled:opacity-50"
                     >
                       {createCashMutation.isPending ? "Tworzenie…" : "Utwórz transakcję gotówkową"}
                     </button>
                     {!showCashCandidates ? (
                       <button
                         onClick={() => setShowCashCandidates(true)}
-                        className="block text-xs px-3 py-1.5 rounded-md border border-[#635bff] text-[#635bff]
-                                   hover:bg-[#635bff]/10 transition-colors"
+                        className="block text-xs px-3 py-1.5 rounded-md border border-accent text-accent
+                                   hover:bg-accent/10 transition-colors"
                       >
                         Powiąż z istniejącą transakcją gotówkową
                       </button>
@@ -939,8 +897,8 @@ export default function ReceiptReviewPage({
                             <button
                               disabled={linkCashMutation.isPending}
                               onClick={() => linkCashMutation.mutate(c.cash_transaction_id)}
-                              className="shrink-0 px-2 py-1 text-[10px] rounded-md bg-[#635bff]
-                                         text-white hover:bg-[#4b44cc] transition-colors disabled:opacity-40"
+                              className="shrink-0 px-2 py-1 text-[10px] rounded-md bg-accent
+                                         text-white hover:bg-accent-hover transition-colors disabled:opacity-50"
                             >
                               {linkCashMutation.isPending ? "…" : "Powiąż"}
                             </button>
@@ -977,7 +935,7 @@ export default function ReceiptReviewPage({
                     type="text"
                     value={editedVendor}
                     onChange={(e) => setEditedVendor(e.target.value)}
-                    className="mt-1 w-full text-sm border border-gray-200 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-[#635bff]"
+                    className="mt-1 w-full text-sm border border-gray-200 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-accent"
                   />
                 </label>
                 <div className="block text-xs text-gray-600">
@@ -993,7 +951,7 @@ export default function ReceiptReviewPage({
                     type="date"
                     value={toIsoDate(editedDate)}
                     onChange={(e) => setEditedDate(toDisplayDate(e.target.value))}
-                    className="mt-1 w-full text-sm border border-gray-200 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-[#635bff]"
+                    className="mt-1 w-full text-sm border border-gray-200 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-accent"
                   />
                 </label>
                 <div className="block text-xs text-gray-600">
@@ -1006,7 +964,7 @@ export default function ReceiptReviewPage({
                         inputMode="decimal"
                         value={editedTotal}
                         onChange={(e) => setEditedTotal(e.target.value)}
-                        className="w-full text-sm border border-gray-200 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-[#635bff]"
+                        className="w-full text-sm border border-gray-200 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-accent"
                       />
                     </div>
                     <div>
@@ -1056,7 +1014,7 @@ export default function ReceiptReviewPage({
                   }
                   confirmMutation.mutate(resolved);
                 }}
-                className="w-full py-2.5 rounded-md bg-[#635bff] text-white font-medium text-sm hover:bg-[#5248db] disabled:opacity-50 transition-colors"
+                className="w-full py-2.5 rounded-md bg-accent text-white font-medium text-sm hover:bg-accent-hover disabled:opacity-50 transition-colors"
               >
                 {confirmMutation.isPending ? "Zapisywanie…" : "Potwierdź paragon"}
               </button>
@@ -1081,7 +1039,7 @@ export default function ReceiptReviewPage({
                     value={productSearch}
                     onChange={(e) => setProductSearch(e.target.value)}
                     placeholder="Szukaj produktu…"
-                    className="w-full text-sm border border-gray-200 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-[#635bff]"
+                    className="w-full text-sm border border-gray-200 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-accent"
                   />
                 )}
                 {products
@@ -1101,7 +1059,7 @@ export default function ReceiptReviewPage({
                           value={product.name}
                           onChange={(e) => updateEditedProduct(index, { name: e.target.value })}
                           placeholder="Nazwa produktu"
-                          className="flex-1 text-sm font-medium text-gray-900 border border-gray-200 rounded-md px-2 py-0.5 focus:outline-none focus:ring-2 focus:ring-[#635bff] min-w-0"
+                          className="flex-1 text-sm font-medium text-gray-900 border border-gray-200 rounded-md px-2 py-0.5 focus:outline-none focus:ring-2 focus:ring-accent min-w-0"
                         />
                         <div className="relative shrink-0 ml-2" ref={openMenuIndex === index ? menuRef : undefined}>
                           <button
@@ -1143,7 +1101,7 @@ export default function ReceiptReviewPage({
                                 quantity: parseFloat(e.target.value) || 0,
                               })
                             }
-                            className="mt-1 w-full text-sm border border-gray-200 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-[#635bff]"
+                            className="mt-1 w-full text-sm border border-gray-200 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-accent"
                           />
                         </label>
                         <label className="flex-1 text-xs text-gray-600 pt-2">
@@ -1153,7 +1111,7 @@ export default function ReceiptReviewPage({
                             inputMode="decimal"
                             value={priceInputs[index]?.unit ?? ""}
                             onChange={(e) => updatePriceInput(index, "unit", e.target.value)}
-                            className="mt-1 w-full text-sm border border-gray-200 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-[#635bff]"
+                            className="mt-1 w-full text-sm border border-gray-200 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-accent"
                           />
                         </label>
                         <label className="flex-1 text-xs text-gray-600 pt-2">
@@ -1163,7 +1121,7 @@ export default function ReceiptReviewPage({
                             inputMode="decimal"
                             value={priceInputs[index]?.total ?? ""}
                             onChange={(e) => updatePriceInput(index, "total", e.target.value)}
-                            className="mt-1 w-full text-sm border border-gray-200 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-[#635bff]"
+                            className="mt-1 w-full text-sm border border-gray-200 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-accent"
                           />
                         </label>
                       </div>
@@ -1208,7 +1166,7 @@ export default function ReceiptReviewPage({
               <button
                 type="button"
                 onClick={addProduct}
-                className="w-full py-2 rounded-md border border-dashed border-gray-300 text-sm text-gray-500 hover:border-[#635bff] hover:text-[#635bff] transition-colors"
+                className="w-full py-2 rounded-md border border-dashed border-gray-300 text-sm text-gray-500 hover:border-accent hover:text-accent transition-colors"
               >
                 + Dodaj produkt
               </button>
@@ -1223,7 +1181,7 @@ export default function ReceiptReviewPage({
                   }
                   confirmMutation.mutate(resolved);
                 }}
-                className="mt-2 w-full py-2.5 rounded-md bg-[#635bff] text-white font-medium text-sm hover:bg-[#5248db] disabled:opacity-50 transition-colors"
+                className="mt-2 w-full py-2.5 rounded-md bg-accent text-white font-medium text-sm hover:bg-accent-hover disabled:opacity-50 transition-colors"
               >
                 {confirmMutation.isPending ? "Zapisywanie…" : "Potwierdź paragon"}
               </button>

@@ -5,10 +5,10 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { listReceipts, processReceipts, deleteReceipt, retryReceipt, getReceiptCounts, getAllTags } from "@/lib/api";
 import { ReceiptScanListItem } from "@/lib/types";
 import { DataTable, Column } from "@/components/DataTable";
-import { StatusBadge } from "@/components/StatusBadge";
 import { getPusher } from "@/lib/pusher";
 import { Info, SlidersHorizontal, X } from "lucide-react";
 import Link from "next/link";
+import { StatusBadge, Pill, PageHeader, NavLink, Button } from "@/components/ui";
 
 const STATUS_FILTERS = [
   "all",
@@ -140,7 +140,7 @@ const FilterPanel = memo(function FilterPanel({
 
   const hasAny = Object.values(local).some(Boolean);
 
-  const INPUT = "w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-[#635bff] focus:ring-1 focus:ring-[#635bff] outline-none transition-colors";
+  const INPUT = "w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm focus-ring";
 
   return (
     <div className="flex-shrink-0 rounded-lg border border-gray-200 bg-white p-4">
@@ -366,8 +366,7 @@ export default function ReceiptsPage() {
           type="checkbox"
           checked={allFilteredSelected}
           onChange={toggleAll}
-          className="rounded border-gray-300 text-[#635bff] focus:ring-[#635bff] cursor-pointer"
-          onClick={(e) => e.stopPropagation()}
+          className="rounded border-gray-300 text-accent focus:ring-accent cursor-pointer"
         />
       ),
       accessor: (r) => (
@@ -382,8 +381,7 @@ export default function ReceiptsPage() {
             })
           }
           onClick={(e) => e.stopPropagation()}
-          className="rounded border-gray-300 text-[#635bff] focus:ring-[#635bff] cursor-pointer"
-        />
+          className="rounded border-gray-300 text-accent focus:ring-accent cursor-pointer"
       ),
       className: "w-10",
     },
@@ -393,7 +391,7 @@ export default function ReceiptsPage() {
       accessor: (r) => (
         <Link
           href={`/receipts/${r.id}`}
-          className="text-[#635bff] hover:underline font-medium"
+          className="text-accent hover:underline font-medium"
         >
           {r.filename}
         </Link>
@@ -427,9 +425,7 @@ export default function ReceiptsPage() {
         r.tags && r.tags.length > 0 ? (
           <div className="flex flex-wrap gap-1">
             {r.tags.map((tag) => (
-              <span key={tag} className="inline-block bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-full text-xs px-2 py-0.5 font-medium">
-                {tag}
-              </span>
+              <Pill key={tag} variant="tag" size="sm">{tag}</Pill>
             ))}
           </div>
         ) : null,
@@ -443,22 +439,25 @@ export default function ReceiptsPage() {
       header: "",
       accessor: (r) =>
         r.status === "to_confirm" ? (
-          <Link
+          <NavLink
             href={`/receipts/${r.id}`}
-            className="text-xs font-medium text-[#635bff] hover:underline"
-          >
-            Przejrzyj →
-          </Link>
+            label="Przejrzyj"
+            variant="forward"
+            size="xs"
+            onClick={(e) => e.stopPropagation()}
+          />
         ) : null,
     },
   ];
 
   return (
     <div className="flex flex-col flex-1 min-h-0 gap-6">
-      <div className="flex items-center justify-between flex-shrink-0">
-        <div>
+      <PageHeader
+        title="Paragony"
+        variant="list"
+        subtitle="Wszystkie zeskanowane paragony i ich status przetwarzania."
+        actions={
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold text-gray-900">Paragony</h1>
             <div ref={legendRef} className="relative">
               <button
                 onClick={() => setLegendOpen((o) => !o)}
@@ -468,7 +467,7 @@ export default function ReceiptsPage() {
                 <Info size={18} />
               </button>
               {legendOpen && (
-                <div className="absolute left-0 top-full mt-2 z-50 w-96 rounded-lg border border-gray-200 bg-white shadow-lg p-4">
+                <div className="absolute right-0 top-full mt-2 z-50 w-96 rounded-lg border border-gray-200 bg-white shadow-lg p-4">
                   <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Legenda statusów</p>
                   <div className="grid grid-cols-1 gap-y-2">
                     {STATUS_LEGEND.map(({ status, description }) => (
@@ -481,19 +480,17 @@ export default function ReceiptsPage() {
                 </div>
               )}
             </div>
+            <Button
+              variant="primary"
+              size="md"
+              onClick={() => processMutation.mutate()}
+              disabled={processMutation.isPending || progress?.status === "running"}
+            >
+              {processMutation.isPending || progress?.status === "running" ? "Przetwarzanie…" : "Przetwórz paragony"}
+            </Button>
           </div>
-          <p className="text-sm text-gray-500 mt-1">
-            Wszystkie zeskanowane paragony i ich status przetwarzania.
-          </p>
-        </div>
-        <button
-          onClick={() => processMutation.mutate()}
-          disabled={processMutation.isPending || progress?.status === "running"}
-          className="px-4 py-2 rounded-md bg-[#635bff] text-white text-sm font-medium hover:bg-[#5248db] disabled:opacity-50 transition-colors"
-        >
-          {processMutation.isPending || progress?.status === "running" ? "Przetwarzanie…" : "Przetwórz paragony"}
-        </button>
-      </div>
+        }
+      />
 
       {/* Live progress bar */}
       {progress && (
@@ -510,7 +507,7 @@ export default function ReceiptsPage() {
               </div>
               <div className="w-full bg-gray-200 rounded-full h-1.5">
                 <div
-                  className="bg-[#635bff] h-1.5 rounded-full transition-all duration-300"
+                  className="bg-accent h-1.5 rounded-full transition-all duration-300"
                   style={{ width: progress.total > 0 ? `${(progress.index / progress.total) * 100}%` : "0%" }}
                 />
               </div>
@@ -533,7 +530,7 @@ export default function ReceiptsPage() {
             onClick={() => { setStatusFilter(s); setPage(1); setSelectedIds(new Set()); }}
             className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
               statusFilter === s
-                ? "bg-[#635bff] text-white"
+                ? "bg-accent text-white"
                 : "bg-gray-100 text-gray-600 hover:bg-gray-200"
             }`}
           >
@@ -549,7 +546,7 @@ export default function ReceiptsPage() {
           onClick={() => setFiltersOpen((o) => !o)}
           className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
             filtersOpen || activeFilterCount > 0
-              ? "bg-[#635bff] text-white"
+              ? "bg-accent text-white"
               : "bg-gray-100 text-gray-600 hover:bg-gray-200"
           }`}
         >

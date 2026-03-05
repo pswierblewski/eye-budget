@@ -23,7 +23,7 @@ function ReceiptImage({ entryId }: { entryId: number }) {
       {!loaded && (
         <div className="flex items-center justify-center h-64">
           <svg
-            className="animate-spin h-8 w-8 text-[#635bff]"
+            className="animate-spin h-8 w-8 text-accent"
             xmlns="http://www.w3.org/2000/svg"
             fill="none"
             viewBox="0 0 24 24"
@@ -150,7 +150,7 @@ export default function GroundTruthEditPage({
             onChange={(e) => setForm(e.target.value)}
             rows={24}
             spellCheck={false}
-            className="w-full rounded-md border border-gray-200 px-3 py-2 font-mono text-xs text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#635bff] resize-y"
+            className="w-full rounded-md border border-gray-200 px-3 py-2 font-mono text-xs text-gray-800 focus:outline-none focus:ring-2 focus:ring-accent resize-y"
           />
           {parseError && (
             <p className="text-sm text-red-500">{parseError}</p>
@@ -163,7 +163,7 @@ export default function GroundTruthEditPage({
           <button
             onClick={handleSave}
             disabled={saveMutation.isPending}
-            className="px-5 py-2.5 rounded-md bg-[#635bff] text-white font-medium text-sm hover:bg-[#5248db] disabled:opacity-50 transition-colors"
+            className="px-5 py-2.5 rounded-md bg-accent text-white font-medium text-sm hover:bg-accent-hover disabled:opacity-50 transition-colors"
           >
             {saveMutation.isPending ? "Zapisywanie…" : "Zapisz zmiany"}
           </button>
