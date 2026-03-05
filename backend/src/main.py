@@ -1,6 +1,8 @@
 from dotenv import load_dotenv
 load_dotenv()
 
+from typing import Optional
+
 from src.app import App
 from src.celery_app import celery_app
 from src.tasks.process_receipts import process_receipts_task
@@ -38,8 +40,10 @@ from src.data import (
     CashTxCandidateItem,
     PaginatedResponse,
     UpdateTagsRequest,
+    UnifiedTransaction,
+    AnalyticsSummary,
 )
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import FastAPI, File, UploadFile, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 import io
@@ -595,6 +599,18 @@ def get_bank_transaction(tx_id: int) -> BankTransactionDetail:
         my_app.dispose()
 
 
+@app.delete("/bank-transactions/{tx_id}", status_code=204)
+def delete_bank_transaction(tx_id: int) -> None:
+    """Delete a bank transaction."""
+    my_app = App()
+    try:
+        ok = my_app.delete_bank_transaction(tx_id)
+        if not ok:
+            raise HTTPException(status_code=404, detail=f"Bank transaction {tx_id} not found")
+    finally:
+        my_app.dispose()
+
+
 @app.post("/bank-transactions/{tx_id}/confirm", response_model=BankTransactionDetail)
 def confirm_bank_transaction(
     tx_id: int, request: ConfirmBankTransactionRequest
@@ -907,5 +923,61 @@ def update_cash_transaction_tags(tx_id: int, request: UpdateTagsRequest) -> Cash
         if result is None:
             raise HTTPException(status_code=404, detail=f"Cash transaction {tx_id} not found")
         return result
+    finally:
+        my_app.dispose()
+
+
+# ------------------------------------------------------------------
+# Unified transactions
+# ------------------------------------------------------------------
+
+@app.get("/transactions", response_model=PaginatedResponse[UnifiedTransaction])
+def list_unified_transactions(
+    status: Optional[str] = Query(None),
+    source_type: Optional[str] = Query(None),
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    category_id: Optional[int] = Query(None),
+    tag: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
+    amount_min: Optional[float] = Query(None),
+    amount_max: Optional[float] = Query(None),
+    sort_by: str = Query("date"),
+    sort_dir: str = Query("desc"),
+    limit: int = Query(50),
+    offset: int = Query(0),
+) -> PaginatedResponse[UnifiedTransaction]:
+    """Return a paginated, filterable unified list of transactions."""
+    my_app = App()
+    try:
+        items, total = my_app.get_unified_transactions(
+            status=status,
+            source_type=source_type,
+            date_from=date_from,
+            date_to=date_to,
+            category_id=category_id,
+            tag=tag,
+            search=search,
+            amount_min=amount_min,
+            amount_max=amount_max,
+            sort_by=sort_by,
+            sort_dir=sort_dir,
+            limit=limit,
+            offset=offset,
+        )
+        return PaginatedResponse(items=items, total=total, limit=limit, offset=offset)
+    finally:
+        my_app.dispose()
+
+
+@app.get("/transactions/analytics", response_model=AnalyticsSummary)
+def get_transactions_analytics(
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+) -> AnalyticsSummary:
+    """Return aggregated analytics for the given date range."""
+    my_app = App()
+    try:
+        return my_app.get_transactions_analytics(date_from=date_from, date_to=date_to)
     finally:
         my_app.dispose()

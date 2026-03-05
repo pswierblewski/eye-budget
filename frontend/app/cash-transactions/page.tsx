@@ -25,59 +25,29 @@ import {
 } from "@/lib/types";
 import { CategoryDropdown } from "@/components/CategoryDropdown";
 import { VendorDropdown } from "@/components/VendorDropdown";
-import { StatusBadge } from "@/components/StatusBadge";
 import TagsEditor from "@/components/TagsEditor";
 import { DataTable, Column } from "@/components/DataTable";
 import Link from "next/link";
-import { Plus, Banknote, Receipt, Trash2 } from "lucide-react";
+import { Plus } from "lucide-react";
+import {
+  StatusBadge,
+  SourceBadge,
+  MatchBadge,
+  CountBadge,
+  Pill,
+  PageHeader,
+  FilterTabs,
+  SectionLabel,
+  NavLink,
+  Button,
+  Amount,
+  Modal,
+  ThreeDotsMenu,
+  ConfirmDeleteModal,
+} from "@/components/ui";
 
 const STATUS_FILTERS = ["all", "to_confirm", "done"] as const;
 type StatusFilter = (typeof STATUS_FILTERS)[number];
-
-function formatAmount(amount: number, currency: string): string {
-  return new Intl.NumberFormat("pl-PL", {
-    style: "currency",
-    currency,
-    minimumFractionDigits: 2,
-  }).format(amount);
-}
-
-function MatchBadge({ score }: { score: number }) {
-  const labels: Record<number, string> = {
-    2: "kwota + data",
-    3: "kwota + data + sklep",
-  };
-  const colors: Record<number, string> = {
-    2: "bg-yellow-100 text-yellow-700",
-    3: "bg-green-100 text-green-700",
-  };
-  return (
-    <span
-      className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${
-        colors[score] ?? "bg-gray-100 text-gray-500"
-      }`}
-    >
-      {labels[score] ?? `score ${score}`}
-    </span>
-  );
-}
-
-function SourceBadge({ source }: { source: string }) {
-  if (source === "receipt") {
-    return (
-      <span className="flex items-center gap-1 text-[10px] bg-blue-50 text-blue-700 border border-blue-200 rounded-full px-2 py-0.5 font-medium">
-        <Receipt className="h-3 w-3" />
-        Paragon
-      </span>
-    );
-  }
-  return (
-    <span className="flex items-center gap-1 text-[10px] bg-gray-50 text-gray-600 border border-gray-200 rounded-full px-2 py-0.5 font-medium">
-      <Banknote className="h-3 w-3" />
-      Ręcznie
-    </span>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Add Transaction Modal
@@ -133,8 +103,8 @@ function AddTransactionModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+    <Modal open onClose={onClose} maxWidth="md">
+      <div className="p-6">
         <h2 className="text-base font-semibold text-gray-800 mb-4">
           Nowa transakcja gotówkowa
         </h2>
@@ -149,7 +119,7 @@ function AddTransactionModal({
               required
               value={date}
               onChange={(e) => setDate(e.target.value)}
-              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#635bff]/30"
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus-ring"
             />
           </div>
 
@@ -182,7 +152,7 @@ function AddTransactionModal({
                 placeholder="0.00"
                 value={amountStr}
                 onChange={(e) => setAmountStr(e.target.value)}
-                className="flex-1 border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#635bff]/30"
+                className="flex-1 border border-gray-300 rounded-md px-3 py-2 text-sm focus-ring"
               />
             </div>
           </div>
@@ -197,7 +167,7 @@ function AddTransactionModal({
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="np. Kawa w kawiarni"
-              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#635bff]/30 resize-none"
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus-ring resize-none"
             />
           </div>
 
@@ -222,24 +192,16 @@ function AddTransactionModal({
           )}
 
           <div className="flex gap-3 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 px-4 py-2 rounded-md border border-gray-300 text-sm font-medium hover:bg-gray-50 transition-colors"
-            >
+            <Button variant="secondary" size="md" type="button" onClick={onClose} className="flex-1">
               Anuluj
-            </button>
-            <button
-              type="submit"
-              disabled={createMutation.isPending}
-              className="flex-1 px-4 py-2 rounded-md bg-[#635bff] text-white text-sm font-medium hover:bg-[#4b44cc] transition-colors disabled:opacity-50"
-            >
+            </Button>
+            <Button variant="primary" size="md" type="submit" disabled={createMutation.isPending} className="flex-1">
               {createMutation.isPending ? "Zapisywanie…" : "Dodaj"}
-            </button>
+            </Button>
           </div>
         </form>
       </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -257,7 +219,7 @@ function ExpandedRowContent({ tx, allTags = [] }: ExpandedRowProps) {
     tx.category_id ?? undefined
   );
   const [showCandidates, setShowCandidates] = useState(false);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   // Edit state
   const [editMode, setEditMode] = useState(false);
@@ -286,7 +248,7 @@ function ExpandedRowContent({ tx, allTags = [] }: ExpandedRowProps) {
   });
 
   const confirmMutation = useMutation({
-    mutationFn: (categoryId: number) => confirmCashTransaction(tx.id, categoryId),
+    mutationFn: (categoryId: number | null) => confirmCashTransaction(tx.id, categoryId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["cash-transactions"] });
       queryClient.invalidateQueries({ queryKey: ["cash-transactions-counts"] });
@@ -411,19 +373,21 @@ function ExpandedRowContent({ tx, allTags = [] }: ExpandedRowProps) {
               <VendorDropdown value={editVendorName} onChange={setEditVendorName} />
             </div>
             <div className="flex gap-2">
-              <button
+              <Button
+                variant="primary"
+                size="sm"
                 onClick={() => updateMutation.mutate()}
                 disabled={updateMutation.isPending}
-                className="px-3 py-1.5 rounded-md bg-[#635bff] text-white text-xs font-medium disabled:opacity-50"
               >
                 {updateMutation.isPending ? "Zapisywanie…" : "Zapisz"}
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
                 onClick={() => setEditMode(false)}
-                className="px-3 py-1.5 rounded-md border border-gray-300 text-xs font-medium hover:bg-gray-50"
               >
                 Anuluj
-              </button>
+              </Button>
             </div>
           </div>
         ) : (
@@ -449,7 +413,7 @@ function ExpandedRowContent({ tx, allTags = [] }: ExpandedRowProps) {
                 <span className="font-medium text-gray-700">Paragon: </span>
                 <Link
                   href={`/receipts/${detail.receipt_scan_id}`}
-                  className="text-[#635bff] hover:underline"
+                  className="text-accent hover:underline"
                 >
                   #{detail.receipt_scan_id}
                 </Link>
@@ -457,7 +421,7 @@ function ExpandedRowContent({ tx, allTags = [] }: ExpandedRowProps) {
             )}
             <button
               onClick={() => setEditMode(true)}
-              className="mt-1 text-xs text-[#635bff] hover:underline"
+              className="mt-1 text-xs text-accent hover:underline"
             >
               Edytuj
             </button>
@@ -466,59 +430,106 @@ function ExpandedRowContent({ tx, allTags = [] }: ExpandedRowProps) {
 
         {/* Tags */}
         <div>
-          <p className="text-xs font-medium text-gray-500 mb-1">Tagi</p>
+          <SectionLabel className="mb-1">Tagi</SectionLabel>
           <TagsEditor
             tags={tx.tags ?? []}
             allTags={allTags}
-            onSave={(tags) => tagsMutation.mutate(tags)}
-            isSaving={tagsMutation.isPending}
+            onChange={(tags) => tagsMutation.mutate(tags)}
           />
         </div>
       </div>
 
       {/* Right: category + confirm/reopen + receipt linking + delete */}
       <div className="w-96 space-y-4">
+        {/* ConfirmDeleteModal */}
+        <ConfirmDeleteModal
+          open={showDeleteModal}
+          onClose={() => setShowDeleteModal(false)}
+          onConfirm={() => deleteMutation.mutate()}
+          title="Usuń transakcję"
+          description="Transakcja zostanie trwale usunięta."
+          loading={deleteMutation.isPending}
+        />
         {/* Category */}
         <div>
-          <p className="text-xs font-medium text-gray-500 mb-1">Kategoria</p>
-          <CategoryDropdown
-            value={selectedCategory}
-            onChange={setSelectedCategory}
-          />
+          <div className="flex items-center justify-between mb-1">
+            <SectionLabel>Kategoria</SectionLabel>
+            <ThreeDotsMenu
+              variant="inline"
+              items={[
+                { label: "Edytuj", onClick: () => setEditMode(true) },
+                { separator: true, label: "Usuń transakcję", variant: "danger", onClick: () => setShowDeleteModal(true) },
+              ]}
+            />
+          </div>
+          {receiptLink ? (
+            /* Receipt-linked: categories derived from receipt items */
+            <div className="space-y-2">
+              <div className="flex flex-col gap-1">
+                {(detail?.receipt_categories ?? []).length > 0 ? (
+                  (detail?.receipt_categories ?? []).map((cat: { id: number; name: string; product_count: number }, idx: number) => (
+                    <Pill
+                      key={cat.id}
+                      variant={idx === 0 ? "category-primary" : "category-secondary"}
+                      size="sm"
+                    >
+                      {cat.name}
+                      <span className="ml-1 text-[10px] text-gray-400">({cat.product_count})</span>
+                    </Pill>
+                  ))
+                ) : (
+                  <span className="text-xs text-gray-400 italic">Paragon bez potwierdzonych kategorii</span>
+                )}
+              </div>
+              <NavLink
+                href={`/receipts/${receiptLink.scan_id}`}
+                label="Zarządzaj kategoriami w paragonie"
+                variant="forward"
+                onClick={(e) => e.stopPropagation()}
+              />
+            </div>
+          ) : (
+            <CategoryDropdown
+              value={selectedCategory}
+              onChange={setSelectedCategory}
+            />
+          )}
         </div>
 
         {/* Confirm / reopen */}
         <div className="flex gap-2">
           {tx.status === "to_confirm" ? (
-            <button
-              disabled={!selectedCategory || confirmMutation.isPending}
-              onClick={() => selectedCategory && confirmMutation.mutate(selectedCategory)}
-              className="flex-1 px-3 py-1.5 rounded-md bg-[#635bff] text-white text-xs font-medium
-                         disabled:opacity-40 hover:bg-[#4b44cc] transition-colors"
+            <Button
+              variant="primary"
+              size="sm"
+              disabled={(receiptLink ? false : !selectedCategory) || confirmMutation.isPending}
+              onClick={() => confirmMutation.mutate(receiptLink ? null : (selectedCategory ?? null))}
+              className="flex-1"
             >
               {confirmMutation.isPending ? "Zapisywanie…" : "Potwierdź"}
-            </button>
+            </Button>
           ) : (
-            <button
+            <Button
+              variant="secondary"
+              size="sm"
               disabled={reopenMutation.isPending}
               onClick={() => reopenMutation.mutate()}
-              className="flex-1 px-3 py-1.5 rounded-md border border-gray-300 text-xs font-medium
-                         hover:bg-gray-50 transition-colors disabled:opacity-40"
+              className="flex-1"
             >
               {reopenMutation.isPending ? "…" : "Cofnij potwierdzenie"}
-            </button>
+            </Button>
           )}
         </div>
 
         {/* Receipt linking */}
         <div>
-          <p className="text-xs font-medium text-gray-500 mb-1">Paragon</p>
+          <SectionLabel className="mb-1">Paragon</SectionLabel>
           {receiptLink ? (
-            <div className="flex items-center justify-between rounded-md bg-gray-50 border border-gray-200 px-3 py-2 text-xs">
+            <div className="flex items-center justify-between rounded-md bg-green-50 border border-green-200 px-3 py-2 text-xs">
               <div>
                 <Link
                   href={`/receipts/${receiptLink.scan_id}`}
-                  className="font-medium text-[#635bff] hover:underline"
+                  className="font-medium text-accent hover:underline"
                 >
                   {receiptLink.scan_filename}
                 </Link>
@@ -527,31 +538,33 @@ function ExpandedRowContent({ tx, allTags = [] }: ExpandedRowProps) {
                   {receiptLink.total.toFixed(2)} PLN
                 </div>
               </div>
-              <button
+              <Button
+                variant="danger"
+                size="sm"
                 onClick={() => unlinkMutation.mutate()}
                 disabled={unlinkMutation.isPending}
-                className="text-gray-400 hover:text-red-500 transition-colors ml-2 shrink-0"
-                title="Odlinkuj paragon"
+                className="ml-2 shrink-0"
               >
-                ✕
-              </button>
+                Odepnij
+              </Button>
             </div>
           ) : (
             <div>
               {!showCandidates ? (
-                <button
+                <Button
+                  variant="secondary"
+                  size="sm"
                   onClick={() => setShowCandidates(true)}
-                  className="text-xs text-[#635bff] hover:underline"
                 >
-                  Szukaj pasującego paragonu
-                </button>
+                  Znajdź pasujący paragon
+                </Button>
               ) : (
                 <div className="space-y-1.5">
                   {candidatesLoading && (
                     <p className="text-xs text-gray-400">Szukanie…</p>
                   )}
                   {!candidatesLoading && candidates.length === 0 && (
-                    <p className="text-xs text-gray-400">Brak pasujących paragonów.</p>
+                    <p className="text-xs text-gray-400">Nie znaleziono pasujących paragonów.</p>
                   )}
                   {candidates.map((c) => (
                     <div
@@ -567,13 +580,15 @@ function ExpandedRowContent({ tx, allTags = [] }: ExpandedRowProps) {
                         </span>
                         <MatchBadge score={c.match_score} />
                       </div>
-                      <button
+                      <Button
+                        variant="primary"
+                        size="sm"
                         onClick={() => linkMutation.mutate(c.receipt_transaction_id)}
                         disabled={linkMutation.isPending}
-                        className="ml-2 px-2 py-1 rounded-md bg-[#635bff] text-white text-[10px] font-medium hover:bg-[#4b44cc] disabled:opacity-40"
+                        className="ml-2 shrink-0"
                       >
-                        Linkuj
-                      </button>
+                        Powiąż
+                      </Button>
                     </div>
                   ))}
                   <button
@@ -585,36 +600,6 @@ function ExpandedRowContent({ tx, allTags = [] }: ExpandedRowProps) {
                 </div>
               )}
             </div>
-          )}
-        </div>
-
-        {/* Delete */}
-        <div className="pt-2 border-t border-gray-100">
-          {showDeleteConfirm ? (
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-red-600">Na pewno usunąć?</span>
-              <button
-                onClick={() => deleteMutation.mutate()}
-                disabled={deleteMutation.isPending}
-                className="px-2 py-1 rounded-md bg-red-600 text-white text-xs font-medium disabled:opacity-40"
-              >
-                {deleteMutation.isPending ? "Usuwanie…" : "Usuń"}
-              </button>
-              <button
-                onClick={() => setShowDeleteConfirm(false)}
-                className="px-2 py-1 rounded-md border border-gray-300 text-xs font-medium hover:bg-gray-50"
-              >
-                Anuluj
-              </button>
-            </div>
-          ) : (
-            <button
-              onClick={() => setShowDeleteConfirm(true)}
-              className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-red-500 transition-colors"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-              Usuń transakcję
-            </button>
           )}
         </div>
       </div>
@@ -687,28 +672,33 @@ export default function CashTransactionsPage() {
     },
     {
       header: "Kwota",
-      accessor: (t) => (
-        <span
-          className={`font-mono font-medium whitespace-nowrap ${
-            t.amount < 0 ? "text-red-600" : "text-green-600"
-          }`}
-        >
-          {formatAmount(t.amount, t.currency)}
-        </span>
-      ),
+      accessor: (t) => <Amount value={t.amount} currency={t.currency} />,
       serverSortKey: "amount",
       className: "text-right",
     },
     {
       header: "Kategoria",
-      accessor: (t) =>
-        t.category_name ? (
+      accessor: (t) => {
+        if (t.receipt_category_name) {
+          return (
+            <div className="flex items-center gap-1 flex-wrap">
+              <span className="text-xs text-gray-700">
+                {t.receipt_category_name}
+              </span>
+              {(t.receipt_category_count ?? 1) > 1 && (
+                <CountBadge count={t.receipt_category_count! - 1} className="shrink-0" />
+              )}
+            </div>
+          );
+        }
+        return t.category_name ? (
           <span className="text-gray-700 text-xs truncate max-w-[160px] block">
             {t.category_name}
           </span>
         ) : (
           <span className="text-gray-400 italic text-xs">Nie przypisano</span>
-        ),
+        );
+      },
       serverSortKey: "category_name",
     },
     {
@@ -721,12 +711,7 @@ export default function CashTransactionsPage() {
         t.tags && t.tags.length > 0 ? (
           <div className="flex flex-wrap gap-1">
             {t.tags.map((tag) => (
-              <span
-                key={tag}
-                className="inline-block bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-full text-xs px-2 py-0.5 font-medium"
-              >
-                {tag}
-              </span>
+              <Pill key={tag} variant="tag" size="sm">{tag}</Pill>
             ))}
           </div>
         ) : null,
@@ -741,45 +726,32 @@ export default function CashTransactionsPage() {
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-xl font-semibold text-gray-800">
-          Transakcje gotówkowe
-        </h1>
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="flex items-center gap-2 px-4 py-2 rounded-md bg-[#635bff] text-white
-                     text-sm font-medium hover:bg-[#4b44cc] transition-colors"
-        >
-          <Plus className="h-4 w-4" />
-          Dodaj transakcję
-        </button>
-      </div>
+      <PageHeader
+        title="Transakcje gotówkowe"
+        variant="list"
+        actions={
+          <Button
+            variant="primary"
+            size="md"
+            onClick={() => setShowAddModal(true)}
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Dodaj transakcję
+          </Button>
+        }
+      />
 
       {/* Status filter tabs */}
-      <div className="flex gap-1 mb-4 border-b border-gray-200">
-        {STATUS_FILTERS.map((f) => (
-          <button
-            key={f}
-            onClick={() => {
-              setStatusFilter(f);
-              setPage(1);
-            }}
-            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
-              statusFilter === f
-                ? "border-[#635bff] text-[#635bff]"
-                : "border-transparent text-gray-500 hover:text-gray-700"
-            }`}
-          >
-            {f === "all"
-              ? "Wszystkie"
-              : f === "to_confirm"
-              ? "Do potwierdzenia"
-              : "Potwierdzone"}
-            <span className="ml-1.5 text-xs bg-gray-100 text-gray-600 rounded-full px-1.5 py-0.5">
-              {f === "all" ? totalAll : (statusCounts[f] ?? 0)}
-            </span>
-          </button>
-        ))}
+      <div className="flex items-center gap-2 mt-4 mb-4">
+        <FilterTabs
+          tabs={[
+            { value: "all", label: <span>Wszystkie <span className="ml-1 text-xs bg-gray-100 text-gray-600 rounded-full px-1.5 py-0.5">{totalAll}</span></span> },
+            { value: "to_confirm", label: <span>Do potwierdzenia <span className="ml-1 text-xs bg-gray-100 text-gray-600 rounded-full px-1.5 py-0.5">{statusCounts["to_confirm"] ?? 0}</span></span> },
+            { value: "done", label: <span>Potwierdzone <span className="ml-1 text-xs bg-gray-100 text-gray-600 rounded-full px-1.5 py-0.5">{statusCounts["done"] ?? 0}</span></span> },
+          ]}
+          value={statusFilter}
+          onChange={(v) => { setStatusFilter(v as StatusFilter); setPage(1); }}
+        />
       </div>
 
       {/* Table */}

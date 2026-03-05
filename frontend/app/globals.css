@@ -6,6 +6,7 @@
 
 :root {
   --accent: #635bff;
+  --accent-hover: #5248db;
   --sidebar: #f6f9fc;
 }
 
@@ -13,4 +14,10 @@ body {
   font-family: 'Inter', system-ui, sans-serif;
   background-color: #ffffff;
   color: #1a1a2e;
+}
+
+@layer components {
+  .focus-ring {
+    @apply focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent;
+  }
 }

@@ -110,7 +110,7 @@ export default function EvaluationsPage() {
       accessor: (r) => (
         <Link
           href={`/evaluations/${r.id}`}
-          className="text-xs text-[#635bff] hover:underline"
+          className="text-xs text-accent hover:underline"
         >
           Szczegóły →
         </Link>
@@ -130,7 +130,7 @@ export default function EvaluationsPage() {
         <button
           onClick={() => runMutation.mutate()}
           disabled={runMutation.isPending || progress?.status === "running"}
-          className="px-4 py-2 rounded-md bg-[#635bff] text-white text-sm font-medium hover:bg-[#5248db] disabled:opacity-50 transition-colors"
+          className="px-4 py-2 rounded-md bg-accent text-white text-sm font-medium hover:bg-accent-hover disabled:opacity-50 transition-colors"
         >
           {runMutation.isPending || progress?.status === "running" ? "Trwa ocena…" : "Uruchom ocenę"}
         </button>
@@ -151,7 +151,7 @@ export default function EvaluationsPage() {
               </div>
               <div className="w-full bg-gray-200 rounded-full h-1.5">
                 <div
-                  className="bg-[#635bff] h-1.5 rounded-full transition-all duration-300"
+                  className="bg-accent h-1.5 rounded-full transition-all duration-300"
                   style={{ width: progress.total > 0 ? `${(progress.index / progress.total) * 100}%` : "0%" }}
                 />
               </div>

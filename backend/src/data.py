@@ -230,6 +230,13 @@ class CategoryItem(BaseModel):
     group_name: str | None = None
 
 
+class ReceiptCategory(BaseModel):
+    """A distinct category derived from receipt transaction items."""
+    id: int
+    name: str
+    product_count: int
+
+
 class CreateCategoryRequest(BaseModel):
     """Request body for creating a new expense category."""
     name: str
@@ -313,6 +320,8 @@ class BankTransactionListItem(BaseModel):
     category_id: int | None = None
     category_name: str | None = None
     tags: list[str] = []
+    receipt_category_name: str | None = None  # top category from linked receipt
+    receipt_category_count: int | None = None  # total distinct categories from linked receipt
 
 
 class BankTransactionDetail(BaseModel):
@@ -335,6 +344,7 @@ class BankTransactionDetail(BaseModel):
     category_candidates: list | None = None  # list[CategoryCandidate]
     vendor_id: int | None = None
     receipt_link: Optional['ReceiptLinkInfo'] = None
+    receipt_categories: list['ReceiptCategory'] | None = None  # distinct categories from linked receipt
     tags: list[str] = []
 
 
@@ -353,7 +363,7 @@ class UpdateTagsRequest(BaseModel):
 
 class ConfirmBankTransactionRequest(BaseModel):
     """Request body for confirming a bank transaction category."""
-    category_id: int
+    category_id: Optional[int] = None
 
 
 class CategoryCandidatesTransaction(BaseModel):
@@ -431,6 +441,9 @@ class CashTransactionListItem(BaseModel):
     vendor_name: str | None = None
     tags: list[str] = []
     receipt_link: Optional['CashReceiptLinkInfo'] = None
+    receipt_category_name: str | None = None  # top category from linked receipt
+    receipt_category_count: int | None = None  # total distinct categories from linked receipt
+    receipt_categories: list['ReceiptCategory'] | None = None  # full list for detail views
 
 
 class CashTransactionDetail(CashTransactionListItem):
@@ -458,7 +471,7 @@ class CashTransactionUpdate(BaseModel):
 
 class ConfirmCashTransactionRequest(BaseModel):
     """Request body for confirming a cash transaction category."""
-    category_id: int
+    category_id: Optional[int] = None
 
 
 class LinkCashReceiptRequest(BaseModel):
@@ -491,3 +504,67 @@ class CashTxCandidateItem(BaseModel):
     booking_date: str
     amount: float
     match_score: int
+
+
+# ---------------------------------------------------------------------------
+# Unified transaction models (cross-source list + analytics)
+# ---------------------------------------------------------------------------
+
+class UnifiedTransaction(BaseModel):
+    """A single row in the unified transaction list (bank | cash | receipt)."""
+    id: int
+    source_type: str           # 'bank' | 'cash' | 'receipt'
+    date: str                  # ISO date string
+    amount: float
+    description: str | None = None
+    vendor_name: str | None = None
+    category_id: int | None = None
+    category_name: str | None = None
+    category_group_name: str | None = None
+    tags: list[str] = []
+    status: str
+    has_receipt: bool = False  # True when bank/cash row has a linked receipt
+    receipt_scan_id: int | None = None  # set when has_receipt=True or source_type='receipt'
+    currency: str = "PLN"
+    receipt_category_name: str | None = None  # top category from linked receipt items
+    receipt_category_count: int | None = None  # total distinct categories from linked receipt
+    receipt_categories: list['ReceiptCategory'] | None = None  # full list of categories from linked receipt
+
+
+class MonthlySummary(BaseModel):
+    """Aggregated expenses and incomes for a single calendar month."""
+    month: str     # 'YYYY-MM'
+    expense: float
+    income: float
+
+
+class CategoryBreakdown(BaseModel):
+    """Spending total for a single category or category group."""
+    name: str
+    group_name: str | None = None
+    total: float
+
+
+class VendorBreakdown(BaseModel):
+    """Spending total for a single vendor."""
+    vendor_name: str
+    total: float
+
+
+class MonthOverMonth(BaseModel):
+    """Month-over-month expense comparison."""
+    current: float
+    previous: float
+    change_pct: float
+
+
+class AnalyticsSummary(BaseModel):
+    """Full analytics payload returned by GET /transactions/analytics."""
+    total_expense: float
+    total_income: float
+    transaction_count: int
+    monthly_totals: list[MonthlySummary]
+    by_category_group: list[CategoryBreakdown]
+    by_vendor: list[VendorBreakdown]
+    by_category: list[CategoryBreakdown]
+    month_over_month: MonthOverMonth

@@ -6,9 +6,9 @@ from __future__ import annotations
 import datetime
 import json
 from decimal import Decimal
-from typing import Optional
+from typing import Optional, List
 
-from ..data import BankTransactionListItem, BankTransactionDetail
+from ..data import BankTransactionListItem, BankTransactionDetail, ReceiptCategory
 from ..services.bank_csv_parser import BankTransactionRow
 
 
@@ -79,16 +79,22 @@ class BankTransactionsRepository:
             print(f"BankTransactionsRepository.update_candidates error: {e}")
             self.conn.rollback()
 
-    def confirm(self, transaction_id: int, category_id: int) -> None:
-        """Mark transaction as done and save chosen category."""
+    def confirm(self, transaction_id: int, category_id: Optional[int] = None) -> None:
+        """Mark transaction as done. Saves category only if provided (skip when receipt-linked)."""
         if not self.conn:
             return
         try:
             with self.conn.cursor() as cur:
-                cur.execute(
-                    "UPDATE bank_transactions SET status = 'done', category_id = %s WHERE id = %s",
-                    (category_id, transaction_id),
-                )
+                if category_id is not None:
+                    cur.execute(
+                        "UPDATE bank_transactions SET status = 'done', category_id = %s WHERE id = %s",
+                        (category_id, transaction_id),
+                    )
+                else:
+                    cur.execute(
+                        "UPDATE bank_transactions SET status = 'done' WHERE id = %s",
+                        (transaction_id,),
+                    )
             self.conn.commit()
         except Exception as e:
             print(f"BankTransactionsRepository.confirm error: {e}")
@@ -171,6 +177,24 @@ class BankTransactionsRepository:
                            bt.counterparty, bt.description, bt.amount, bt.currency,
                            bt.operation_type, bt.status, bt.category_id, c.name,
                            bt.tags,
+                           (
+                               SELECT CONCAT_WS(' / ', cg2.name, pc.name, cat.name)
+                               FROM receipt_bank_links rbl2
+                               JOIN receipt_transaction_items rti ON rti.transaction_id = rbl2.receipt_transaction_id
+                               JOIN categories cat ON cat.id = rti.category_id
+                               LEFT JOIN category_groups cg2 ON cg2.id = cat.category_group_id
+                               LEFT JOIN categories pc ON pc.id = cat.parent_id
+                               WHERE rbl2.bank_transaction_id = bt.id
+                               GROUP BY cat.id, cat.name, cg2.name, pc.name
+                               ORDER BY COUNT(*) DESC
+                               LIMIT 1
+                           ) AS receipt_category_name,
+                           (
+                               SELECT COUNT(DISTINCT rti.category_id)
+                               FROM receipt_bank_links rbl2
+                               JOIN receipt_transaction_items rti ON rti.transaction_id = rbl2.receipt_transaction_id
+                               WHERE rbl2.bank_transaction_id = bt.id
+                           ) AS receipt_category_count,
                            COUNT(*) OVER () AS total_count
                     FROM bank_transactions bt
                     LEFT JOIN categories c ON c.id = bt.category_id
@@ -181,7 +205,7 @@ class BankTransactionsRepository:
                     params + [limit, offset],
                 )
                 rows = cur.fetchall()
-            total = int(rows[0][12]) if rows else 0
+            total = int(rows[0][14]) if rows else 0
             return [
                 BankTransactionListItem(
                     id=r[0],
@@ -196,6 +220,8 @@ class BankTransactionsRepository:
                     category_id=r[9],
                     category_name=r[10],
                     tags=list(r[11]) if r[11] else [],
+                    receipt_category_name=r[12],
+                    receipt_category_count=int(r[13]) if r[13] is not None else None,
                 )
                 for r in rows
             ], total
@@ -236,8 +262,28 @@ class BankTransactionsRepository:
                     (transaction_id,),
                 )
                 r = cur.fetchone()
-            if not r:
-                return None
+                if not r:
+                    return None
+                # Fetch per-receipt categories (distinct, ordered by product count desc)
+                cur.execute(
+                    """
+                    SELECT cat.id, CONCAT_WS(' / ', cg2.name, pc.name, cat.name) AS full_path, COUNT(*) AS product_count
+                    FROM receipt_bank_links rbl
+                    JOIN receipt_transaction_items rti ON rti.transaction_id = rbl.receipt_transaction_id
+                    JOIN categories cat ON cat.id = rti.category_id
+                    LEFT JOIN category_groups cg2 ON cg2.id = cat.category_group_id
+                    LEFT JOIN categories pc ON pc.id = cat.parent_id
+                    WHERE rbl.bank_transaction_id = %s
+                    GROUP BY cat.id, cat.name, cg2.name, pc.name
+                    ORDER BY COUNT(*) DESC
+                    """,
+                    (transaction_id,),
+                )
+                cat_rows = cur.fetchall()
+            receipt_categories: List[ReceiptCategory] | None = (
+                [ReceiptCategory(id=cr[0], name=cr[1], product_count=int(cr[2])) for cr in cat_rows]
+                if cat_rows else None
+            )
             return BankTransactionDetail(
                 id=r[0],
                 reference_number=r[1],
@@ -257,6 +303,7 @@ class BankTransactionsRepository:
                 category_candidates=r[15],
                 vendor_id=r[16],
                 tags=list(r[17]) if r[17] else [],
+                receipt_categories=receipt_categories,
             )
         except Exception as e:
             print(f"BankTransactionsRepository.get_by_id error: {e}")
@@ -323,6 +370,20 @@ class BankTransactionsRepository:
 
     def dispose(self) -> None:
         pass
+
+    def delete(self, tx_id: int) -> bool:
+        """Delete a bank transaction by id."""
+        if not self.conn:
+            return False
+        try:
+            with self.conn.cursor() as cur:
+                cur.execute("DELETE FROM bank_transactions WHERE id = %s", (tx_id,))
+            self.conn.commit()
+            return True
+        except Exception as e:
+            print(f"BankTransactionsRepository.delete error: {e}")
+            self.conn.rollback()
+            return False
 
     def update_tags(self, tx_id: int, tags: list[str]) -> bool:
         if not self.conn:

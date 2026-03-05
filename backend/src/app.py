@@ -24,6 +24,7 @@ from .repositories.bank_transactions import BankTransactionsRepository
 from .repositories.bank_receipt_links import BankReceiptLinksRepository
 from .repositories.cash_transactions import CashTransactionsRepository
 from .repositories.cash_receipt_links import CashReceiptLinksRepository
+from .repositories.unified_transactions import UnifiedTransactionsRepository
 from .data import (
     ReceiptsScanStatus,
     TransactionModel,
@@ -58,6 +59,8 @@ from .data import (
     CashReceiptLinkInfo,
     CashLinkInfo,
     CashTxCandidateItem,
+    UnifiedTransaction,
+    AnalyticsSummary,
 )
 from .db_contexts.eye_budget import EyeBudgetDbContext
 
@@ -81,6 +84,7 @@ class App(ABC):
         self.bank_receipt_links_repository = BankReceiptLinksRepository(self.eye_budget_db_context)
         self.cash_transactions_repository = CashTransactionsRepository(self.eye_budget_db_context)
         self.cash_receipt_links_repository = CashReceiptLinksRepository(self.eye_budget_db_context)
+        self.unified_transactions_repository = UnifiedTransactionsRepository(self.eye_budget_db_context)
 
         # Core services
         self.ocr_service = OCRService()
@@ -715,8 +719,12 @@ class App(ABC):
     def confirm_bank_transaction(
         self, tx_id: int, request: ConfirmBankTransactionRequest
     ) -> BankTransactionDetail | None:
-        self.bank_transactions_repository.confirm(tx_id, request.category_id)
-        return self.bank_transactions_repository.get_by_id(tx_id)
+        # If the transaction is linked to a receipt, preserve the existing
+        # category_id (categories come from receipt items) — only advance status.
+        link_data = self.bank_receipt_links_repository.get_receipt_link_info(tx_id)
+        category_id = None if link_data else request.category_id
+        self.bank_transactions_repository.confirm(tx_id, category_id)
+        return self.get_bank_transaction_by_id(tx_id)
 
     def reopen_bank_transaction(self, tx_id: int) -> BankTransactionDetail | None:
         self.bank_transactions_repository.reopen(tx_id)
@@ -885,10 +893,17 @@ class App(ABC):
     def delete_cash_transaction(self, tx_id: int) -> bool:
         return self.cash_transactions_repository.delete(tx_id)
 
+    def delete_bank_transaction(self, tx_id: int) -> bool:
+        return self.bank_transactions_repository.delete(tx_id)
+
     def confirm_cash_transaction(
         self, tx_id: int, request: ConfirmCashTransactionRequest
     ) -> CashTransactionDetail | None:
-        self.cash_transactions_repository.confirm(tx_id, request.category_id)
+        # If the transaction is linked to a receipt, preserve the existing
+        # category_id (categories come from receipt items) — only advance status.
+        link_data = self.cash_receipt_links_repository.get_receipt_link_info(tx_id)
+        category_id = None if link_data else request.category_id
+        self.cash_transactions_repository.confirm(tx_id, category_id)
         return self.get_cash_transaction_by_id(tx_id)
 
     def reopen_cash_transaction(self, tx_id: int) -> CashTransactionDetail | None:
@@ -946,15 +961,15 @@ class App(ABC):
         return self.get_cash_transaction_by_id(tx_id)
 
     def update_cash_transaction_tags(self, tx_id: int, tags: list[str]) -> None:
+        """Update tags for a cash transaction and propagate to linked receipt scan."""
         self.cash_transactions_repository.update_tags(tx_id, tags)
-        """Update tags for a receipt scan and propagate to linked bank transaction."""
-        self.receipts_scans_repository.update_tags(scan_id, tags)
-        bank_tx_id = self.bank_receipt_links_repository.get_bank_tx_id_for_scan(scan_id)
-        if bank_tx_id is not None:
-            tx_tags = self.bank_transactions_repository.get_tags_for_tx(bank_tx_id)
-            merged = sorted(set(tags) | set(tx_tags))
+        link_data = self.cash_receipt_links_repository.get_receipt_link_info(tx_id)
+        if link_data is not None:
+            scan_id = link_data["scan_id"]
+            scan_tags = self.receipts_scans_repository.get_tags_for_scan(scan_id)
+            merged = sorted(set(tags) | set(scan_tags))
+            self.cash_transactions_repository.update_tags(tx_id, merged)
             self.receipts_scans_repository.update_tags(scan_id, merged)
-            self.bank_transactions_repository.update_tags(bank_tx_id, merged)
 
     def update_bank_transaction_tags(self, tx_id: int, tags: list[str]) -> None:
         """Update tags for a bank transaction and propagate to linked receipt."""
@@ -966,6 +981,49 @@ class App(ABC):
             merged = sorted(set(tags) | set(scan_tags))
             self.bank_transactions_repository.update_tags(tx_id, merged)
             self.receipts_scans_repository.update_tags(scan_id, merged)
+
+    # ------------------------------------------------------------------
+    # Unified transactions
+    # ------------------------------------------------------------------
+
+    def get_unified_transactions(
+        self,
+        status=None,
+        source_type=None,
+        date_from=None,
+        date_to=None,
+        category_id=None,
+        tag=None,
+        search=None,
+        amount_min=None,
+        amount_max=None,
+        sort_by="date",
+        sort_dir="desc",
+        limit=50,
+        offset=0,
+    ) -> tuple[list[UnifiedTransaction], int]:
+        return self.unified_transactions_repository.get_list(
+            status=status,
+            source_type=source_type,
+            date_from=date_from,
+            date_to=date_to,
+            category_id=category_id,
+            tag=tag,
+            search=search,
+            amount_min=amount_min,
+            amount_max=amount_max,
+            sort_by=sort_by,
+            sort_dir=sort_dir,
+            limit=limit,
+            offset=offset,
+        )
+
+    def get_transactions_analytics(
+        self, date_from=None, date_to=None
+    ) -> AnalyticsSummary:
+        return self.unified_transactions_repository.get_analytics(
+            date_from=date_from, date_to=date_to
+        )
 
     def get_all_tags(self) -> list[str]:
         """Return all distinct tags used across receipts_scans, bank_transactions, and cash_transactions."""
@@ -1005,6 +1063,7 @@ class App(ABC):
         self.cash_transactions_repository.dispose()
         self.cash_receipt_links_repository.dispose()
         self.ocr_service.dispose()
+        # unified_transactions_repository has no own connection — no dispose needed
         self.minio_service.dispose()
         self.vendors_service.dispose()
         self.products_service.dispose()

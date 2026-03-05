@@ -32,7 +32,7 @@ export default function GroundTruthPage() {
       accessor: (r) => (
         <Link
           href={`/ground-truth/${r.id}`}
-          className="text-[#635bff] hover:underline font-medium"
+          className="text-accent hover:underline font-medium"
         >
           {r.filename}
         </Link>
@@ -110,7 +110,7 @@ export default function GroundTruthPage() {
           <button
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading}
-            className="px-4 py-2 rounded-md bg-[#635bff] text-white text-sm font-medium hover:bg-[#5248db] disabled:opacity-50 transition-colors"
+            className="px-4 py-2 rounded-md bg-accent text-white text-sm font-medium hover:bg-accent-hover disabled:opacity-50 transition-colors"
           >
             {uploading ? "Przesyłanie…" : "Prześlij obraz paragonu"}
           </button>
