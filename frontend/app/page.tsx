@@ -10,7 +10,6 @@ import {
 } from "lucide-react";
 import {
   listUnifiedTransactions,
-  getTransactionsAnalytics,
   confirmBankTransaction,
   confirmCashTransaction,
   updateBankTransactionTags,
@@ -19,10 +18,10 @@ import {
   getAllTags,
 } from "@/lib/api";
 import { UnifiedTransaction } from "@/lib/types";
+import { isoToDisplay } from "@/lib/utils";
 import { DataTable, Column } from "@/components/DataTable";
 import { CategoryDropdown } from "@/components/CategoryDropdown";
 import TagsEditor from "@/components/TagsEditor";
-import { AnalyticsPanel } from "@/components/AnalyticsPanel";
 import {
   StatusBadge,
   SourceBadge,
@@ -34,6 +33,7 @@ import {
   NavLink,
   Pill,
   Amount,
+  DateInput,
 } from "@/components/ui";
 
 // ─── Helpers ───────────────────────────────────────────────────────
@@ -228,8 +228,6 @@ export default function TransactionsPage() {
 
   // ── Date preset ───────────────────────────────────────────────
   const [activePreset, setActivePreset] = useState("12m");
-  const analyticsRange = dateRangeFor(activePreset);
-
   function applyPreset(preset: string) {
     setActivePreset(preset);
     const range = dateRangeFor(preset);
@@ -257,12 +255,6 @@ export default function TransactionsPage() {
     filters.tag,
   ];
 
-  const analyticsKey = [
-    "transactions-analytics",
-    analyticsRange.date_from,
-    analyticsRange.date_to,
-  ];
-
   // ── Data fetching ─────────────────────────────────────────────
   const { data: listData, isFetching } = useQuery({
     queryKey: listKey,
@@ -283,16 +275,6 @@ export default function TransactionsPage() {
       }),
     staleTime: 30_000,
     placeholderData: (prev) => prev,
-  });
-
-  const { data: analyticsData, isLoading: analyticsLoading } = useQuery({
-    queryKey: analyticsKey,
-    queryFn: () =>
-      getTransactionsAnalytics({
-        date_from: analyticsRange.date_from,
-        date_to: analyticsRange.date_to,
-      }),
-    staleTime: 60_000,
   });
 
   const { data: allTags = [] } = useQuery({
@@ -368,7 +350,7 @@ export default function TransactionsPage() {
       header: "Data",
       serverSortKey: "date",
       accessor: (r) => (
-        <span className="font-mono text-xs text-gray-600">{r.date}</span>
+        <span className="font-mono text-xs text-gray-600">{isoToDisplay(r.date)}</span>
       ),
       className: "w-28",
     },
@@ -497,35 +479,30 @@ export default function TransactionsPage() {
               </button>
             ))}
             <div className="w-px h-4 bg-gray-300 mx-1" />
-            <Input
-              type="date"
-              inputSize="xs"
+            <DateInput
               value={filters.date_from}
-              onChange={(e) => {
-                setFilter("date_from", e.target.value);
+              onChange={(iso) => {
+                setFilter("date_from", iso);
                 setActivePreset("custom");
                 setPage(1);
               }}
+              inputSize="xs"
               className="w-32"
             />
             <span className="text-gray-400 text-xs">–</span>
-            <Input
-              type="date"
-              inputSize="xs"
+            <DateInput
               value={filters.date_to}
-              onChange={(e) => {
-                setFilter("date_to", e.target.value);
+              onChange={(iso) => {
+                setFilter("date_to", iso);
                 setActivePreset("custom");
                 setPage(1);
               }}
+              inputSize="xs"
               className="w-32"
             />
           </div>
         }
       />
-
-      {/* ── Analytics panel ─────────────────────────────────────── */}
-      <AnalyticsPanel data={analyticsData} isLoading={analyticsLoading} />
 
       {/* ── Filters ─────────────────────────────────────────────── */}
       <div className="space-y-3">

@@ -7,26 +7,13 @@ import { useRouter } from "next/navigation";
 import { ReceiptImageViewer } from "@/components/ReceiptImageViewer";
 import { ProductCategoryRow } from "@/components/ProductCategoryRow";
 import { CategoryDropdown } from "@/components/CategoryDropdown";
-import { StatusBadge, NavLink, Button, ConfirmDeleteModal, PrevNextNav, SectionLabel, Card, ThreeDotsMenu } from "@/components/ui";
+import { StatusBadge, NavLink, Button, ConfirmDeleteModal, PrevNextNav, SectionLabel, Card, ThreeDotsMenu, DateInput } from "@/components/ui";
+import { isoToDisplay } from "@/lib/utils";
 import { VendorDropdown } from "@/components/VendorDropdown";
 import { ProductDropdown } from "@/components/ProductDropdown";
 import TagsEditor from "@/components/TagsEditor";
 import { BankTxCandidateItem, CashTxCandidateItem, ProductItem, ReceiptTransactionItem } from "@/lib/types";
 import Link from "next/link";
-
-/** Convert YYYY-MM-DD (backend) → DD-MM-YYYY (display) */
-function toDisplayDate(iso: string): string {
-  const [y, m, d] = iso.split("-");
-  if (!y || !m || !d) return iso;
-  return `${d}-${m}-${y}`;
-}
-
-/** Convert DD-MM-YYYY (display) → YYYY-MM-DD (backend) */
-function toIsoDate(display: string): string {
-  const [d, m, y] = display.split("-");
-  if (!d || !m || !y) return display;
-  return `${y}-${m}-${d}`;
-}
 
 export default function ReceiptReviewPage({
   params,
@@ -157,7 +144,7 @@ export default function ReceiptReviewPage({
     if (scan?.result) {
       setProductSearch("");
       setEditedVendor(scan.result.vendor);
-      setEditedDate(toDisplayDate(scan.result.date));
+      setEditedDate(scan.result.date);
       setEditedTotal(scan.result.total.toFixed(2));
       setEditedProducts(scan.result.products);
       setPriceInputs(
@@ -180,7 +167,7 @@ export default function ReceiptReviewPage({
       confirmReceipt(scanId, {
         product_categories: productCategories,
         vendor: editedVendor || undefined,
-        date: editedDate ? toIsoDate(editedDate) : undefined,
+        date: editedDate || undefined,
         total: editedTotal ? parseFloat(editedTotal) : undefined,
         products: editedProducts.length > 0 ? editedProducts : undefined,
         normalized_vendor: editedNormalizedVendor.trim() || undefined,
@@ -509,7 +496,7 @@ export default function ReceiptReviewPage({
                 {scan.transaction.normalized_vendor_name && scan.transaction.normalized_vendor_name !== scan.transaction.raw_vendor_name && (
                   <p className="text-xs text-gray-400">Raw: {scan.transaction.raw_vendor_name}</p>
                 )}
-                <p className="text-sm text-gray-500">{scan.transaction.date}</p>
+                <p className="text-sm text-gray-500">{isoToDisplay(scan.transaction.date)}</p>
               </div>
 
               <div className="space-y-2">
@@ -947,11 +934,11 @@ export default function ReceiptReviewPage({
                 </div>
                 <label className="block text-xs text-gray-600">
                   Data
-                  <input
-                    type="date"
-                    value={toIsoDate(editedDate)}
-                    onChange={(e) => setEditedDate(toDisplayDate(e.target.value))}
-                    className="mt-1 w-full text-sm border border-gray-200 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-accent"
+                  <DateInput
+                    value={editedDate}
+                    onChange={setEditedDate}
+                    inputSize="sm"
+                    className="mt-1 w-full"
                   />
                 </label>
                 <div className="block text-xs text-gray-600">

@@ -14,6 +14,7 @@ import {
   updateBankTransactionTags,
   getAllTags,
 } from "@/lib/api";
+import { isoToDisplay } from "@/lib/utils";
 import {
   BankTransactionListItem,
   BankImportResult,
@@ -267,7 +268,7 @@ function ExpandedRowContent({ tx, allTags = [] }: ExpandedRowProps) {
               >
                 <p className="font-medium text-accent">{receiptLink.vendor_name}</p>
                 <p className="text-gray-500">
-                  {receiptLink.date} · {receiptLink.total.toFixed(2)} PLN
+                  {isoToDisplay(receiptLink.date)} · {receiptLink.total.toFixed(2)} PLN
                 </p>
                 <p className="text-gray-400 font-mono">{receiptLink.scan_filename}</p>
               </Link>
@@ -451,9 +452,11 @@ export default function BankTransactionsPage() {
   const columns: Column<BankTransactionListItem>[] = [
     {
       header: "Data",
-      accessor: "booking_date",
+      accessor: (t) => (
+        <span className="font-mono text-xs text-gray-600">{isoToDisplay(t.booking_date)}</span>
+      ),
       serverSortKey: "booking_date",
-      className: "whitespace-nowrap text-gray-700",
+      className: "whitespace-nowrap",
     },
     {
       header: "Kontrahent / Opis",

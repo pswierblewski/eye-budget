@@ -33,6 +33,71 @@ Data flow: Frontend → Next.js API proxy routes (`frontend/app/api/*/route.ts` 
 - UI text is in **Polish** (`Transakcje`, `Paragony`, `Szczegóły`, etc.).
 - UI components: Radix primitives, Tailwind utilities inline, `clsx`/`tailwind-merge` for conditional classes.
 
+## UI Design System
+
+### Design tokens (`frontend/tailwind.config.ts`)
+```ts
+colors: {
+  accent: { DEFAULT: "#635bff", hover: "#5248db" },
+  sidebar: "#f6f9fc",
+}
+```
+Always use `text-accent`, `bg-accent`, `hover:bg-accent-hover` — never the raw hex values `#635bff` / `#5248db`.
+
+`frontend/app/globals.css` adds `.focus-ring` in `@layer components`:
+```css
+.focus-ring { @apply focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent; }
+```
+
+### Shared UI components (`frontend/components/ui/`)
+All components are re-exported from `frontend/components/ui/index.ts`. **Always import from `@/components/ui`.**
+
+| Component | Usage |
+|---|---|
+| `Button` | variants: `primary/secondary/danger/ghost/dashed`; sizes: `sm/md/lg` |
+| `FilterTabs` | Segmented tab filter — status/source filters on list pages |
+| `PageHeader` | `variant="list"` (text-2xl, list pages) / `variant="detail"` (text-xl, detail pages). Props: `title`, `subtitle`, `actions` |
+| `SectionLabel` | `text-xs font-semibold text-gray-500 uppercase tracking-wide` — card section headings |
+| `Input` / `Textarea` | Focus ring, sizes `xs/sm/md` |
+| `Card` | `rounded-xl border border-gray-200 bg-white`, padding variants `none/sm/md` |
+| `Badge` | `StatusBadge`, `SourceBadge`, `MatchBadge`, `CountBadge` |
+| `Pill` | variants: `tag` (indigo), `category-primary`, `category-secondary` |
+| `Modal` | Fixed overlay, escape + click-outside close, `maxWidth` prop |
+| `ConfirmDeleteModal` | Wraps `Modal`. Props: `open`, `onClose`, `onConfirm`, `title`, `description`, `loading` |
+| `ThreeDotsMenu` | Props: `variant="inline"` (table rows) or `variant="outlined"` (page headers); `items: ThreeDotsMenuItem[]` |
+| `Amount` | `Intl.NumberFormat pl-PL`. Also exports `formatAmount(amount, currency)` utility |
+| `NavLink` | `variant="back"` (ArrowLeft before text) / `variant="forward"` (ArrowRight after text) |
+| `PrevNextNav` | prev/next arrow buttons with disabled state. Props: `hasPrev`, `hasNext`, `onPrev`, `onNext` |
+
+### Key UI patterns
+
+**Delete action** — always via `ThreeDotsMenu` + `ConfirmDeleteModal`. Never `window.confirm`, never inline two-step. The danger item uses `separator: true` to draw a line before it:
+```tsx
+<ThreeDotsMenu variant="outlined" items={[
+  { label: "Usuń X", variant: "danger", separator: true, onClick: () => setShowDeleteModal(true) },
+]} />
+<ConfirmDeleteModal open={showDeleteModal} onClose={...} onConfirm={...} title="Usuń X" description="..." loading={mutation.isPending} />
+```
+Note: `separator` is a property on the item object (draws a line *before* that item), **not** a standalone `{ separator: true }` entry — that fails TypeScript validation.
+
+**Detail page header** — `PageHeader variant="detail"` + `NavLink back` in `subtitle` + `PrevNextNav` + `ThreeDotsMenu outlined` in `actions`:
+```tsx
+<PageHeader variant="detail" title={...}
+  subtitle={<NavLink href="/bank-transactions" label="Transakcje bankowe" variant="back" size="xs" />}
+  actions={<div className="flex items-center gap-2"><PrevNextNav .../><ThreeDotsMenu variant="outlined" .../></div>}
+/>
+```
+
+**List page header** — `PageHeader variant="list"` with action buttons in `actions` slot.
+
+**Status filter** — `FilterTabs` component, not underline tabs or custom segmented buttons.
+
+**Expanded rows** — layout: `<div className="flex gap-8">` with `<div className="flex-1">` (main info) + `<div className="w-96">` (sidebar). Tags in a separate `border-t border-gray-200 mt-4 pt-4` section at the bottom.
+
+**Category pills** — `Pill variant="category-primary"` for first/top, `variant="category-secondary"` for rest. `Pill variant="tag"` for tags.
+
+**CandidateBar** — kept in `frontend/components/BankHelpers.tsx` (only `CandidateBar`; `formatAmount` and `MatchBadge` have been removed — use `Amount`/`formatAmount` from ui and `MatchBadge` from `Badge`).
+
 ## Build & Test
 
 ```bash

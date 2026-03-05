@@ -13,3 +13,4 @@ export type { ThreeDotsMenuItem } from "./ThreeDotsMenu";
 export { Amount, formatAmount } from "./Amount";
 export { NavLink } from "./NavLink";
 export { PrevNextNav } from "./PrevNextNav";
+export { DateInput } from "./DateInput";
