@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   importBankCsv,
+  recategorizeBankTransactions,
   listBankTransactions,
   saveBankTransactionCategory,
   getReceiptCandidates,
@@ -21,7 +22,7 @@ import {
 import { CategoryDropdown } from "@/components/CategoryDropdown";
 import TagsEditor from "@/components/TagsEditor";
 import { getPusher } from "@/lib/pusher";
-import { Upload, ArrowRight } from "lucide-react";
+import { Upload, ArrowRight, RefreshCw } from "lucide-react";
 import { DataTable, Column } from "@/components/DataTable";
 import Link from "next/link";
 import { CandidateBar } from "@/components/BankHelpers";
@@ -319,6 +320,7 @@ export default function BankTransactionsPage() {
   const [importError, setImportError] = useState<string | null>(null);
   const [progress, setProgress] = useState<{ index: number; total: number } | null>(null);
   const [categorizingDone, setCategorizingDone] = useState(false);
+  const [recategorizeInfo, setRecategorizeInfo] = useState<string | null>(null);
   const channelRef = useRef<ReturnType<ReturnType<typeof getPusher>["subscribe"]> | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -398,6 +400,58 @@ export default function BankTransactionsPage() {
     onError: (err: Error) => {
       setImportError(err.message);
       setImportResult(null);
+    },
+  });
+
+  const recategorizeMutation = useMutation({
+    mutationFn: recategorizeBankTransactions,
+    onSuccess: (result) => {
+      if (!result.task_id || result.count === 0) {
+        setRecategorizeInfo("Brak transakcji do kategoryzacji.");
+        return;
+      }
+      setRecategorizeInfo(`Kategoryzacja w toku… (${result.count} transakcji)`);
+      setProgress(null);
+      setCategorizingDone(false);
+
+      const pusher = getPusher();
+      const channel = pusher.subscribe("bank-transactions");
+      channelRef.current = channel;
+
+      channel.bind(
+        "categorization.progress",
+        (data: { task_id: string; index: number; total: number }) => {
+          if (data.task_id !== result.task_id) return;
+          setProgress({ index: data.index, total: data.total });
+        }
+      );
+
+      channel.bind(
+        "categorization.done",
+        (data: { task_id: string; total: number }) => {
+          if (data.task_id !== result.task_id) return;
+          setProgress(null);
+          setCategorizingDone(true);
+          setRecategorizeInfo(null);
+          channel.unbind_all();
+          channel.unsubscribe();
+          queryClient.invalidateQueries({ queryKey: ["bank-transactions"] });
+        }
+      );
+
+      channel.bind(
+        "categorization.error",
+        (data: { task_id: string; error: string }) => {
+          if (data.task_id !== result.task_id) return;
+          setProgress(null);
+          setRecategorizeInfo(`Błąd kategoryzacji: ${data.error}`);
+          channel.unbind_all();
+          channel.unsubscribe();
+        }
+      );
+    },
+    onError: (err: Error) => {
+      setRecategorizeInfo(`Błąd: ${err.message}`);
     },
   });
 
@@ -527,6 +581,9 @@ export default function BankTransactionsPage() {
               <span className="text-gray-700">
                 ✓ Zaimportowano: {importResult.imported}, duplikaty:{" "}
                 {importResult.duplicates}
+                {(importResult.auto_linked ?? 0) > 0 && (
+                  <>, powiązano paragonów: {importResult.auto_linked}</>
+                )}
               </span>
               {progress && (
                 <div className="flex flex-col gap-0.5 min-w-[220px]">
@@ -552,6 +609,13 @@ export default function BankTransactionsPage() {
             <span className="text-sm text-red-600">Błąd: {importError}</span>
           )}
 
+          {/* Recategorize feedback */}
+          {recategorizeInfo && (
+            <span className={`text-sm ${recategorizeInfo.startsWith("Błąd") ? "text-red-600" : "text-gray-500"}`}>
+              {recategorizeInfo}
+            </span>
+          )}
+
           {/* CSV upload button */}
           <input
             ref={fileRef}
@@ -560,6 +624,19 @@ export default function BankTransactionsPage() {
             className="hidden"
             onChange={handleFileChange}
           />
+          <Button
+            variant="secondary"
+            size="md"
+            onClick={() => {
+              setRecategorizeInfo(null);
+              recategorizeMutation.mutate();
+            }}
+            disabled={recategorizeMutation.isPending || !!progress}
+            title="Ponów kategoryzację dla transakcji bez propozycji kategorii i bez powiązanych paragonów"
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${recategorizeMutation.isPending ? "animate-spin" : ""}`} />
+            Ponów kategoryzację
+          </Button>
           <Button
             variant="primary"
             size="md"

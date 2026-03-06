@@ -162,6 +162,116 @@ class BankReceiptLinksRepository:
             print(f"BankReceiptLinksRepository.find_bank_tx_candidates error: {e}")
             return []
 
+    def find_auto_match_receipt(self, bank_transaction_id: int) -> ReceiptCandidate | None:
+        """
+        Return the single best-matching receipt_transaction for the given bank transaction.
+
+        Excludes receipts already linked to any bank transaction OR any cash transaction.
+        Returns None when no match exists.
+        """
+        if not self.conn:
+            return None
+        try:
+            with self.conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT
+                        rt.id                       AS receipt_transaction_id,
+                        rs.id                       AS scan_id,
+                        rs.filename                 AS scan_filename,
+                        COALESCE(v.name, rt.raw_vendor_name) AS vendor_name,
+                        rt.date,
+                        rt.total,
+                        CASE
+                            WHEN bt.vendor_id IS NOT NULL
+                             AND rt.vendor_id IS NOT NULL
+                             AND bt.vendor_id = rt.vendor_id  THEN 3
+                            ELSE 2
+                        END                         AS match_score
+                    FROM bank_transactions bt
+                    JOIN receipt_transactions rt
+                      ON ABS(bt.amount) = rt.total
+                     AND bt.booking_date BETWEEN rt.date - INTERVAL '2 days'
+                                             AND rt.date + INTERVAL '2 days'
+                    JOIN receipts_scans rs ON rs.id = rt.scan_id
+                    LEFT JOIN vendors v ON v.id = rt.vendor_id
+                    LEFT JOIN receipt_bank_links rbl ON rbl.receipt_transaction_id = rt.id
+                    LEFT JOIN receipt_cash_links rcl ON rcl.receipt_transaction_id = rt.id
+                    WHERE bt.id = %s
+                      AND rbl.id IS NULL
+                      AND rcl.id IS NULL
+                    ORDER BY match_score DESC, rt.date DESC
+                    LIMIT 1
+                    """,
+                    (bank_transaction_id,),
+                )
+                r = cur.fetchone()
+            if r is None:
+                return None
+            return ReceiptCandidate(
+                receipt_transaction_id=r[0],
+                scan_id=r[1],
+                scan_filename=r[2],
+                vendor_name=r[3],
+                date=r[4].isoformat() if isinstance(r[4], datetime.date) else str(r[4]),
+                total=float(r[5]),
+                match_score=r[6],
+            )
+        except Exception as e:
+            print(f"BankReceiptLinksRepository.find_auto_match_receipt error: {e}")
+            return None
+
+    def find_auto_match_bank_tx(self, receipt_transaction_id: int) -> BankTxCandidate | None:
+        """
+        Return the single best-matching bank_transaction for the given receipt.
+
+        Excludes bank transactions already linked to any receipt.
+        Returns None when no match exists.
+        """
+        if not self.conn:
+            return None
+        try:
+            with self.conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT
+                        bt.id,
+                        bt.counterparty,
+                        bt.booking_date,
+                        bt.amount,
+                        CASE
+                            WHEN bt.vendor_id IS NOT NULL
+                             AND rt.vendor_id IS NOT NULL
+                             AND bt.vendor_id = rt.vendor_id  THEN 3
+                            ELSE 2
+                        END AS match_score
+                    FROM receipt_transactions rt
+                    JOIN bank_transactions bt
+                      ON ABS(bt.amount) = rt.total
+                     AND bt.booking_date BETWEEN rt.date - INTERVAL '2 days'
+                                             AND rt.date + INTERVAL '2 days'
+                    LEFT JOIN receipt_bank_links rbl ON rbl.bank_transaction_id = bt.id
+                    WHERE rt.id = %s
+                      AND rbl.id IS NULL
+                    ORDER BY match_score DESC, bt.booking_date DESC
+                    LIMIT 1
+                    """,
+                    (receipt_transaction_id,),
+                )
+                r = cur.fetchone()
+            if r is None:
+                return None
+            return BankTxCandidate(
+                bank_transaction_id=r[0],
+                counterparty=r[1],
+                booking_date=r[2].isoformat() if isinstance(r[2], datetime.date) else str(r[2]),
+                amount=float(r[3]),
+                match_score=r[4],
+            )
+        except Exception as e:
+            print(f"BankReceiptLinksRepository.find_auto_match_bank_tx error: {e}")
+            return None
+
     # ------------------------------------------------------------------
     # Link CRUD
     # ------------------------------------------------------------------

@@ -45,6 +45,7 @@ from .data import (
     BankTransactionListItem,
     BankTransactionDetail,
     BankImportResult,
+    RecategorizeBankTransactionsResult,
     UpdateBankTransactionCategoryRequest,
     ReceiptLinkInfo,
     BankLinkInfo,
@@ -523,6 +524,9 @@ class App(ABC):
 
         self.receipts_scans_repository.set_status_done(scan_id)
 
+        # Auto-link to best matching bank/cash transaction (bank has priority)
+        self._auto_link_receipt(scan_id, transaction_id)
+
         # Collect prompt analytics
         self._save_prompt_analytics(scan_id, detail, request, tx_model)
 
@@ -788,7 +792,15 @@ class App(ABC):
 
         # Collect IDs that still need LLM categorization
         new_ids = self.bank_transactions_repository.get_new_ids_for_categorization()
-        return BankImportResult(imported=inserted, duplicates=duplicates, errors=0), new_ids
+
+        # Auto-link newly imported transactions to matching unlinked receipts
+        auto_linked = self._auto_link_bank_transactions(new_ids)
+
+        return BankImportResult(imported=inserted, duplicates=duplicates, errors=0, auto_linked=auto_linked), new_ids
+
+    def get_bank_tx_ids_for_recategorization(self) -> list[int]:
+        """Return IDs of bank transactions that lack category candidates and have no receipt link."""
+        return self.bank_transactions_repository.get_ids_for_recategorization()
 
     def categorize_bank_transactions(self, transaction_ids: list[int]) -> None:
         """Run LLM categorization for the given bank transaction IDs."""
@@ -871,6 +883,83 @@ class App(ABC):
             for c in candidates
         ]
 
+    # ------------------------------------------------------------------
+    # Auto-linking helpers
+    # ------------------------------------------------------------------
+
+    def _auto_link_receipt(self, scan_id: int, receipt_transaction_id: int) -> None:
+        """
+        After receipt confirmation, try to auto-link to a matching transaction.
+
+        Bank transactions have priority. Falls back to cash if no bank match found.
+        Applies the same tag-merge logic as manual linking.
+        """
+        try:
+            bank = self.bank_receipt_links_repository.find_auto_match_bank_tx(receipt_transaction_id)
+            if bank:
+                ok = self.bank_receipt_links_repository.create_link(
+                    bank_transaction_id=bank.bank_transaction_id,
+                    receipt_transaction_id=receipt_transaction_id,
+                )
+                if ok:
+                    scan_tags = self.receipts_scans_repository.get_tags_for_scan(scan_id)
+                    tx_tags = self.bank_transactions_repository.get_tags_for_tx(bank.bank_transaction_id)
+                    merged = sorted(set(scan_tags) | set(tx_tags))
+                    self.receipts_scans_repository.update_tags(scan_id, merged)
+                    self.bank_transactions_repository.update_tags(bank.bank_transaction_id, merged)
+                return
+            cash = self.cash_receipt_links_repository.find_auto_match_cash_tx(receipt_transaction_id)
+            if cash:
+                self.cash_receipt_links_repository.create_link(
+                    cash_transaction_id=cash["cash_transaction_id"],
+                    receipt_transaction_id=receipt_transaction_id,
+                )
+        except Exception as e:
+            print(f"Warning: _auto_link_receipt failed for scan {scan_id}: {e}")
+
+    def _auto_link_bank_transactions(self, tx_ids: list[int]) -> int:
+        """
+        For each newly imported bank transaction, try to auto-link the best unlinked receipt.
+
+        Returns the number of links created.
+        """
+        linked = 0
+        for tx_id in tx_ids:
+            try:
+                match = self.bank_receipt_links_repository.find_auto_match_receipt(tx_id)
+                if match:
+                    ok = self.bank_receipt_links_repository.create_link(
+                        bank_transaction_id=tx_id,
+                        receipt_transaction_id=match.receipt_transaction_id,
+                    )
+                    if ok:
+                        scan_tags = self.receipts_scans_repository.get_tags_for_scan(match.scan_id)
+                        tx_tags = self.bank_transactions_repository.get_tags_for_tx(tx_id)
+                        merged = sorted(set(scan_tags) | set(tx_tags))
+                        self.receipts_scans_repository.update_tags(match.scan_id, merged)
+                        self.bank_transactions_repository.update_tags(tx_id, merged)
+                        linked += 1
+            except Exception as e:
+                print(f"Warning: _auto_link_bank_transactions failed for tx {tx_id}: {e}")
+        return linked
+
+    def _auto_link_cash_transaction(self, tx_id: int) -> bool:
+        """
+        After a new manual cash transaction is created, try to auto-link the best unlinked receipt.
+
+        Returns True if a link was created.
+        """
+        try:
+            match = self.cash_receipt_links_repository.find_auto_match_receipt(tx_id)
+            if match:
+                return self.cash_receipt_links_repository.create_link(
+                    cash_transaction_id=tx_id,
+                    receipt_transaction_id=match["receipt_transaction_id"],
+                )
+        except Exception as e:
+            print(f"Warning: _auto_link_cash_transaction failed for tx {tx_id}: {e}")
+        return False
+
     def link_bank_to_receipt(
         self, tx_id: int, request: LinkReceiptRequest
     ) -> BankTransactionDetail | None:
@@ -918,6 +1007,8 @@ class App(ABC):
         )
         if tx_id is None:
             return None
+        # Auto-link to a matching unlinked receipt if one exists
+        self._auto_link_cash_transaction(tx_id)
         return self.get_cash_transaction_by_id(tx_id)
 
     def create_cash_transaction_from_receipt(

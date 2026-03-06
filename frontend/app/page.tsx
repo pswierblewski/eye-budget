@@ -16,8 +16,14 @@ import {
   updateCashTransactionTags,
   updateReceiptTags,
   getAllTags,
+  getReceiptCandidates,
+  getCashReceiptCandidates,
+  linkBankToReceipt,
+  linkCashToReceipt,
+  unlinkBankTransaction,
+  unlinkCashTransaction,
 } from "@/lib/api";
-import { UnifiedTransaction } from "@/lib/types";
+import { UnifiedTransaction, ReceiptCandidateItem } from "@/lib/types";
 import { isoToDisplay } from "@/lib/utils";
 import { DataTable, Column } from "@/components/DataTable";
 import { CategoryDropdown } from "@/components/CategoryDropdown";
@@ -34,7 +40,10 @@ import {
   Pill,
   Amount,
   DateInput,
+  MatchBadge,
+  Button,
 } from "@/components/ui";
+import Link from "next/link";
 
 // ─── Helpers ───────────────────────────────────────────────────────
 function dateRangeFor(preset: string): { date_from: string; date_to: string } {
@@ -61,6 +70,55 @@ function ExpandedRow({
   onCategoryConfirm: (row: UnifiedTransaction, categoryId: number) => void;
   onTagsChange: (row: UnifiedTransaction, tags: string[]) => void;
 }) {
+  const queryClient = useQueryClient();
+  const [showCandidates, setShowCandidates] = useState(false);
+
+  const isLinkable = row.source_type === "bank" || row.source_type === "cash";
+
+  const { data: detail } = useQuery({
+    queryKey: ["tx-detail", row.source_type, row.id],
+    queryFn: () =>
+      row.source_type === "bank"
+        ? fetch(`/api/bank-transactions/${row.id}`).then((r) => r.json())
+        : fetch(`/api/cash-transactions/${row.id}`).then((r) => r.json()),
+    enabled: isLinkable,
+  });
+
+  const { data: candidates = [], isFetching: candidatesLoading } = useQuery<ReceiptCandidateItem[]>({
+    queryKey: ["tx-receipt-candidates", row.source_type, row.id],
+    queryFn: () =>
+      row.source_type === "bank"
+        ? getReceiptCandidates(row.id)
+        : getCashReceiptCandidates(row.id),
+    enabled: showCandidates && isLinkable,
+  });
+
+  const linkMutation = useMutation<unknown, Error, number>({
+    mutationFn: (receiptTxId: number) =>
+      row.source_type === "bank"
+        ? linkBankToReceipt(row.id, receiptTxId)
+        : linkCashToReceipt(row.id, receiptTxId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["tx-detail", row.source_type, row.id] });
+      queryClient.invalidateQueries({ queryKey: ["tx-receipt-candidates", row.source_type, row.id] });
+      setShowCandidates(false);
+    },
+  });
+
+  const unlinkMutation = useMutation<unknown, Error, void>({
+    mutationFn: () =>
+      row.source_type === "bank"
+        ? unlinkBankTransaction(row.id)
+        : unlinkCashTransaction(row.id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["tx-detail", row.source_type, row.id] });
+    },
+  });
+
+  const receiptLink = detail?.receipt_link ?? null;
+
   const detailHref =
     row.source_type === "bank"
       ? `/bank-transactions/${row.id}`
@@ -167,6 +225,81 @@ function ExpandedRow({
           onChange={(tags) => onTagsChange(row, tags)}
         />
       </div>
+
+      {/* ── Receipt linking — only for bank/cash ────────────────── */}
+      {isLinkable && (
+        <div className="mt-4 pt-4 border-t border-gray-200 space-y-1.5">
+          <SectionLabel>Powiązany paragon</SectionLabel>
+
+          {receiptLink ? (
+            <div className="flex items-center justify-between gap-4 rounded-lg border border-green-200 bg-green-50 px-3 py-2">
+              <Link
+                href={`/receipts/${receiptLink.scan_id}`}
+                className="text-xs space-y-0.5 hover:underline min-w-0"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <p className="font-medium text-accent">{receiptLink.vendor_name}</p>
+                <p className="text-gray-500">
+                  {isoToDisplay(receiptLink.date)} · {receiptLink.total.toFixed(2)} PLN
+                </p>
+                <p className="text-gray-400 font-mono">{receiptLink.scan_filename}</p>
+              </Link>
+              <Button
+                variant="danger"
+                size="sm"
+                disabled={unlinkMutation.isPending}
+                onClick={() => unlinkMutation.mutate()}
+                className="shrink-0"
+              >
+                {unlinkMutation.isPending ? "…" : "Odepnij"}
+              </Button>
+            </div>
+          ) : showCandidates ? (
+            candidatesLoading ? (
+              <p className="text-xs text-gray-400 animate-pulse">Szukanie…</p>
+            ) : candidates.length === 0 ? (
+              <p className="text-xs text-gray-400 italic">Nie znaleziono pasujących paragonów.</p>
+            ) : (
+              <div className="space-y-1.5">
+                {candidates.map((c) => (
+                  <div
+                    key={c.receipt_transaction_id}
+                    className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white px-3 py-2"
+                  >
+                    <div className="text-xs space-y-0.5 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium text-gray-800 truncate">{c.vendor_name}</p>
+                        <MatchBadge score={c.match_score} />
+                      </div>
+                      <p className="text-gray-500">
+                        {c.date} · {c.total.toFixed(2)} PLN
+                      </p>
+                      <p className="text-gray-400 font-mono text-[10px] truncate">{c.scan_filename}</p>
+                    </div>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      disabled={linkMutation.isPending}
+                      onClick={() => linkMutation.mutate(c.receipt_transaction_id)}
+                      className="shrink-0"
+                    >
+                      {linkMutation.isPending ? "…" : "Powiąż"}
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )
+          ) : (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setShowCandidates(true)}
+            >
+              Znajdź pasujące paragony
+            </Button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

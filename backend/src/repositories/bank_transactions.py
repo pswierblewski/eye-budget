@@ -280,6 +280,33 @@ class BankTransactionsRepository:
             print(f"BankTransactionsRepository.get_new_ids_for_categorization error: {e}")
             return []
 
+    def get_ids_for_recategorization(self) -> list[int]:
+        """Return IDs of transactions with no category candidates and no linked receipt.
+
+        Used to retry categorization for transactions that failed the initial LLM pass
+        (e.g. due to a transient error) and are not covered by a receipt link.
+        """
+        if not self.conn:
+            return []
+        try:
+            with self.conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT bt.id
+                    FROM bank_transactions bt
+                    WHERE bt.category_candidates IS NULL
+                      AND NOT EXISTS (
+                          SELECT 1 FROM receipt_bank_links rbl
+                          WHERE rbl.bank_transaction_id = bt.id
+                      )
+                    ORDER BY bt.id
+                    """
+                )
+                return [r[0] for r in cur.fetchall()]
+        except Exception as e:
+            print(f"BankTransactionsRepository.get_ids_for_recategorization error: {e}")
+            return []
+
     # ------------------------------------------------------------------
     # Context queries for LLM
     # ------------------------------------------------------------------
