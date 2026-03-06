@@ -283,8 +283,7 @@ Zwróć kandydatów na kategorię z wynikiem pewności dla tej transakcji.
                     SELECT bt.counterparty, bt.description, bt.amount, c.name
                     FROM bank_transactions bt
                     JOIN categories c ON c.id = bt.category_id
-                    WHERE bt.status = 'done'
-                      AND bt.counterparty ILIKE %s
+                    WHERE bt.counterparty ILIKE %s
                     ORDER BY bt.booking_date DESC
                     LIMIT 5
                     """,

@@ -27,6 +27,7 @@ from src.data import (
     BankTransactionListItem,
     BankTransactionDetail,
     BankImportResult,
+    RecategorizeBankTransactionsResult,
     UpdateBankTransactionCategoryRequest,
     ReceiptCandidateItem,
     BankTxCandidateItem,
@@ -541,6 +542,26 @@ async def import_bank_transactions(file: UploadFile = File(...)) -> BankImportRe
             task = categorize_bank_transactions_task.delay(new_ids)
             result.task_id = task.id
         return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        my_app.dispose()
+
+
+@app.post("/bank-transactions/recategorize", response_model=RecategorizeBankTransactionsResult, status_code=202)
+def recategorize_bank_transactions() -> RecategorizeBankTransactionsResult:
+    """Queue LLM categorization for all bank transactions that have no candidates and no receipt link.
+
+    Returns immediately with the Celery task_id and the number of transactions queued.
+    If there is nothing to process, task_id is null and count is 0.
+    """
+    my_app = App()
+    try:
+        ids = my_app.get_bank_tx_ids_for_recategorization()
+        if not ids:
+            return RecategorizeBankTransactionsResult(task_id=None, count=0)
+        task = categorize_bank_transactions_task.delay(ids)
+        return RecategorizeBankTransactionsResult(task_id=task.id, count=len(ids))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     finally:

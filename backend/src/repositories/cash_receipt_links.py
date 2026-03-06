@@ -121,6 +121,116 @@ class CashReceiptLinksRepository:
             print(f"CashReceiptLinksRepository.find_cash_tx_candidates error: {e}")
             return []
 
+    def find_auto_match_receipt(self, cash_transaction_id: int) -> Optional[dict]:
+        """
+        Return the single best-matching receipt_transaction for the given cash transaction.
+
+        Excludes receipts already linked to any bank transaction OR any cash transaction.
+        Returns None when no match exists.
+        """
+        if not self.conn:
+            return None
+        try:
+            with self.conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT
+                        rt.id                       AS receipt_transaction_id,
+                        rs.id                       AS scan_id,
+                        rs.filename                 AS scan_filename,
+                        COALESCE(v.name, rt.raw_vendor_name) AS vendor_name,
+                        rt.date,
+                        rt.total,
+                        CASE
+                            WHEN ct.vendor_id IS NOT NULL
+                             AND rt.vendor_id IS NOT NULL
+                             AND ct.vendor_id = rt.vendor_id  THEN 3
+                            ELSE 2
+                        END AS match_score
+                    FROM cash_transactions ct
+                    JOIN receipt_transactions rt
+                      ON ABS(ct.amount) = rt.total
+                     AND ct.booking_date BETWEEN rt.date - INTERVAL '2 days'
+                                             AND rt.date + INTERVAL '2 days'
+                    JOIN receipts_scans rs ON rs.id = rt.scan_id
+                    LEFT JOIN vendors v ON v.id = rt.vendor_id
+                    LEFT JOIN receipt_cash_links rcl ON rcl.receipt_transaction_id = rt.id
+                    LEFT JOIN receipt_bank_links rbl ON rbl.receipt_transaction_id = rt.id
+                    WHERE ct.id = %s
+                      AND rcl.id IS NULL
+                      AND rbl.id IS NULL
+                    ORDER BY match_score DESC, rt.date DESC
+                    LIMIT 1
+                    """,
+                    (cash_transaction_id,),
+                )
+                r = cur.fetchone()
+            if r is None:
+                return None
+            return dict(
+                receipt_transaction_id=r[0],
+                scan_id=r[1],
+                scan_filename=r[2],
+                vendor_name=r[3],
+                date=r[4].isoformat() if isinstance(r[4], datetime.date) else str(r[4]),
+                total=float(r[5]),
+                match_score=r[6],
+            )
+        except Exception as e:
+            print(f"CashReceiptLinksRepository.find_auto_match_receipt error: {e}")
+            return None
+
+    def find_auto_match_cash_tx(self, receipt_transaction_id: int) -> Optional[dict]:
+        """
+        Return the single best-matching cash_transaction for the given receipt.
+
+        Excludes cash transactions already linked to any receipt.
+        Returns None when no match exists.
+        """
+        if not self.conn:
+            return None
+        try:
+            with self.conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT
+                        ct.id,
+                        ct.description,
+                        ct.booking_date,
+                        ct.amount,
+                        CASE
+                            WHEN ct.vendor_id IS NOT NULL
+                             AND rt.vendor_id IS NOT NULL
+                             AND ct.vendor_id = rt.vendor_id  THEN 3
+                            ELSE 2
+                        END AS match_score
+                    FROM receipt_transactions rt
+                    JOIN cash_transactions ct
+                      ON ABS(ct.amount) = rt.total
+                     AND ct.booking_date BETWEEN rt.date - INTERVAL '2 days'
+                                             AND rt.date + INTERVAL '2 days'
+                    LEFT JOIN receipt_cash_links rcl ON rcl.cash_transaction_id = ct.id
+                    WHERE rt.id = %s
+                      AND rcl.id IS NULL
+                    ORDER BY match_score DESC, ct.booking_date DESC
+                    LIMIT 1
+                    """,
+                    (receipt_transaction_id,),
+                )
+                r = cur.fetchone()
+            if r is None:
+                return None
+            return dict(
+                cash_transaction_id=r[0],
+                description=r[1],
+                booking_date=r[2].isoformat() if isinstance(r[2], datetime.date) else str(r[2]),
+                amount=float(r[3]),
+                match_score=r[4],
+            )
+        except Exception as e:
+            print(f"CashReceiptLinksRepository.find_auto_match_cash_tx error: {e}")
+            return None
+
     # ------------------------------------------------------------------
     # Link CRUD
     # ------------------------------------------------------------------

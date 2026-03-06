@@ -355,6 +355,13 @@ class BankImportResult(BaseModel):
     duplicates: int
     errors: int
     task_id: str | None = None  # Celery task ID for background categorization
+    auto_linked: int = 0        # Number of receipts auto-linked during import
+
+
+class RecategorizeBankTransactionsResult(BaseModel):
+    """Result of a recategorization request."""
+    task_id: str | None = None  # Celery task ID; None when there is nothing to process
+    count: int                  # Number of transactions queued for categorization
 
 
 class UpdateTagsRequest(BaseModel):
