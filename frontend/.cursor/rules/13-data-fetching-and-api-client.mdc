@@ -1,0 +1,93 @@
+---
+description: React Query, api.ts client, proxy layer, and real-time Pusher conventions
+globs: ["frontend/**/*.ts", "frontend/**/*.tsx"]
+alwaysApply: false
+---
+
+# Data Fetching and API Client
+
+## React Query
+
+All client-side data fetching uses **@tanstack/react-query v5** via `useQuery` and `useMutation`.
+`QueryProvider` is mounted in `app/layout.tsx` and wraps the entire app.
+
+```tsx
+// reads
+const { data, isLoading } = useQuery({
+  queryKey: ["bank-transactions", filters],
+  queryFn: () => listBankTransactions(filters),
+});
+
+// writes
+const mutation = useMutation({
+  mutationFn: (payload) => updateBankTransaction(id, payload),
+  onSuccess: () => queryClient.invalidateQueries({ queryKey: ["bank-transactions"] }),
+});
+```
+
+- After a mutation succeeds, always call `queryClient.invalidateQueries()` to keep the cache fresh.
+- Use `useQueryClient()` to get the client inside components.
+
+## lib/api.ts — the single API client
+
+**Every** client-side API call must go through a typed function in `frontend/lib/api.ts`.
+Do not call `fetch` directly from components or pages.
+
+The generic wrapper is:
+```ts
+apiFetch<T>(url: string, schema: ZodType<T>, options?: RequestInit): Promise<T>
+```
+
+- Add new domain functions alongside existing ones (e.g., `listBankTransactions`, `getBankTransaction`).
+- Response is always validated with `schema.parse(json)` before being returned.
+- Query params are appended via `URLSearchParams`.
+
+## Proxy Layer (server-side)
+
+API route handlers in `app/api/` use `lib/proxy.ts` to reach the backend.
+These helpers run on the server (they read `process.env.BACKEND_URL`).
+
+```ts
+// lib/proxy.ts exports
+proxyGet(req)        // GET — forwards searchParams
+proxyPost(req)       // POST — forwards JSON body
+proxyPut(req)        // PUT — forwards JSON body
+proxyPatch(req)      // PATCH — forwards JSON body
+proxyDelete(req)     // DELETE
+```
+
+The backend URL defaults to `http://localhost:8080` if `BACKEND_URL` is unset.
+**Never hardcode** `http://localhost:8080` anywhere — always read through `backendUrl()`.
+
+## Pagination
+
+- List endpoints use `limit` + `offset` query params.
+- Responses conform to `PaginatedResponse<T>`: `{ items, total, limit, offset }`.
+- The Zod helper `paginatedSchema<T>(itemSchema)` in `lib/types.ts` builds the list response schema.
+
+## Real-time (Pusher / Soketi)
+
+Long-running operations (receipt OCR, CSV bank import) push progress events via Pusher.
+
+- Subscribe to channels inside `useEffect` using the client from `lib/pusher.ts`.
+- Always unsubscribe / unbind in the effect cleanup to avoid memory leaks.
+- Progress events update local state (e.g., a progress bar or status message); on completion, call `queryClient.invalidateQueries()` to refresh the list.
+
+```ts
+// canonical pattern — app/bank-transactions/page.tsx
+useEffect(() => {
+  const channel = pusherClient.subscribe("import-channel");
+  channel.bind("import.progress", handler);
+  return () => { channel.unbind_all(); pusherClient.unsubscribe("import-channel"); };
+}, []);
+```
+
+## Canonical References
+
+- `frontend/lib/api.ts` — `apiFetch`, all domain API functions
+- `frontend/lib/types.ts` — Zod schemas + `paginatedSchema` helper
+- `frontend/lib/proxy.ts` — `proxyGet` / `proxyPost` / etc.
+- `frontend/lib/pusher.ts` — Pusher client initialisation
+- `frontend/components/QueryProvider.tsx` — React Query client setup
+- `frontend/app/bank-transactions/page.tsx` — Pusher usage + list + mutations
+- `frontend/app/bank-transactions/[id]/page.tsx` — detail page with multiple mutations

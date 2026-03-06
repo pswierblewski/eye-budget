@@ -14,6 +14,7 @@ import { ProductDropdown } from "@/components/ProductDropdown";
 import TagsEditor from "@/components/TagsEditor";
 import { BankTxCandidateItem, CashTxCandidateItem, ProductItem, ReceiptTransactionItem } from "@/lib/types";
 import Link from "next/link";
+import { ChevronDown } from "lucide-react";
 
 export default function ReceiptReviewPage({
   params,
@@ -83,6 +84,8 @@ export default function ReceiptReviewPage({
   const menuRef = useRef<HTMLDivElement>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [productSearch, setProductSearch] = useState("");
+  const [sectionOneOpen, setSectionOneOpen] = useState(true);
+  const [sectionTwoOpen, setSectionTwoOpen] = useState(true);
   const [confirmedMenuItemId, setConfirmedMenuItemId] = useState<number | null>(null);
   const [confirmDeleteItemId, setConfirmDeleteItemId] = useState<number | null>(null);
   const confirmedMenuRef = useRef<HTMLDivElement>(null);
@@ -469,6 +472,21 @@ export default function ReceiptReviewPage({
                 </button>
               </div>
 
+              <button
+                type="button"
+                onClick={() => setSectionOneOpen((o) => !o)}
+                className="flex items-center justify-between w-full group"
+              >
+                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide group-hover:text-gray-700 transition-colors">
+                  Powiązania i tagi
+                </span>
+                <ChevronDown
+                  size={14}
+                  className={`text-gray-400 group-hover:text-gray-600 transition-transform ${sectionOneOpen ? "" : "-rotate-90"}`}
+                />
+              </button>
+
+              {sectionOneOpen && (<>
               {/* Bank transaction link section */}
               <div className="rounded-xl border border-gray-200 p-4 space-y-2">
                 <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
@@ -657,7 +675,23 @@ export default function ReceiptReviewPage({
                   allTags={allTags}
                 />
               </div>
+              </>)}
 
+              <button
+                type="button"
+                onClick={() => setSectionTwoOpen((o) => !o)}
+                className="flex items-center justify-between w-full group"
+              >
+                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide group-hover:text-gray-700 transition-colors">
+                  Dane paragonu
+                </span>
+                <ChevronDown
+                  size={14}
+                  className={`text-gray-400 group-hover:text-gray-600 transition-transform ${sectionTwoOpen ? "" : "-rotate-90"}`}
+                />
+              </button>
+
+              {sectionTwoOpen && (<>
               <div className="rounded-xl border border-gray-200 p-4 space-y-1">
                 {(() => {
                   const confirmedCalc = scan.transaction.items.reduce((s, i) => s + i.price, 0);
@@ -720,7 +754,7 @@ export default function ReceiptReviewPage({
                   .map((item) => {
                   const cat = allCategories.find((c) => c.id === item.category_id);
                   const catLabel = cat
-                    ? [cat.group_name, cat.parent_name, cat.name].filter(Boolean).join(" / ")
+                    ? [cat.parent_name, cat.name].filter(Boolean).join(" / ")
                     : `Category #${item.category_id}`;
 
                   if (editingItemId === item.id) {
@@ -918,11 +952,52 @@ export default function ReceiptReviewPage({
                   </div>
                 );
               })()}
+              </>)}
 
             </>
           ) : (
             /* Editable — assign categories (and optionally edit OCR fields) */
             <>
+              <button
+                type="button"
+                onClick={() => setSectionOneOpen((o) => !o)}
+                className="flex items-center justify-between w-full group"
+              >
+                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide group-hover:text-gray-700 transition-colors">
+                  Tagi
+                </span>
+                <ChevronDown
+                  size={14}
+                  className={`text-gray-400 group-hover:text-gray-600 transition-transform ${sectionOneOpen ? "" : "-rotate-90"}`}
+                />
+              </button>
+
+              {sectionOneOpen && (
+                <div className="rounded-xl border border-gray-200 p-4 space-y-2">
+                  <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Tagi</h2>
+                  <TagsEditor
+                    tags={scan.tags ?? []}
+                    onChange={(tags) => tagsMutation.mutate(tags)}
+                    allTags={allTags}
+                  />
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setSectionTwoOpen((o) => !o)}
+                className="flex items-center justify-between w-full group"
+              >
+                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide group-hover:text-gray-700 transition-colors">
+                  Dane paragonu
+                </span>
+                <ChevronDown
+                  size={14}
+                  className={`text-gray-400 group-hover:text-gray-600 transition-transform ${sectionTwoOpen ? "" : "-rotate-90"}`}
+                />
+              </button>
+
+              {sectionTwoOpen && (<>
               {/* Top-level OCR fields — always editable */}
               <div className="rounded-xl border border-gray-200 p-4 space-y-2">
                 <label className="block text-xs text-gray-600">
@@ -988,16 +1063,6 @@ export default function ReceiptReviewPage({
                     </div>
                   </div>
                 </div>
-              </div>
-
-              {/* Tags section (editable view) */}
-              <div className="rounded-xl border border-gray-200 p-4 space-y-2">
-                <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Tagi</h2>
-                <TagsEditor
-                  tags={scan.tags ?? []}
-                  onChange={(tags) => tagsMutation.mutate(tags)}
-                  allTags={allTags}
-                />
               </div>
 
               <button
@@ -1187,6 +1252,7 @@ export default function ReceiptReviewPage({
                   Błąd zapisu. Spróbuj ponownie.
                 </p>
               )}
+              </>)}
             </>
           )}
         </div>

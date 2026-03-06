@@ -1,0 +1,75 @@
+---
+description: Next.js 14 App Router conventions — routing, layouts, API proxy handlers
+globs: ["frontend/app/**/*.ts", "frontend/app/**/*.tsx"]
+alwaysApply: false
+---
+
+# Next.js Architecture
+
+## Router
+
+- **App Router only.** There is no `pages/` directory and it must never be created.
+- File-based routing lives entirely in `frontend/app/`.
+
+## Page Components
+
+- All page and leaf route components are **`"use client"`** — they use React Query for data and local `useState` for UI state.
+- Do not use React Server Components for pages that display dynamic data.
+- Dynamic route params are typed as `{ params: { id: string } }` in the page props.
+
+```tsx
+// canonical pattern — app/bank-transactions/[id]/page.tsx
+"use client";
+export default function BankTransactionPage({ params }: { params: { id: string } }) { … }
+```
+
+## Root Layout
+
+- `app/layout.tsx` is the single root layout. It wraps `<QueryProvider>` and `<Sidebar>`.
+- **Do not add new providers** anywhere else — place them here if a new global provider is needed.
+- `<html lang="en">` is set in the root layout; do not add another `<html>` tag.
+
+## API Route Handlers (proxy layer)
+
+- Every Next.js API route in `app/api/` is a **thin proxy**. Its only job is to call one of the helpers from `lib/proxy.ts` and return the result.
+- Use `proxyGet`, `proxyPost`, `proxyPut`, `proxyPatch`, `proxyDelete` from `@/lib/proxy`.
+- Forward `searchParams` for GET list endpoints:
+
+```ts
+// canonical pattern — app/api/bank-transactions/route.ts
+import { proxyGet } from "@/lib/proxy";
+export async function GET(req: Request) {
+  return proxyGet(req);
+}
+```
+
+- For endpoints with a path parameter, use `NextRequest` and pass the id explicitly:
+
+```ts
+// app/api/receipts/[id]/route.ts
+import { proxyGet, proxyDelete } from "@/lib/proxy";
+export async function GET(_: Request, { params }: { params: { id: string } }) {
+  return proxyGet(_, { pathSuffix: params.id });
+}
+```
+
+- **Never add business logic** to route handlers — validation, transformation, or DB calls all belong in the backend.
+
+## Path Alias
+
+- `@/*` maps to `frontend/*` (configured in `tsconfig.json`).
+- Use the alias for all intra-project imports: `@/lib/api`, `@/components/ui`, etc.
+
+## Navigation
+
+- Internal navigation uses Next.js `<Link>` — do not use `<a href>` for internal routes.
+- Programmatic navigation uses `useRouter()` from `next/navigation`.
+
+## Canonical References
+
+- `frontend/app/layout.tsx` — root layout with providers
+- `frontend/app/bank-transactions/page.tsx` — representative list page
+- `frontend/app/bank-transactions/[id]/page.tsx` — representative detail page
+- `frontend/app/api/receipts/[id]/route.ts` — thin proxy with path param
+- `frontend/app/api/bank-transactions/route.ts` — thin proxy forwarding searchParams
+- `frontend/lib/proxy.ts` — all proxy helper implementations

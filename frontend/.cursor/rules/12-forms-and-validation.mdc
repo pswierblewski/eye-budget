@@ -1,0 +1,67 @@
+---
+description: Form patterns, Zod validation, and type inference conventions for the frontend
+globs: ["frontend/**/*.ts", "frontend/**/*.tsx"]
+alwaysApply: false
+---
+
+# Forms and Validation
+
+## No Form Library
+
+This project does **not** use react-hook-form, Formik, or any other form library.
+Forms are built with controlled React inputs and `useState`.
+
+```tsx
+// canonical pattern
+const [name, setName] = useState(initialValue);
+<Input value={name} onChange={(e) => setName(e.target.value)} />
+```
+
+## Zod — the single source of truth for types
+
+All data shapes are defined as **Zod schemas** in `frontend/lib/types.ts`.
+TypeScript types are always **inferred** from schemas — never write a parallel `interface` or `type` alias manually.
+
+```ts
+// in lib/types.ts
+export const receiptSchema = z.object({ … });
+export type Receipt = z.infer<typeof receiptSchema>;
+
+// in a component
+import type { Receipt } from "@/lib/types";
+```
+
+## Schema Composition
+
+- Use the shared `paginatedSchema<T>()` helper from `lib/types.ts` for any list response:
+
+```ts
+export const paginatedReceiptsSchema = paginatedSchema(receiptSchema);
+export type PaginatedReceipts = z.infer<typeof paginatedReceiptsSchema>;
+```
+
+- Keep all schemas in `lib/types.ts`. Do not scatter schema definitions across components or pages.
+
+## Response Validation
+
+- Every API call in `lib/api.ts` validates the JSON response through its Zod schema via `schema.parse(json)`.
+- This means invalid server responses throw at the `apiFetch` call site, not silently produce bad data.
+- Do not bypass validation with `as SomeType` casts on raw fetch responses.
+
+## Input Components
+
+- Use `Input` and `Textarea` from `@/components/ui` for all text fields.
+- Use `DateInput` from `@/components/ui` for date fields (returns ISO string).
+- `Input` accepts an `inputSize` prop (`"sm"` | `"md"` | `"lg"`).
+
+## Optional Fields
+
+- Model optional fields as `z.string().nullable()` or `z.string().optional()` in Zod to match the backend's `Optional[str]` / `str | None`.
+- Handle `null` explicitly in render — do not rely on falsy coercion for `0` or `""`.
+
+## Canonical References
+
+- `frontend/lib/types.ts` — all Zod schemas and inferred types
+- `frontend/lib/api.ts` — `apiFetch<T>` and how `schema.parse()` is used
+- `frontend/app/bank-transactions/[id]/page.tsx` — inline edit state with controlled inputs
+- `frontend/app/receipts/[id]/page.tsx` — complex multi-field edit form

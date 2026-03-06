@@ -223,11 +223,10 @@ class ReceiptScanDetail(BaseModel):
 
 
 class CategoryItem(BaseModel):
-    """A single expense category with parent and group context."""
+    """A single expense category with parent context."""
     id: int
     name: str
     parent_name: str | None = None
-    group_name: str | None = None
 
 
 class ReceiptCategory(BaseModel):
@@ -240,7 +239,6 @@ class ReceiptCategory(BaseModel):
 class CreateCategoryRequest(BaseModel):
     """Request body for creating a new expense category."""
     name: str
-    group_name: str
     parent_id: int | None = None
 
 
@@ -301,11 +299,6 @@ class EvaluationRunDetail(EvaluationRunListItem):
 # Bank transaction models (CSV import)
 # ---------------------------------------------------------------------------
 
-class BankTransactionStatus(StrEnum):
-    TO_CONFIRM = "to_confirm"
-    DONE = "done"
-
-
 class BankTransactionListItem(BaseModel):
     """Lightweight bank transaction for list views."""
     id: int
@@ -316,7 +309,6 @@ class BankTransactionListItem(BaseModel):
     amount: float
     currency: str
     operation_type: str | None = None
-    status: str
     category_id: int | None = None
     category_name: str | None = None
     tags: list[str] = []
@@ -338,7 +330,6 @@ class BankTransactionDetail(BaseModel):
     amount: float
     currency: str
     operation_type: str | None = None
-    status: str
     category_id: int | None = None
     category_name: str | None = None
     category_candidates: list | None = None  # list[CategoryCandidate]
@@ -361,8 +352,8 @@ class UpdateTagsRequest(BaseModel):
     tags: list[str]
 
 
-class ConfirmBankTransactionRequest(BaseModel):
-    """Request body for confirming a bank transaction category."""
+class UpdateBankTransactionCategoryRequest(BaseModel):
+    """Request body for updating the category of a bank transaction."""
     category_id: Optional[int] = None
 
 
@@ -432,11 +423,9 @@ class CashTransactionListItem(BaseModel):
     description: str | None = None
     amount: float
     currency: str
-    status: str
     source: str  # manual | receipt
     category_id: int | None = None
     category_name: str | None = None
-    category_group_name: str | None = None
     vendor_id: int | None = None
     vendor_name: str | None = None
     tags: list[str] = []
@@ -469,8 +458,8 @@ class CashTransactionUpdate(BaseModel):
     vendor_id: int | None = None
 
 
-class ConfirmCashTransactionRequest(BaseModel):
-    """Request body for confirming a cash transaction category."""
+class UpdateCashTransactionCategoryRequest(BaseModel):
+    """Request body for updating the category of a cash transaction."""
     category_id: Optional[int] = None
 
 
@@ -520,7 +509,6 @@ class UnifiedTransaction(BaseModel):
     vendor_name: str | None = None
     category_id: int | None = None
     category_name: str | None = None
-    category_group_name: str | None = None
     tags: list[str] = []
     status: str
     has_receipt: bool = False  # True when bank/cash row has a linked receipt
@@ -539,9 +527,8 @@ class MonthlySummary(BaseModel):
 
 
 class CategoryBreakdown(BaseModel):
-    """Spending total for a single category or category group."""
+    """Spending total for a single category."""
     name: str
-    group_name: str | None = None
     total: float
 
 
@@ -564,7 +551,6 @@ class AnalyticsSummary(BaseModel):
     total_income: float
     transaction_count: int
     monthly_totals: list[MonthlySummary]
-    by_category_group: list[CategoryBreakdown]
     by_vendor: list[VendorBreakdown]
     by_category: list[CategoryBreakdown]
     month_over_month: MonthOverMonth

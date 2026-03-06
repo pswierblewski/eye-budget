@@ -10,8 +10,8 @@ import {
 import { SOURCE_CONFIG } from "@/lib/sourceConfig";
 import {
   listUnifiedTransactions,
-  confirmBankTransaction,
-  confirmCashTransaction,
+  saveBankTransactionCategory,
+  saveCashTransactionCategory,
   updateBankTransactionTags,
   updateCashTransactionTags,
   updateReceiptTags,
@@ -89,12 +89,6 @@ function ExpandedRow({
               <span>
                 <span className="font-medium text-gray-500">Opis: </span>
                 {row.description}
-              </span>
-            )}
-            {row.category_group_name && (
-              <span>
-                <span className="font-medium text-gray-500">Grupa: </span>
-                {row.category_group_name}
               </span>
             )}
             {row.has_receipt && row.receipt_scan_id != null && (
@@ -297,8 +291,8 @@ export default function TransactionsPage() {
       categoryId: number;
     }) => {
       if (row.source_type === "bank")
-        return confirmBankTransaction(row.id, categoryId);
-      return confirmCashTransaction(row.id, categoryId);
+        return saveBankTransactionCategory(row.id, categoryId);
+      return saveCashTransactionCategory(row.id, categoryId);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
@@ -400,9 +394,6 @@ export default function TransactionsPage() {
         return r.category_name ? (
           <span className="text-xs text-gray-700">
             {r.category_name}
-            {r.category_group_name && (
-              <span className="text-gray-400 ml-1">({r.category_group_name})</span>
-            )}
           </span>
         ) : (
           <span className="text-gray-300 text-xs">—</span>
@@ -428,7 +419,7 @@ export default function TransactionsPage() {
       serverSortKey: "status",
       accessor: (r) => (
         <div className="flex items-center gap-1.5">
-          <StatusBadge status={r.status} />
+          {r.source_type === "receipt" && <StatusBadge status={r.status} />}
           {r.has_receipt && (() => {
             const { icon: Icon, style } = SOURCE_CONFIG.receipt;
             return (
@@ -520,12 +511,11 @@ export default function TransactionsPage() {
           <FilterTabs
             tabs={sourceTabs}
             value={filters.source_type}
-            onChange={(v) => { setFilter("source_type", v); setPage(1); }}
-          />
-          <FilterTabs
-            tabs={statusTabs}
-            value={filters.status}
-            onChange={(v) => { setFilter("status", v); setPage(1); }}
+            onChange={(v) => {
+              setFilter("source_type", v);
+              if (v !== "receipt") setFilter("status", "");
+              setPage(1);
+            }}
           />
           <FilterTabs
             tabs={directionTabs}
@@ -570,6 +560,21 @@ export default function TransactionsPage() {
           <span className="ml-auto text-xs text-gray-400">
             {isFetching ? "Ładowanie…" : `${total.toLocaleString("pl-PL")} transakcji`}
           </span>
+        </div>
+
+        {/* Second row: status filter — always rendered to prevent table shift */}
+        <div
+          className={`flex items-center gap-2 h-9 transition-opacity duration-150 ${
+            filters.source_type === "receipt"
+              ? "opacity-100 pointer-events-auto"
+              : "opacity-0 pointer-events-none"
+          }`}
+        >
+          <FilterTabs
+            tabs={statusTabs}
+            value={filters.status}
+            onChange={(v) => { setFilter("status", v); setPage(1); }}
+          />
         </div>
 
         {/* Advanced filter panel */}

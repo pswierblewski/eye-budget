@@ -115,7 +115,7 @@ class UnifiedTransactionsRepository:
                     f"""
                     SELECT
                         id, source_type, date, amount, description,
-                        vendor_name, category_id, category_name, category_group_name,
+                        vendor_name, category_id, category_name,
                         tags, status, has_receipt, receipt_scan_id, currency,
                         receipt_category_name, receipt_category_count,
                         receipt_categories,
@@ -131,21 +131,19 @@ class UnifiedTransactionsRepository:
                             v.name AS vendor_name,
                             bt.category_id,
                             c.name AS category_name,
-                            cg.name AS category_group_name,
                             bt.tags,
                             bt.status,
                             (rbl.bank_transaction_id IS NOT NULL) AS has_receipt,
                             rbl_scan.scan_id AS receipt_scan_id,
                             bt.currency,
                             (
-                                SELECT CONCAT_WS(' / ', cg2.name, pc.name, cat.name)
+                                SELECT CONCAT_WS(' / ', pc.name, cat.name)
                                 FROM receipt_bank_links rbl2
                                 JOIN receipt_transaction_items rti ON rti.transaction_id = rbl2.receipt_transaction_id
                                 JOIN categories cat ON cat.id = rti.category_id
-                                LEFT JOIN category_groups cg2 ON cg2.id = cat.category_group_id
                                 LEFT JOIN categories pc ON pc.id = cat.parent_id
                                 WHERE rbl2.bank_transaction_id = bt.id
-                                GROUP BY cat.id, cat.name, cg2.name, pc.name
+                                GROUP BY cat.id, cat.name, pc.name
                                 ORDER BY COUNT(*) DESC
                                 LIMIT 1
                             ) AS receipt_category_name,
@@ -161,19 +159,17 @@ class UnifiedTransactionsRepository:
                                     ORDER BY cnt DESC
                                 )
                                 FROM (
-                                    SELECT rti.category_id AS cat_id, CONCAT_WS(' / ', cg2.name, pc.name, cat.name) AS cat_name, COUNT(*) AS cnt
+                                    SELECT rti.category_id AS cat_id, CONCAT_WS(' / ', pc.name, cat.name) AS cat_name, COUNT(*) AS cnt
                                     FROM receipt_bank_links rbl2
                                     JOIN receipt_transaction_items rti ON rti.transaction_id = rbl2.receipt_transaction_id
                                     JOIN categories cat ON cat.id = rti.category_id
-                                    LEFT JOIN category_groups cg2 ON cg2.id = cat.category_group_id
                                     LEFT JOIN categories pc ON pc.id = cat.parent_id
                                     WHERE rbl2.bank_transaction_id = bt.id
-                                    GROUP BY rti.category_id, cat.id, cat.name, cg2.name, pc.name
+                                    GROUP BY rti.category_id, cat.id, cat.name, pc.name
                                 ) AS cats
                             ) AS receipt_categories
                         FROM bank_transactions bt
                         LEFT JOIN categories c ON c.id = bt.category_id
-                        LEFT JOIN category_groups cg ON cg.id = c.category_group_id
                         LEFT JOIN vendors v ON v.id = bt.vendor_id
                         LEFT JOIN receipt_bank_links rbl ON rbl.bank_transaction_id = bt.id
                         LEFT JOIN receipt_transactions rbl_scan ON rbl_scan.id = rbl.receipt_transaction_id
@@ -190,21 +186,19 @@ class UnifiedTransactionsRepository:
                             v.name AS vendor_name,
                             ct.category_id,
                             c.name AS category_name,
-                            cg.name AS category_group_name,
                             ct.tags,
                             ct.status,
                             (rcl.cash_transaction_id IS NOT NULL) AS has_receipt,
                             rcl_scan.scan_id AS receipt_scan_id,
                             ct.currency,
                             (
-                                SELECT CONCAT_WS(' / ', cg2.name, pc.name, cat.name)
+                                SELECT CONCAT_WS(' / ', pc.name, cat.name)
                                 FROM receipt_cash_links rcl2
                                 JOIN receipt_transaction_items rti ON rti.transaction_id = rcl2.receipt_transaction_id
                                 JOIN categories cat ON cat.id = rti.category_id
-                                LEFT JOIN category_groups cg2 ON cg2.id = cat.category_group_id
                                 LEFT JOIN categories pc ON pc.id = cat.parent_id
                                 WHERE rcl2.cash_transaction_id = ct.id
-                                GROUP BY cat.id, cat.name, cg2.name, pc.name
+                                GROUP BY cat.id, cat.name, pc.name
                                 ORDER BY COUNT(*) DESC
                                 LIMIT 1
                             ) AS receipt_category_name,
@@ -220,19 +214,17 @@ class UnifiedTransactionsRepository:
                                     ORDER BY cnt DESC
                                 )
                                 FROM (
-                                    SELECT rti.category_id AS cat_id, CONCAT_WS(' / ', cg2.name, pc.name, cat.name) AS cat_name, COUNT(*) AS cnt
+                                    SELECT rti.category_id AS cat_id, CONCAT_WS(' / ', pc.name, cat.name) AS cat_name, COUNT(*) AS cnt
                                     FROM receipt_cash_links rcl2
                                     JOIN receipt_transaction_items rti ON rti.transaction_id = rcl2.receipt_transaction_id
                                     JOIN categories cat ON cat.id = rti.category_id
-                                    LEFT JOIN category_groups cg2 ON cg2.id = cat.category_group_id
                                     LEFT JOIN categories pc ON pc.id = cat.parent_id
                                     WHERE rcl2.cash_transaction_id = ct.id
-                                    GROUP BY rti.category_id, cat.id, cat.name, cg2.name, pc.name
+                                    GROUP BY rti.category_id, cat.id, cat.name, pc.name
                                 ) AS cats
                             ) AS receipt_categories
                         FROM cash_transactions ct
                         LEFT JOIN categories c ON c.id = ct.category_id
-                        LEFT JOIN category_groups cg ON cg.id = c.category_group_id
                         LEFT JOIN vendors v ON v.id = ct.vendor_id
                         LEFT JOIN receipt_cash_links rcl ON rcl.cash_transaction_id = ct.id
                         LEFT JOIN receipt_transactions rcl_scan ON rcl_scan.id = rcl.receipt_transaction_id
@@ -249,7 +241,6 @@ class UnifiedTransactionsRepository:
                             COALESCE(v.name, rt.raw_vendor_name) AS vendor_name,
                             NULL::int AS category_id,
                             NULL::text AS category_name,
-                            NULL::text AS category_group_name,
                             rs.tags,
                             rs.status::text,
                             FALSE AS has_receipt,
@@ -275,7 +266,7 @@ class UnifiedTransactionsRepository:
                 )
                 rows = cur.fetchall()
 
-            total = int(rows[0][17]) if rows else 0
+            total = int(rows[0][16]) if rows else 0
             return [
                 UnifiedTransaction(
                     id=r[0],
@@ -286,17 +277,16 @@ class UnifiedTransactionsRepository:
                     vendor_name=r[5],
                     category_id=r[6],
                     category_name=r[7],
-                    category_group_name=r[8],
-                    tags=list(r[9]) if r[9] else [],
-                    status=r[10],
-                    has_receipt=bool(r[11]),
-                    receipt_scan_id=r[12],
-                    currency=r[13] or "PLN",
-                    receipt_category_name=r[14],
-                    receipt_category_count=int(r[15]) if r[15] is not None else None,
+                    tags=list(r[8]) if r[8] else [],
+                    status=r[9],
+                    has_receipt=bool(r[10]),
+                    receipt_scan_id=r[11],
+                    currency=r[12] or "PLN",
+                    receipt_category_name=r[13],
+                    receipt_category_count=int(r[14]) if r[14] is not None else None,
                     receipt_categories=[
                         ReceiptCategory(id=cat['id'], name=cat['name'], product_count=cat['product_count'])
-                        for cat in (r[16] or [])
+                        for cat in (r[15] or [])
                     ] or None,
                 )
                 for r in rows
@@ -389,40 +379,7 @@ class UnifiedTransactionsRepository:
                     for r in monthly_rows
                 ]
 
-                # ── 3. By category group ─────────────────────────────────
-                cur.execute(
-                    """
-                    SELECT
-                        COALESCE(cg.name, 'Bez kategorii') AS group_name,
-                        COALESCE(SUM(CASE WHEN amount < 0 THEN -amount ELSE 0 END), 0)::float AS total
-                    FROM (
-                        SELECT bt.amount::float AS amount, bt.category_id, bt.booking_date AS date
-                        FROM bank_transactions bt
-                        WHERE bt.booking_date BETWEEN %s AND %s AND bt.amount < 0
-
-                        UNION ALL
-
-                        SELECT ct.amount::float AS amount, ct.category_id, ct.booking_date AS date
-                        FROM cash_transactions ct
-                        LEFT JOIN receipt_cash_links rcl ON rcl.cash_transaction_id = ct.id
-                        WHERE ct.booking_date BETWEEN %s AND %s
-                          AND ct.amount < 0
-                          AND rcl.cash_transaction_id IS NULL
-                    ) t
-                    LEFT JOIN categories c ON c.id = t.category_id
-                    LEFT JOIN category_groups cg ON cg.id = c.category_group_id
-                    GROUP BY group_name
-                    ORDER BY total DESC
-                    LIMIT 10
-                    """,
-                    (date_from, date_to, date_from, date_to),
-                )
-                by_category_group = [
-                    CategoryBreakdown(name=r[0], total=float(r[1]))
-                    for r in cur.fetchall()
-                ]
-
-                # ── 4. By vendor (top 10) ───────────────────────────────
+                # ── 3. By vendor (top 10) ───────────────────────────────
                 cur.execute(
                     """
                     SELECT
@@ -455,12 +412,11 @@ class UnifiedTransactionsRepository:
                     for r in cur.fetchall()
                 ]
 
-                # ── 5. By category (leaf, top 15) ───────────────────────
+                # ── 4b. By category (leaf, top 15) ──────────────────────
                 cur.execute(
                     """
                     SELECT
                         COALESCE(c.name, 'Bez kategorii') AS category_name,
-                        COALESCE(cg.name, '') AS group_name,
                         SUM(-amount)::float AS total
                     FROM (
                         SELECT bt.amount::float, bt.category_id, bt.booking_date AS date
@@ -477,15 +433,14 @@ class UnifiedTransactionsRepository:
                           AND rcl.cash_transaction_id IS NULL
                     ) t
                     LEFT JOIN categories c ON c.id = t.category_id
-                    LEFT JOIN category_groups cg ON cg.id = c.category_group_id
-                    GROUP BY category_name, group_name
+                    GROUP BY category_name
                     ORDER BY total DESC
                     LIMIT 15
                     """,
                     (date_from, date_to, date_from, date_to),
                 )
                 by_category = [
-                    CategoryBreakdown(name=r[0], group_name=r[1] or None, total=float(r[2]))
+                    CategoryBreakdown(name=r[0], total=float(r[1]))
                     for r in cur.fetchall()
                 ]
 
@@ -537,7 +492,6 @@ class UnifiedTransactionsRepository:
                 total_income=total_income,
                 transaction_count=transaction_count,
                 monthly_totals=monthly_totals,
-                by_category_group=by_category_group,
                 by_vendor=by_vendor,
                 by_category=by_category,
                 month_over_month=month_over_month,
@@ -554,7 +508,6 @@ def _empty_analytics() -> AnalyticsSummary:
         total_income=0,
         transaction_count=0,
         monthly_totals=[],
-        by_category_group=[],
         by_vendor=[],
         by_category=[],
         month_over_month=MonthOverMonth(current=0, previous=0, change_pct=0),

@@ -27,7 +27,7 @@ from src.data import (
     BankTransactionListItem,
     BankTransactionDetail,
     BankImportResult,
-    ConfirmBankTransactionRequest,
+    UpdateBankTransactionCategoryRequest,
     ReceiptCandidateItem,
     BankTxCandidateItem,
     LinkReceiptRequest,
@@ -35,7 +35,7 @@ from src.data import (
     CashTransactionDetail,
     CashTransactionCreate,
     CashTransactionUpdate,
-    ConfirmCashTransactionRequest,
+    UpdateCashTransactionCategoryRequest,
     LinkCashReceiptRequest,
     CashTxCandidateItem,
     PaginatedResponse,
@@ -373,16 +373,6 @@ def create_product(request: CreateProductRequest) -> NormalizedProductItem:
 # Categories
 # ------------------------------------------------------------------
 
-@app.get("/categories/groups", response_model=list[str])
-def list_category_groups() -> list[str]:
-    """Return all distinct category group names."""
-    my_app = App()
-    try:
-        return my_app.get_all_category_groups()
-    finally:
-        my_app.dispose()
-
-
 @app.get("/categories", response_model=list[CategoryItem])
 def list_categories() -> list[CategoryItem]:
     """Return all expense categories with parent and group context."""
@@ -398,7 +388,7 @@ def create_category(request: CreateCategoryRequest) -> CategoryItem:
     """Create a new expense category."""
     my_app = App()
     try:
-        result = my_app.create_category(request.name, request.group_name, request.parent_id)
+        result = my_app.create_category(request.name, request.parent_id)
         if result is None:
             raise HTTPException(status_code=500, detail="Failed to create category")
         return result
@@ -555,30 +545,19 @@ async def import_bank_transactions(file: UploadFile = File(...)) -> BankImportRe
         my_app.dispose()
 
 
-@app.get("/bank-transactions/counts")
-def get_bank_transaction_counts() -> dict[str, int]:
-    """Return count of bank transactions per status."""
-    my_app = App()
-    try:
-        return my_app.get_bank_transaction_status_counts()
-    finally:
-        my_app.dispose()
-
-
 @app.get("/bank-transactions", response_model=PaginatedResponse[BankTransactionListItem])
 def list_bank_transactions(
-    status: str | None = None,
     limit: int = 50,
     offset: int = 0,
     sort_by: str = "booking_date",
     sort_dir: str = "desc",
     tag: str | None = None,
 ) -> PaginatedResponse[BankTransactionListItem]:
-    """List bank transactions, paginated, optionally filtered by status."""
+    """List bank transactions, paginated."""
     my_app = App()
     try:
         items, total = my_app.get_all_bank_transactions(
-            status=status, limit=limit, offset=offset, sort_by=sort_by, sort_dir=sort_dir,
+            limit=limit, offset=offset, sort_by=sort_by, sort_dir=sort_dir,
             tag=tag,
         )
         return PaginatedResponse(items=items, total=total, limit=limit, offset=offset)
@@ -611,27 +590,14 @@ def delete_bank_transaction(tx_id: int) -> None:
         my_app.dispose()
 
 
-@app.post("/bank-transactions/{tx_id}/confirm", response_model=BankTransactionDetail)
-def confirm_bank_transaction(
-    tx_id: int, request: ConfirmBankTransactionRequest
+@app.patch("/bank-transactions/{tx_id}/category", response_model=BankTransactionDetail)
+def update_bank_transaction_category(
+    tx_id: int, request: UpdateBankTransactionCategoryRequest
 ) -> BankTransactionDetail:
-    """Confirm a category for a bank transaction and mark it as done."""
+    """Update the category of a bank transaction."""
     my_app = App()
     try:
-        result = my_app.confirm_bank_transaction(tx_id, request)
-        if result is None:
-            raise HTTPException(status_code=404, detail=f"Bank transaction {tx_id} not found")
-        return result
-    finally:
-        my_app.dispose()
-
-
-@app.post("/bank-transactions/{tx_id}/reopen", response_model=BankTransactionDetail)
-def reopen_bank_transaction(tx_id: int) -> BankTransactionDetail:
-    """Reset a confirmed bank transaction back to to_confirm for re-categorization."""
-    my_app = App()
-    try:
-        result = my_app.reopen_bank_transaction(tx_id)
+        result = my_app.update_bank_transaction_category(tx_id, request)
         if result is None:
             raise HTTPException(status_code=404, detail=f"Bank transaction {tx_id} not found")
         return result
@@ -748,30 +714,19 @@ def update_bank_transaction_tags(tx_id: int, request: UpdateTagsRequest) -> Bank
 # Cash Transactions
 # ------------------------------------------------------------------
 
-@app.get("/cash-transactions/counts")
-def get_cash_transaction_counts() -> dict[str, int]:
-    """Return count of cash transactions per status."""
-    my_app = App()
-    try:
-        return my_app.get_cash_transaction_status_counts()
-    finally:
-        my_app.dispose()
-
-
 @app.get("/cash-transactions", response_model=PaginatedResponse[CashTransactionListItem])
 def list_cash_transactions(
-    status: str | None = None,
     limit: int = 50,
     offset: int = 0,
     sort_by: str = "booking_date",
     sort_dir: str = "desc",
     tag: str | None = None,
 ) -> PaginatedResponse[CashTransactionListItem]:
-    """List cash transactions, paginated, optionally filtered by status."""
+    """List cash transactions, paginated."""
     my_app = App()
     try:
         items, total = my_app.get_all_cash_transactions(
-            status=status, limit=limit, offset=offset, sort_by=sort_by, sort_dir=sort_dir,
+            limit=limit, offset=offset, sort_by=sort_by, sort_dir=sort_dir,
             tag=tag,
         )
         return PaginatedResponse(items=items, total=total, limit=limit, offset=offset)
@@ -846,27 +801,14 @@ def delete_cash_transaction(tx_id: int) -> None:
         my_app.dispose()
 
 
-@app.post("/cash-transactions/{tx_id}/confirm", response_model=CashTransactionDetail)
-def confirm_cash_transaction(
-    tx_id: int, request: ConfirmCashTransactionRequest
+@app.patch("/cash-transactions/{tx_id}/category", response_model=CashTransactionDetail)
+def update_cash_transaction_category(
+    tx_id: int, request: UpdateCashTransactionCategoryRequest
 ) -> CashTransactionDetail:
-    """Confirm a category for a cash transaction and mark it as done."""
+    """Update the category of a cash transaction."""
     my_app = App()
     try:
-        result = my_app.confirm_cash_transaction(tx_id, request)
-        if result is None:
-            raise HTTPException(status_code=404, detail=f"Cash transaction {tx_id} not found")
-        return result
-    finally:
-        my_app.dispose()
-
-
-@app.post("/cash-transactions/{tx_id}/reopen", response_model=CashTransactionDetail)
-def reopen_cash_transaction(tx_id: int) -> CashTransactionDetail:
-    """Reset a cash transaction back to to_confirm."""
-    my_app = App()
-    try:
-        result = my_app.reopen_cash_transaction(tx_id)
+        result = my_app.update_cash_transaction_category(tx_id, request)
         if result is None:
             raise HTTPException(status_code=404, detail=f"Cash transaction {tx_id} not found")
         return result

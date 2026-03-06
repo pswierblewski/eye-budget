@@ -1,0 +1,90 @@
+---
+description: FastAPI route conventions, App class lifecycle, service and task patterns
+globs: ["backend/src/**/*.py"]
+alwaysApply: false
+---
+
+# Python Service Conventions
+
+## Route Organization
+
+- **All routes live in `src/main.py`.** Do not create `APIRouter` files or sub-packages for routes.
+- Group routes by domain with comment headers (e.g., `# --- Receipts ---`).
+- Use synchronous handlers by default. Use `async def` only when calling async I/O (e.g., `AsyncOpenAI`, `UploadFile.read()`).
+
+## App Class Lifecycle (per-request)
+
+`App` (in `src/app.py`) is the central orchestration object. It is **instantiated once per HTTP request** and disposed in a `finally` block:
+
+```python
+# canonical pattern — src/main.py handler
+@app.get("/receipts", response_model=PaginatedResponse[ReceiptScanListItem])
+def list_receipts(limit: int = 20, offset: int = 0):
+    my_app = App()
+    try:
+        return my_app.list_receipts(limit=limit, offset=offset)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        my_app.dispose()
+```
+
+- Never store `App()` as a global or module-level object.
+- `App.__init__` creates the DB context, repositories, services, and calls `.build()` on services that need preloading.
+- `App.dispose()` closes the DB connection and any other resources. Always call it.
+
+## Services (`src/services/`)
+
+- One file per service domain (e.g., `ocr.py`, `categories.py`, `vendors.py`).
+- Services receive their dependencies via constructor injection — no globals, no `App()` inside a service.
+- Services that must preload data (e.g., fetching categories from DB) expose a `build()` method that is called in `App.__init__`.
+- Services that hold no external resources implement `dispose()` as `pass`.
+
+```python
+# canonical pattern — src/services/categories.py
+class CategoriesService:
+    def __init__(self, repo: CategoriesRepository, openai: OpenAI):
+        self.repo = repo
+        self.openai = openai
+        self.categories = []
+
+    def build(self):
+        self.categories = self.repo.get_all()
+```
+
+## LLM / OpenAI Tool Calls
+
+- Use `model_json_schema()` on a Pydantic model to generate the function schema for OpenAI tools.
+- Parse the tool call result with `json.loads(tool_call.arguments)`, then construct the Pydantic model.
+- Always handle the case where no tool call is returned (`ValueError` or `None` check).
+
+## Background Tasks (Celery)
+
+- Tasks live in `src/tasks/`. One file per task domain.
+- Every task instantiates `App()` and disposes it in a `finally` block — same pattern as HTTP handlers.
+- Long-running tasks push progress updates via Pusher (`pusher.trigger(...)`).
+- On completion, tasks must also push a final status event (success or failure).
+- HTTP handlers that enqueue tasks return `TaskResponse(task_id=task.id)` with `status_code=202`.
+
+```python
+# canonical pattern — src/tasks/process_receipts.py
+@celery_app.task(bind=True, name="tasks.process_receipts")
+def process_receipt(self, receipt_id: int):
+    my_app = App()
+    try:
+        ...
+    except Exception as e:
+        pusher.trigger(..., "receipt.error", {"id": receipt_id, "error": str(e)})
+        raise
+    finally:
+        my_app.dispose()
+```
+
+## Canonical References
+
+- `backend/src/main.py` — all route definitions and per-request App lifecycle
+- `backend/src/app.py` — App wiring: repositories, services, dispose
+- `backend/src/services/categories.py` — service with `build()` preloading
+- `backend/src/services/ocr.py` — OpenAI tool-call pattern
+- `backend/src/tasks/process_receipts.py` — Celery task with App + Pusher
+- `backend/src/celery_app.py` — Celery + Redis configuration

@@ -1,0 +1,50 @@
+---
+description: Quality gates to check before finishing any change in the monorepo
+globs: ["**/*"]
+alwaysApply: false
+---
+
+# Quality Gates
+
+Apply these checks before considering any change complete.
+
+## TypeScript (frontend)
+
+- TypeScript strict mode is enabled (`"strict": true` in `frontend/tsconfig.json`). All code must type-check.
+- Run `cd frontend && npx tsc --noEmit` to verify — there must be zero errors.
+- Do not use `any` unless you can justify it with a comment explaining why the type is unknowable.
+- Prefer `z.infer<typeof Schema>` over manually duplicated interfaces.
+
+## Python (backend)
+
+- No bare `except Exception` without at minimum a `print(...)` log — silent swallowing of errors is not acceptable.
+- Every write path (INSERT/UPDATE/DELETE) must have `conn.rollback()` in the `except` block and `conn.commit()` on success.
+- Do not return `None` from a function that the caller treats as always-truthy without documenting the `None` case.
+- No hardcoded connection strings, credentials, or ports — always read from `os.environ`.
+
+## Migrations
+
+- One migration = one concern. Do not bundle unrelated changes.
+- File naming: `YYYYMMDD_XX_short-description.sql` (e.g. `20241015_01_add-category-column.sql`).
+- All DDL must use safety guards: `CREATE TABLE IF NOT EXISTS`, `ADD COLUMN IF NOT EXISTS`, `DROP COLUMN IF EXISTS`, `CREATE INDEX IF NOT EXISTS`.
+- Declare ordering with a `-- depends:` comment at the top referencing the previous migration's base name.
+- Never modify an already-applied migration file — create a new one.
+
+## Environment & Secrets
+
+- No hardcoded URLs, API keys, hostnames, or ports in source files.
+- Frontend env: `NEXT_PUBLIC_*` for browser-exposed vars; server-only vars read in Route Handlers only.
+- Backend env: `os.environ.get("VAR", default)` — never `os.environ["VAR"]` without a fallback for optional vars.
+
+## API Consistency
+
+- Any new endpoint must have a corresponding proxy Route Handler in `frontend/app/api/`.
+- Response bodies must always use a declared `response_model=` (backend) and a Zod schema (frontend).
+- Pagination responses must use `PaginatedResponse[T]` shape: `items`, `total`, `limit`, `offset`.
+
+## Canonical References
+
+- `frontend/tsconfig.json` — strict TypeScript config
+- `backend/migrations/20241010_01_receipts_scans.sql` — migration style reference
+- `backend/src/repositories/receipts_scans.py` — commit/rollback pattern
+- `backend/src/data.py` — Pydantic model naming conventions

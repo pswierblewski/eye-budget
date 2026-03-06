@@ -171,12 +171,12 @@ export function AnalyticsPanel({
                   </ResponsiveContainer>
                 </div>
 
-                {/* Pie chart – by category group */}
+                {/* Pie chart – by category (top 10) */}
                 <div>
                   <p className="text-xs font-semibold text-gray-500 mb-3 uppercase tracking-wide">
-                    Wydatki wg grupy kategorii
+                    Wydatki wg kategorii
                   </p>
-                  {(data?.by_category_group?.length ?? 0) === 0 ? (
+                  {(data?.by_category?.length ?? 0) === 0 ? (
                     <div className="h-[220px] flex items-center justify-center text-gray-400 text-sm">
                       Brak danych
                     </div>
@@ -184,7 +184,7 @@ export function AnalyticsPanel({
                     <ResponsiveContainer width="100%" height={220}>
                       <PieChart>
                         <Pie
-                          data={data?.by_category_group}
+                          data={data?.by_category?.slice(0, 10)}
                           dataKey="total"
                           nameKey="name"
                           cx="50%"
@@ -197,7 +197,7 @@ export function AnalyticsPanel({
                           }
                           labelLine={false}
                         >
-                          {data?.by_category_group.map((_, i) => (
+                          {data?.by_category?.slice(0, 10).map((_, i) => (
                             <Cell
                               key={i}
                               fill={PIE_COLORS[i % PIE_COLORS.length]}
@@ -294,10 +294,6 @@ export function AnalyticsPanel({
                           />
                           <Tooltip
                             formatter={(v: number | undefined) => [`${fmt(v ?? 0)} PLN`, "Wydatki"]}
-                            labelFormatter={(label, payload) => {
-                              const group = payload?.[0]?.payload?.group_name;
-                              return group ? `${label} (${group})` : label;
-                            }}
                           />
                           <Bar
                             dataKey="total"

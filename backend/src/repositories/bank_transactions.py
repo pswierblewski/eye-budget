@@ -79,40 +79,19 @@ class BankTransactionsRepository:
             print(f"BankTransactionsRepository.update_candidates error: {e}")
             self.conn.rollback()
 
-    def confirm(self, transaction_id: int, category_id: Optional[int] = None) -> None:
-        """Mark transaction as done. Saves category only if provided (skip when receipt-linked)."""
-        if not self.conn:
-            return
-        try:
-            with self.conn.cursor() as cur:
-                if category_id is not None:
-                    cur.execute(
-                        "UPDATE bank_transactions SET status = 'done', category_id = %s WHERE id = %s",
-                        (category_id, transaction_id),
-                    )
-                else:
-                    cur.execute(
-                        "UPDATE bank_transactions SET status = 'done' WHERE id = %s",
-                        (transaction_id,),
-                    )
-            self.conn.commit()
-        except Exception as e:
-            print(f"BankTransactionsRepository.confirm error: {e}")
-            self.conn.rollback()
-
-    def reopen(self, transaction_id: int) -> None:
-        """Reset transaction back to to_confirm, clearing confirmed category."""
+    def update_category(self, transaction_id: int, category_id: Optional[int]) -> None:
+        """Set or clear the category on a bank transaction."""
         if not self.conn:
             return
         try:
             with self.conn.cursor() as cur:
                 cur.execute(
-                    "UPDATE bank_transactions SET status = 'to_confirm', category_id = NULL WHERE id = %s",
-                    (transaction_id,),
+                    "UPDATE bank_transactions SET category_id = %s WHERE id = %s",
+                    (category_id, transaction_id),
                 )
             self.conn.commit()
         except Exception as e:
-            print(f"BankTransactionsRepository.reopen error: {e}")
+            print(f"BankTransactionsRepository.update_category error: {e}")
             self.conn.rollback()
 
     def link_vendor(self, transaction_id: int, vendor_id: int) -> None:
@@ -136,14 +115,13 @@ class BankTransactionsRepository:
 
     def get_list(
         self,
-        status: Optional[str] = None,
         limit: int = 50,
         offset: int = 0,
         sort_by: str = "booking_date",
         sort_dir: str = "desc",
         tag: Optional[str] = None,
     ) -> tuple[list[BankTransactionListItem], int]:
-        """Return transactions (optionally filtered by status), paginated."""
+        """Return transactions paginated."""
         _SORT_COLS: dict[str, str] = {
             "id": "bt.id",
             "booking_date": "bt.booking_date",
@@ -151,7 +129,6 @@ class BankTransactionsRepository:
             "amount": "bt.amount",
             "operation_type": "bt.operation_type",
             "category_name": "c.name",
-            "status": "bt.status",
         }
         order_expr = _SORT_COLS.get(sort_by, "bt.booking_date")
         # secondary sort by id keeps pages stable
@@ -164,9 +141,6 @@ class BankTransactionsRepository:
             with self.conn.cursor() as cur:
                 conditions: list[str] = []
                 params: list = []
-                if status:
-                    conditions.append("bt.status = %s")
-                    params.append(status)
                 if tag:
                     conditions.append("%s = ANY(bt.tags)")
                     params.append(tag)
@@ -175,17 +149,16 @@ class BankTransactionsRepository:
                     f"""
                     SELECT bt.id, bt.reference_number, bt.booking_date,
                            bt.counterparty, bt.description, bt.amount, bt.currency,
-                           bt.operation_type, bt.status, bt.category_id, c.name,
+                           bt.operation_type, bt.category_id, c.name,
                            bt.tags,
                            (
-                               SELECT CONCAT_WS(' / ', cg2.name, pc.name, cat.name)
+                               SELECT CONCAT_WS(' / ', pc.name, cat.name)
                                FROM receipt_bank_links rbl2
                                JOIN receipt_transaction_items rti ON rti.transaction_id = rbl2.receipt_transaction_id
                                JOIN categories cat ON cat.id = rti.category_id
-                               LEFT JOIN category_groups cg2 ON cg2.id = cat.category_group_id
                                LEFT JOIN categories pc ON pc.id = cat.parent_id
                                WHERE rbl2.bank_transaction_id = bt.id
-                               GROUP BY cat.id, cat.name, cg2.name, pc.name
+                               GROUP BY cat.id, cat.name, pc.name
                                ORDER BY COUNT(*) DESC
                                LIMIT 1
                            ) AS receipt_category_name,
@@ -205,7 +178,7 @@ class BankTransactionsRepository:
                     params + [limit, offset],
                 )
                 rows = cur.fetchall()
-            total = int(rows[0][14]) if rows else 0
+            total = int(rows[0][13]) if rows else 0
             return [
                 BankTransactionListItem(
                     id=r[0],
@@ -216,31 +189,17 @@ class BankTransactionsRepository:
                     amount=float(r[5]),
                     currency=r[6],
                     operation_type=r[7],
-                    status=r[8],
-                    category_id=r[9],
-                    category_name=r[10],
-                    tags=list(r[11]) if r[11] else [],
-                    receipt_category_name=r[12],
-                    receipt_category_count=int(r[13]) if r[13] is not None else None,
+                    category_id=r[8],
+                    category_name=r[9],
+                    tags=list(r[10]) if r[10] else [],
+                    receipt_category_name=r[11],
+                    receipt_category_count=int(r[12]) if r[12] is not None else None,
                 )
                 for r in rows
             ], total
         except Exception as e:
             print(f"BankTransactionsRepository.get_list error: {e}")
             return [], 0
-
-    def get_status_counts(self) -> dict[str, int]:
-        """Return count per status for all bank transactions."""
-        if not self.conn:
-            return {}
-        try:
-            with self.conn.cursor() as cur:
-                cur.execute("SELECT status, COUNT(*) FROM bank_transactions GROUP BY status")
-                rows = cur.fetchall()
-                return {row[0]: int(row[1]) for row in rows}
-        except Exception as e:
-            print(f"BankTransactionsRepository.get_status_counts error: {e}")
-            return {}
 
     def get_by_id(self, transaction_id: int) -> Optional[BankTransactionDetail]:
         """Return full detail for a single transaction."""
@@ -253,7 +212,7 @@ class BankTransactionsRepository:
                     SELECT bt.id, bt.reference_number, bt.booking_date, bt.value_date,
                            bt.counterparty, bt.counterparty_address, bt.source_account,
                            bt.target_account, bt.description, bt.amount, bt.currency,
-                           bt.operation_type, bt.status, bt.category_id, c.name,
+                           bt.operation_type, bt.category_id, c.name,
                            bt.category_candidates, bt.vendor_id, bt.tags
                     FROM bank_transactions bt
                     LEFT JOIN categories c ON c.id = bt.category_id
@@ -267,14 +226,13 @@ class BankTransactionsRepository:
                 # Fetch per-receipt categories (distinct, ordered by product count desc)
                 cur.execute(
                     """
-                    SELECT cat.id, CONCAT_WS(' / ', cg2.name, pc.name, cat.name) AS full_path, COUNT(*) AS product_count
+                    SELECT cat.id, CONCAT_WS(' / ', pc.name, cat.name) AS full_path, COUNT(*) AS product_count
                     FROM receipt_bank_links rbl
                     JOIN receipt_transaction_items rti ON rti.transaction_id = rbl.receipt_transaction_id
                     JOIN categories cat ON cat.id = rti.category_id
-                    LEFT JOIN category_groups cg2 ON cg2.id = cat.category_group_id
                     LEFT JOIN categories pc ON pc.id = cat.parent_id
                     WHERE rbl.bank_transaction_id = %s
-                    GROUP BY cat.id, cat.name, cg2.name, pc.name
+                    GROUP BY cat.id, cat.name, pc.name
                     ORDER BY COUNT(*) DESC
                     """,
                     (transaction_id,),
@@ -297,12 +255,11 @@ class BankTransactionsRepository:
                 amount=float(r[9]),
                 currency=r[10],
                 operation_type=r[11],
-                status=r[12],
-                category_id=r[13],
-                category_name=r[14],
-                category_candidates=r[15],
-                vendor_id=r[16],
-                tags=list(r[17]) if r[17] else [],
+                category_id=r[12],
+                category_name=r[13],
+                category_candidates=r[14],
+                vendor_id=r[15],
+                tags=list(r[16]) if r[16] else [],
                 receipt_categories=receipt_categories,
             )
         except Exception as e:
@@ -346,8 +303,7 @@ class BankTransactionsRepository:
                            bt.amount, c.name AS category_name
                     FROM bank_transactions bt
                     JOIN categories c ON c.id = bt.category_id
-                    WHERE bt.status = 'done'
-                      AND bt.counterparty ILIKE %s
+                    WHERE bt.counterparty ILIKE %s
                     ORDER BY bt.booking_date DESC
                     LIMIT %s
                     """,

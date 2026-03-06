@@ -88,14 +88,12 @@ Zwróć kandydatów na kategorię z wynikiem pewności dla tej transakcji.
         ids = ["category_id"]
         names = ["category_name"]
         parents = ["category_parent_name"]
-        groups = ["category_group_name"]
         for cat in categories:
             ids.append(cat[0])
             names.append(cat[1])
             parents.append(cat[2])
-            groups.append(cat[3])
         self.categories_table = self.markdown_table_service.table(
-            [ids, names, parents, groups]
+            [ids, names, parents]
         )
 
     def assign_candidates(self, tx: BankTransactionDetail) -> list[dict]:

@@ -44,7 +44,7 @@ from .data import (
     BankTransactionListItem,
     BankTransactionDetail,
     BankImportResult,
-    ConfirmBankTransactionRequest,
+    UpdateBankTransactionCategoryRequest,
     ReceiptLinkInfo,
     BankLinkInfo,
     ReceiptCandidateItem,
@@ -54,7 +54,7 @@ from .data import (
     CashTransactionDetail,
     CashTransactionCreate,
     CashTransactionUpdate,
-    ConfirmCashTransactionRequest,
+    UpdateCashTransactionCategoryRequest,
     LinkCashReceiptRequest,
     CashReceiptLinkInfo,
     CashLinkInfo,
@@ -641,13 +641,9 @@ class App(ABC):
         """Return all expense categories."""
         return self.categories_repository.get_all_expense_categories()
 
-    def get_all_category_groups(self) -> list[str]:
-        """Return all distinct category group names."""
-        return self.categories_repository.get_all_groups()
-
-    def create_category(self, name: str, group_name: str, parent_id: int | None) -> CategoryItem | None:
+    def create_category(self, name: str, parent_id: int | None) -> CategoryItem | None:
         """Create a new expense category."""
-        return self.categories_repository.create_category(name, group_name, parent_id)
+        return self.categories_repository.create_category(name, parent_id)
 
     def get_all_evaluation_runs(
         self, limit: int = 50, offset: int = 0, sort_by: str = "id", sort_dir: str = "desc"
@@ -694,18 +690,14 @@ class App(ABC):
                 print(f"LLM categorization failed for bank_transaction {tx_id}: {e}")
 
     def get_all_bank_transactions(
-        self, status: str | None = None, limit: int = 50, offset: int = 0,
+        self, limit: int = 50, offset: int = 0,
         sort_by: str = "booking_date", sort_dir: str = "desc",
         tag: str | None = None,
     ) -> tuple[list[BankTransactionListItem], int]:
         return self.bank_transactions_repository.get_list(
-            status=status, limit=limit, offset=offset, sort_by=sort_by, sort_dir=sort_dir,
+            limit=limit, offset=offset, sort_by=sort_by, sort_dir=sort_dir,
             tag=tag,
         )
-
-    def get_bank_transaction_status_counts(self) -> dict[str, int]:
-        """Return count of bank transactions per status."""
-        return self.bank_transactions_repository.get_status_counts()
 
     def get_bank_transaction_by_id(self, tx_id: int) -> BankTransactionDetail | None:
         detail = self.bank_transactions_repository.get_by_id(tx_id)
@@ -716,18 +708,13 @@ class App(ABC):
             detail.receipt_link = ReceiptLinkInfo(**link_data)
         return detail
 
-    def confirm_bank_transaction(
-        self, tx_id: int, request: ConfirmBankTransactionRequest
+    def update_bank_transaction_category(
+        self, tx_id: int, request: UpdateBankTransactionCategoryRequest
     ) -> BankTransactionDetail | None:
-        # If the transaction is linked to a receipt, preserve the existing
-        # category_id (categories come from receipt items) — only advance status.
+        """Update the category of a bank transaction (skip if receipt-linked)."""
         link_data = self.bank_receipt_links_repository.get_receipt_link_info(tx_id)
-        category_id = None if link_data else request.category_id
-        self.bank_transactions_repository.confirm(tx_id, category_id)
-        return self.get_bank_transaction_by_id(tx_id)
-
-    def reopen_bank_transaction(self, tx_id: int) -> BankTransactionDetail | None:
-        self.bank_transactions_repository.reopen(tx_id)
+        if not link_data:
+            self.bank_transactions_repository.update_category(tx_id, request.category_id)
         return self.get_bank_transaction_by_id(tx_id)
 
     # ------------------------------------------------------------------
@@ -854,17 +841,14 @@ class App(ABC):
         return self.get_cash_transaction_by_id(tx_id)
 
     def get_all_cash_transactions(
-        self, status: str | None = None, limit: int = 50, offset: int = 0,
+        self, limit: int = 50, offset: int = 0,
         sort_by: str = "booking_date", sort_dir: str = "desc",
         tag: str | None = None,
     ) -> tuple[list[CashTransactionListItem], int]:
         return self.cash_transactions_repository.get_list(
-            status=status, limit=limit, offset=offset, sort_by=sort_by, sort_dir=sort_dir,
+            limit=limit, offset=offset, sort_by=sort_by, sort_dir=sort_dir,
             tag=tag,
         )
-
-    def get_cash_transaction_status_counts(self) -> dict[str, int]:
-        return self.cash_transactions_repository.get_status_counts()
 
     def get_cash_transaction_by_id(self, tx_id: int) -> CashTransactionDetail | None:
         detail = self.cash_transactions_repository.get_by_id(tx_id)
@@ -896,18 +880,13 @@ class App(ABC):
     def delete_bank_transaction(self, tx_id: int) -> bool:
         return self.bank_transactions_repository.delete(tx_id)
 
-    def confirm_cash_transaction(
-        self, tx_id: int, request: ConfirmCashTransactionRequest
+    def update_cash_transaction_category(
+        self, tx_id: int, request: UpdateCashTransactionCategoryRequest
     ) -> CashTransactionDetail | None:
-        # If the transaction is linked to a receipt, preserve the existing
-        # category_id (categories come from receipt items) — only advance status.
+        """Update the category of a cash transaction (skip if receipt-linked)."""
         link_data = self.cash_receipt_links_repository.get_receipt_link_info(tx_id)
-        category_id = None if link_data else request.category_id
-        self.cash_transactions_repository.confirm(tx_id, category_id)
-        return self.get_cash_transaction_by_id(tx_id)
-
-    def reopen_cash_transaction(self, tx_id: int) -> CashTransactionDetail | None:
-        self.cash_transactions_repository.reopen(tx_id)
+        if not link_data:
+            self.cash_transactions_repository.update_category(tx_id, request.category_id)
         return self.get_cash_transaction_by_id(tx_id)
 
     def get_receipt_candidates_for_cash_tx(
@@ -959,6 +938,22 @@ class App(ABC):
     def unlink_cash_transaction(self, tx_id: int) -> CashTransactionDetail | None:
         self.cash_receipt_links_repository.delete_link_by_cash_tx(tx_id)
         return self.get_cash_transaction_by_id(tx_id)
+
+    def update_receipt_tags(self, scan_id: int, tags: list[str]) -> None:
+        """Update tags for a receipt scan and propagate to any linked bank/cash transaction."""
+        self.receipts_scans_repository.update_tags(scan_id, tags)
+        bank_tx_id = self.bank_receipt_links_repository.get_bank_tx_id_for_scan(scan_id)
+        if bank_tx_id is not None:
+            bank_tags = self.bank_transactions_repository.get_tags_for_tx(bank_tx_id)
+            merged = sorted(set(tags) | set(bank_tags))
+            self.receipts_scans_repository.update_tags(scan_id, merged)
+            self.bank_transactions_repository.update_tags(bank_tx_id, merged)
+        cash_tx_id = self.cash_receipt_links_repository.get_cash_tx_id_for_scan(scan_id)
+        if cash_tx_id is not None:
+            cash_tags = self.cash_transactions_repository.get_tags_for_tx(cash_tx_id)
+            merged = sorted(set(tags) | set(cash_tags))
+            self.receipts_scans_repository.update_tags(scan_id, merged)
+            self.cash_transactions_repository.update_tags(cash_tx_id, merged)
 
     def update_cash_transaction_tags(self, tx_id: int, tags: list[str]) -> None:
         """Update tags for a cash transaction and propagate to linked receipt scan."""
