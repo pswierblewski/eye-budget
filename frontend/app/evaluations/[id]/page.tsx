@@ -75,10 +75,11 @@ export default function EvaluationDetailPage({
     {
       header: "Plik",
       accessor: (r) => (
-        <span className="font-mono text-xs text-gray-700 max-w-[180px] block truncate" title={r.filename}>
+        <span className="font-mono text-xs text-gray-700" title={r.filename}>
           {r.filename}
         </span>
       ),
+      className: "min-w-[250px]",
       sortValue: (r) => r.filename,
     },
     {

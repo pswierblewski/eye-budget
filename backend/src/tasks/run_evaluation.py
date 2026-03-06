@@ -9,8 +9,8 @@ from ..services.pusher_service import PusherService
 
 
 @celery_app.task(bind=True, name="tasks.run_evaluation")
-def run_evaluation_task(self):
-    """Celery task: run evaluation against all ground truth entries."""
+def run_evaluation_task(self, entry_ids=None):
+    """Celery task: run evaluation against selected (or all) ground truth entries."""
     task_id = self.request.id
     pusher = PusherService()
     my_app = App()
@@ -30,7 +30,7 @@ def run_evaluation_task(self):
 
     try:
         summary = asyncio.run(
-            my_app.evaluation_service.run_evaluation_async(on_progress=on_progress)
+            my_app.evaluation_service.run_evaluation_async(on_progress=on_progress, entry_ids=entry_ids)
         )
         pusher.trigger(
             f"evaluation-{task_id}",

@@ -2,10 +2,12 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { listEvaluations, runEvaluation } from "@/lib/api";
-import { EvaluationRunListItem } from "@/lib/types";
+import { listEvaluations, runEvaluation, listGroundTruth } from "@/lib/api";
+import { EvaluationRunListItem, GroundTruthEntry } from "@/lib/types";
 import { DataTable, Column } from "@/components/DataTable";
+import { Modal } from "@/components/ui";
 import { getPusher } from "@/lib/pusher";
+import { isoToDisplay } from "@/lib/utils";
 import Link from "next/link";
 
 type ProgressState = {
@@ -24,6 +26,8 @@ export default function EvaluationsPage() {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [progress, setProgress] = useState<ProgressState | null>(null);
   const channelRef = useRef<ReturnType<ReturnType<typeof getPusher>["subscribe"]> | null>(null);
+  const [showSelectModal, setShowSelectModal] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     return () => {
@@ -40,8 +44,37 @@ export default function EvaluationsPage() {
   const runs = data?.items ?? [];
   const total = data?.total ?? 0;
 
+  const { data: groundTruthData, isLoading: isLoadingGT } = useQuery({
+    queryKey: ["ground-truth-all"],
+    queryFn: () => listGroundTruth({ limit: 500, sort_by: "filename", sort_dir: "asc" }),
+    enabled: showSelectModal,
+    staleTime: 60_000,
+  });
+  const gtEntries: GroundTruthEntry[] = groundTruthData?.items ?? [];
+
+  function toggleEntry(id: number) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+
+  function toggleAll() {
+    if (selectedIds.size === gtEntries.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(gtEntries.map((e) => e.id)));
+    }
+  }
+
+  function openSelectModal() {
+    setSelectedIds(new Set());
+    setShowSelectModal(true);
+  }
+
   const runMutation = useMutation({
-    mutationFn: runEvaluation,
+    mutationFn: (entryIds: number[]) => runEvaluation(entryIds.length > 0 ? entryIds : undefined),
     onSuccess: ({ task_id }) => {
       setProgress({ index: 0, total: 0, filename: "", status: "running" });
 
@@ -128,13 +161,95 @@ export default function EvaluationsPage() {
           </p>
         </div>
         <button
-          onClick={() => runMutation.mutate()}
+          onClick={openSelectModal}
           disabled={runMutation.isPending || progress?.status === "running"}
           className="px-4 py-2 rounded-md bg-accent text-white text-sm font-medium hover:bg-accent-hover disabled:opacity-50 transition-colors"
         >
           {runMutation.isPending || progress?.status === "running" ? "Trwa ocena…" : "Uruchom ocenę"}
         </button>
       </div>
+
+      {/* Ground truth selection modal */}
+      <Modal
+        open={showSelectModal}
+        onClose={() => setShowSelectModal(false)}
+        maxWidth="lg"
+        className="!max-w-2xl flex flex-col max-h-[80vh]"
+      >
+        <div className="px-6 pt-5 pb-4 flex flex-col gap-4 min-h-0">
+          <div className="flex items-center justify-between shrink-0">
+            <h2 className="text-lg font-bold text-gray-900">Wybierz dane wzorcowe</h2>
+            <button onClick={() => setShowSelectModal(false)} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+          </div>
+
+          {isLoadingGT ? (
+            <p className="text-sm text-gray-400 py-4 text-center">Ładowanie…</p>
+          ) : (
+            <>
+              <div className="flex items-center justify-between shrink-0 border-b border-gray-100 pb-3">
+                <span className="text-sm text-gray-500">
+                  {selectedIds.size} / {gtEntries.length} zaznaczonych
+                </span>
+                <button
+                  onClick={toggleAll}
+                  className="text-sm text-accent hover:underline"
+                >
+                  {selectedIds.size === gtEntries.length ? "Odznacz wszystkie" : "Zaznacz wszystkie"}
+                </button>
+              </div>
+              <div className="overflow-y-auto flex-1 min-h-0">
+                <ul className="divide-y divide-gray-100">
+                  {gtEntries.map((entry) => (
+                    <li
+                      key={entry.id}
+                      onClick={() => toggleEntry(entry.id)}
+                      className="flex items-center gap-3 px-1 py-2.5 cursor-pointer hover:bg-gray-50 rounded"
+                    >
+                      <input
+                        type="checkbox"
+                        readOnly
+                        checked={selectedIds.has(entry.id)}
+                        className="h-4 w-4 rounded border-gray-300 accent-[#635bff] cursor-pointer shrink-0"
+                      />
+                      <span className="font-mono text-xs text-gray-700 flex-1 min-w-0 truncate" title={entry.filename}>
+                        {entry.filename}
+                      </span>
+                      <span className="text-xs text-gray-500 shrink-0 hidden sm:inline">
+                        {entry.ground_truth.vendor ?? "—"}
+                      </span>
+                      <span className="text-xs text-gray-400 font-mono shrink-0 hidden sm:inline">
+                        {entry.ground_truth.date ? isoToDisplay(entry.ground_truth.date) : "—"}
+                      </span>
+                      <span className="text-xs text-gray-500 shrink-0 w-20 text-right hidden sm:inline">
+                        {entry.ground_truth.total != null ? `${entry.ground_truth.total.toFixed(2)} PLN` : "—"}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </>
+          )}
+
+          <div className="flex items-center justify-end gap-3 pt-3 border-t border-gray-100 shrink-0">
+            <button
+              onClick={() => setShowSelectModal(false)}
+              className="px-4 py-2 rounded-md border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 transition-colors"
+            >
+              Anuluj
+            </button>
+            <button
+              onClick={() => {
+                setShowSelectModal(false);
+                runMutation.mutate(Array.from(selectedIds));
+              }}
+              disabled={selectedIds.size === 0}
+              className="px-4 py-2 rounded-md bg-accent text-white text-sm font-medium hover:bg-accent-hover disabled:opacity-50 transition-colors"
+            >
+              Uruchom ocenę ({selectedIds.size})
+            </button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Live progress bar */}
       {progress && (

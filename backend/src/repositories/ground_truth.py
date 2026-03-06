@@ -196,6 +196,30 @@ class GroundTruthRepository(ABC):
             print(f"Failed to get ground truth entries: {e}")
             return [], 0
 
+    def get_by_ids(self, ids: list[int]) -> list[GroundTruthEntry]:
+        """Fetch specific ground truth entries by ID, preserving the given order."""
+        if not ids:
+            return []
+        if not self.conn:
+            print("No database connection available.")
+            return []
+        try:
+            with self.conn.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT id, filename, minio_object_key, ground_truth, created_at, updated_at
+                    FROM evaluation_ground_truth
+                    WHERE id = ANY(%s)
+                    """,
+                    (ids,),
+                )
+                rows = cursor.fetchall()
+                row_map = {row[0]: self._row_to_entry(row) for row in rows}
+                return [row_map[i] for i in ids if i in row_map]
+        except Exception as e:
+            print(f"Failed to get ground truth entries by IDs: {e}")
+            return []
+
     def _row_to_entry(self, row) -> GroundTruthEntry:
         """Convert a database row to a GroundTruthEntry."""
         return GroundTruthEntry(

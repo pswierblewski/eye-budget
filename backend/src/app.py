@@ -25,6 +25,7 @@ from .repositories.bank_receipt_links import BankReceiptLinksRepository
 from .repositories.cash_transactions import CashTransactionsRepository
 from .repositories.cash_receipt_links import CashReceiptLinksRepository
 from .repositories.unified_transactions import UnifiedTransactionsRepository
+from .repositories.prompt_analytics import PromptAnalyticsRepository
 from .data import (
     ReceiptsScanStatus,
     TransactionModel,
@@ -61,6 +62,7 @@ from .data import (
     CashTxCandidateItem,
     UnifiedTransaction,
     AnalyticsSummary,
+    PromptAnalyticsSummary,
 )
 from .db_contexts.eye_budget import EyeBudgetDbContext
 
@@ -85,6 +87,7 @@ class App(ABC):
         self.cash_transactions_repository = CashTransactionsRepository(self.eye_budget_db_context)
         self.cash_receipt_links_repository = CashReceiptLinksRepository(self.eye_budget_db_context)
         self.unified_transactions_repository = UnifiedTransactionsRepository(self.eye_budget_db_context)
+        self.prompt_analytics_repository = PromptAnalyticsRepository(self.eye_budget_db_context)
 
         # Core services
         self.ocr_service = OCRService()
@@ -520,6 +523,9 @@ class App(ABC):
 
         self.receipts_scans_repository.set_status_done(scan_id)
 
+        # Collect prompt analytics
+        self._save_prompt_analytics(scan_id, detail, request, tx_model)
+
         # Auto-save as ground truth (skip silently if already present)
         self.ground_truth_service.create_from_confirmed_receipt(
             filename=detail.filename,
@@ -528,6 +534,113 @@ class App(ABC):
         )
 
         return self.get_receipt_by_id(scan_id)
+
+    def _save_prompt_analytics(
+        self,
+        scan_id: int,
+        detail,
+        request: ConfirmReceiptRequest,
+        tx_model,
+    ) -> None:
+        """Compute and persist prompt quality analytics for a confirmed receipt."""
+        try:
+            # --- Category corrections ---
+            category_corrections = []
+            candidates_raw = detail.categories_candidates or {}
+            # Build a flat lookup: product_name -> top candidate
+            top_candidate_map: dict[str, dict] = {}
+            for entry in candidates_raw.get("category_candidates", []):
+                product_name = entry.get("product_name", "")
+                candidates = entry.get("category_candidates", [])
+                if candidates:
+                    top = max(candidates, key=lambda c: c.get("category_score", 0))
+                    top_candidate_map[product_name] = top
+
+            for raw_name, user_cat_id in request.product_categories.items():
+                top = top_candidate_map.get(raw_name)
+                if top is None:
+                    continue
+                ai_cat_id = top.get("category_id")
+                if ai_cat_id != user_cat_id:
+                    category_corrections.append({
+                        "raw_product_name": raw_name,
+                        "ai_category_id": ai_cat_id,
+                        "ai_category_name": top.get("category_name", ""),
+                        "ai_confidence": top.get("category_score", 0.0),
+                        "user_category_id": user_cat_id,
+                        "user_category_name": "",  # resolved below if needed
+                    })
+
+            # Resolve user category names from the DB
+            if category_corrections:
+                all_categories = {c.id: c.name for c in self.categories_repository.get_all_expense_categories()}
+                for corr in category_corrections:
+                    corr["user_category_name"] = all_categories.get(corr["user_category_id"], "")
+
+            # --- Product name corrections ---
+            product_name_corrections = []
+            ai_normalizations = detail.product_normalizations or {}
+            user_normalizations = request.normalized_products or {}
+            for raw_name, user_norm in user_normalizations.items():
+                ai_norm = ai_normalizations.get(raw_name)
+                if ai_norm and user_norm and ai_norm.lower() != user_norm.lower():
+                    product_name_corrections.append({
+                        "raw_product_name": raw_name,
+                        "ai_normalized_name": ai_norm,
+                        "user_normalized_name": user_norm,
+                    })
+
+            # --- Product count diff ---
+            ocr_products = detail.result.products if detail.result else []
+            confirmed_products = tx_model.products
+            ocr_count = len(ocr_products)
+            confirmed_count = len(confirmed_products)
+
+            ocr_names = {p.name for p in ocr_products}
+            confirmed_names = {p.name for p in confirmed_products}
+            products_added = list(confirmed_names - ocr_names)
+            products_removed = list(ocr_names - confirmed_names)
+
+            details = {
+                "category_corrections": category_corrections,
+                "product_name_corrections": product_name_corrections,
+                "products_added": products_added,
+                "products_removed": products_removed,
+            }
+
+            vendor_name = tx_model.vendor if tx_model else None
+
+            self.prompt_analytics_repository.upsert(
+                scan_id=scan_id,
+                vendor_name=vendor_name,
+                category_corrections_count=len(category_corrections),
+                product_name_corrections_count=len(product_name_corrections),
+                ocr_product_count=ocr_count,
+                confirmed_product_count=confirmed_count,
+                details=details,
+            )
+        except Exception as e:
+            # Analytics must never break confirmation
+            print("Warning: failed to save prompt analytics:", e)
+
+    def get_prompt_analytics(self) -> PromptAnalyticsSummary:
+        """Return aggregated prompt analytics summary with recent rows."""
+        summary = self.prompt_analytics_repository.get_summary()
+        recent = self.prompt_analytics_repository.get_all(limit=50, offset=0)
+        return PromptAnalyticsSummary(
+            total_receipts=summary.get("total_receipts", 0),
+            total_category_corrections=summary.get("total_category_corrections", 0),
+            total_product_name_corrections=summary.get("total_product_name_corrections", 0),
+            receipts_with_added_products=summary.get("receipts_with_added_products", 0),
+            receipts_with_removed_products=summary.get("receipts_with_removed_products", 0),
+            receipts_with_product_count_mismatch=summary.get("receipts_with_product_count_mismatch", 0),
+            avg_category_corrections=summary.get("avg_category_corrections", 0.0),
+            avg_product_name_corrections=summary.get("avg_product_name_corrections", 0.0),
+            avg_ocr_product_count=summary.get("avg_ocr_product_count", 0.0),
+            top_category_confusions=summary.get("top_category_confusions", []),
+            top_product_name_corrections=summary.get("top_product_name_corrections", []),
+            recent=recent,
+        )
 
     def reopen_receipt(self, scan_id: int) -> ReceiptScanDetail | None:
         """
