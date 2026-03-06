@@ -30,15 +30,14 @@ class CashTransactionsRepository:
         """Insert a new cash transaction.  Returns the new ID."""
         if not self.conn:
             return None
-        status = "done" if category_id is not None else "to_confirm"
         try:
             with self.conn.cursor() as cur:
                 cur.execute(
                     """
                     INSERT INTO cash_transactions
                         (booking_date, description, amount, category_id, vendor_id,
-                         source, receipt_scan_id, status)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                         source, receipt_scan_id)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
                     RETURNING id
                     """,
                     (
@@ -49,7 +48,6 @@ class CashTransactionsRepository:
                         vendor_id,
                         source,
                         receipt_scan_id,
-                        status,
                     ),
                 )
                 row = cur.fetchone()
@@ -105,40 +103,19 @@ class CashTransactionsRepository:
             self.conn.rollback()
             return False
 
-    def confirm(self, tx_id: int, category_id: Optional[int] = None) -> None:
-        """Mark transaction as done. Saves category only if provided (skip when receipt-linked)."""
-        if not self.conn:
-            return
-        try:
-            with self.conn.cursor() as cur:
-                if category_id is not None:
-                    cur.execute(
-                        "UPDATE cash_transactions SET status = 'done', category_id = %s WHERE id = %s",
-                        (category_id, tx_id),
-                    )
-                else:
-                    cur.execute(
-                        "UPDATE cash_transactions SET status = 'done' WHERE id = %s",
-                        (tx_id,),
-                    )
-            self.conn.commit()
-        except Exception as e:
-            print(f"CashTransactionsRepository.confirm error: {e}")
-            self.conn.rollback()
-
-    def reopen(self, tx_id: int) -> None:
-        """Reset transaction back to to_confirm, clearing confirmed category."""
+    def update_category(self, tx_id: int, category_id: Optional[int]) -> None:
+        """Set or clear the category on a cash transaction."""
         if not self.conn:
             return
         try:
             with self.conn.cursor() as cur:
                 cur.execute(
-                    "UPDATE cash_transactions SET status = 'to_confirm', category_id = NULL WHERE id = %s",
-                    (tx_id,),
+                    "UPDATE cash_transactions SET category_id = %s WHERE id = %s",
+                    (category_id, tx_id),
                 )
             self.conn.commit()
         except Exception as e:
-            print(f"CashTransactionsRepository.reopen error: {e}")
+            print(f"CashTransactionsRepository.update_category error: {e}")
             self.conn.rollback()
 
     def delete(self, tx_id: int) -> bool:
@@ -192,7 +169,6 @@ class CashTransactionsRepository:
 
     def get_list(
         self,
-        status: Optional[str] = None,
         limit: int = 50,
         offset: int = 0,
         sort_by: str = "booking_date",
@@ -205,7 +181,6 @@ class CashTransactionsRepository:
             "description": "ct.description",
             "amount": "ct.amount",
             "category_name": "c.name",
-            "status": "ct.status",
         }
         order_expr = _SORT_COLS.get(sort_by, "ct.booking_date")
         secondary = "ct.id DESC" if order_expr != "ct.id" else ""
@@ -217,9 +192,6 @@ class CashTransactionsRepository:
             with self.conn.cursor() as cur:
                 conditions: list[str] = []
                 params: list = []
-                if status:
-                    conditions.append("ct.status = %s")
-                    params.append(status)
                 if tag:
                     conditions.append("%s = ANY(ct.tags)")
                     params.append(tag)
@@ -227,19 +199,17 @@ class CashTransactionsRepository:
                 cur.execute(
                     f"""
                     SELECT ct.id, ct.booking_date, ct.description, ct.amount, ct.currency,
-                           ct.status, ct.source, ct.category_id, c.name AS category_name,
-                           cg.name AS category_group_name,
+                           ct.source, ct.category_id, c.name AS category_name,
                            ct.vendor_id, v.name AS vendor_name,
                            ct.tags,
                            (
-                               SELECT CONCAT_WS(' / ', cg2.name, pc.name, cat.name)
+                               SELECT CONCAT_WS(' / ', pc.name, cat.name)
                                FROM receipt_cash_links rcl2
                                JOIN receipt_transaction_items rti ON rti.transaction_id = rcl2.receipt_transaction_id
                                JOIN categories cat ON cat.id = rti.category_id
-                               LEFT JOIN category_groups cg2 ON cg2.id = cat.category_group_id
                                LEFT JOIN categories pc ON pc.id = cat.parent_id
                                WHERE rcl2.cash_transaction_id = ct.id
-                               GROUP BY cat.id, cat.name, cg2.name, pc.name
+                               GROUP BY cat.id, cat.name, pc.name
                                ORDER BY COUNT(*) DESC
                                LIMIT 1
                            ) AS receipt_category_name,
@@ -252,7 +222,6 @@ class CashTransactionsRepository:
                            COUNT(*) OVER () AS total_count
                     FROM cash_transactions ct
                     LEFT JOIN categories c   ON c.id = ct.category_id
-                    LEFT JOIN category_groups cg ON cg.id = c.category_group_id
                     LEFT JOIN vendors v       ON v.id = ct.vendor_id
                     {where}
                     ORDER BY {order_clause}
@@ -261,7 +230,7 @@ class CashTransactionsRepository:
                     params + [limit, offset],
                 )
                 rows = cur.fetchall()
-            total = int(rows[0][15]) if rows else 0
+            total = int(rows[0][13]) if rows else 0
             return [
                 CashTransactionListItem(
                     id=r[0],
@@ -269,34 +238,20 @@ class CashTransactionsRepository:
                     description=r[2],
                     amount=float(r[3]),
                     currency=r[4],
-                    status=r[5],
-                    source=r[6],
-                    category_id=r[7],
-                    category_name=r[8],
-                    category_group_name=r[9],
-                    vendor_id=r[10],
-                    vendor_name=r[11],
-                    tags=list(r[12]) if r[12] else [],
-                    receipt_category_name=r[13],
-                    receipt_category_count=int(r[14]) if r[14] is not None else None,
+                    source=r[5],
+                    category_id=r[6],
+                    category_name=r[7],
+                    vendor_id=r[8],
+                    vendor_name=r[9],
+                    tags=list(r[10]) if r[10] else [],
+                    receipt_category_name=r[11],
+                    receipt_category_count=int(r[12]) if r[12] is not None else None,
                 )
                 for r in rows
             ], total
         except Exception as e:
             print(f"CashTransactionsRepository.get_list error: {e}")
             return [], 0
-
-    def get_status_counts(self) -> dict[str, int]:
-        if not self.conn:
-            return {}
-        try:
-            with self.conn.cursor() as cur:
-                cur.execute("SELECT status, COUNT(*) FROM cash_transactions GROUP BY status")
-                rows = cur.fetchall()
-                return {row[0]: int(row[1]) for row in rows}
-        except Exception as e:
-            print(f"CashTransactionsRepository.get_status_counts error: {e}")
-            return {}
 
     def get_by_id(self, tx_id: int) -> Optional[CashTransactionDetail]:
         if not self.conn:
@@ -306,13 +261,11 @@ class CashTransactionsRepository:
                 cur.execute(
                     """
                     SELECT ct.id, ct.booking_date, ct.description, ct.amount, ct.currency,
-                           ct.status, ct.source, ct.category_id, c.name AS category_name,
-                           cg.name AS category_group_name,
+                           ct.source, ct.category_id, c.name AS category_name,
                            ct.vendor_id, v.name AS vendor_name,
                            ct.tags, ct.receipt_scan_id
                     FROM cash_transactions ct
                     LEFT JOIN categories c    ON c.id = ct.category_id
-                    LEFT JOIN category_groups cg ON cg.id = c.category_group_id
                     LEFT JOIN vendors v        ON v.id = ct.vendor_id
                     WHERE ct.id = %s
                     """,
@@ -324,14 +277,13 @@ class CashTransactionsRepository:
                 # Fetch per-receipt categories (distinct, ordered by product count desc)
                 cur.execute(
                     """
-                    SELECT cat.id, CONCAT_WS(' / ', cg2.name, pc.name, cat.name) AS full_path, COUNT(*) AS product_count
+                    SELECT cat.id, CONCAT_WS(' / ', pc.name, cat.name) AS full_path, COUNT(*) AS product_count
                     FROM receipt_cash_links rcl
                     JOIN receipt_transaction_items rti ON rti.transaction_id = rcl.receipt_transaction_id
                     JOIN categories cat ON cat.id = rti.category_id
-                    LEFT JOIN category_groups cg2 ON cg2.id = cat.category_group_id
                     LEFT JOIN categories pc ON pc.id = cat.parent_id
                     WHERE rcl.cash_transaction_id = %s
-                    GROUP BY cat.id, cat.name, cg2.name, pc.name
+                    GROUP BY cat.id, cat.name, pc.name
                     ORDER BY COUNT(*) DESC
                     """,
                     (tx_id,),
@@ -347,15 +299,13 @@ class CashTransactionsRepository:
                 description=r[2],
                 amount=float(r[3]),
                 currency=r[4],
-                status=r[5],
-                source=r[6],
-                category_id=r[7],
-                category_name=r[8],
-                category_group_name=r[9],
-                vendor_id=r[10],
-                vendor_name=r[11],
-                tags=list(r[12]) if r[12] else [],
-                receipt_scan_id=r[13],
+                source=r[5],
+                category_id=r[6],
+                category_name=r[7],
+                vendor_id=r[8],
+                vendor_name=r[9],
+                tags=list(r[10]) if r[10] else [],
+                receipt_scan_id=r[11],
                 receipt_categories=receipt_categories,
             )
         except Exception as e:

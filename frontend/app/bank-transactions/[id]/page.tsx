@@ -7,8 +7,7 @@ import Link from "next/link";
 import {
   getBankTransaction,
   listBankTransactions,
-  confirmBankTransaction,
-  reopenBankTransaction,
+  saveBankTransactionCategory,
   getReceiptCandidates,
   linkBankToReceipt,
   unlinkBankTransaction,
@@ -22,7 +21,6 @@ import TagsEditor from "@/components/TagsEditor";
 import { CandidateBar } from "@/components/BankHelpers";
 import { isoToDisplay } from "@/lib/utils";
 import {
-  StatusBadge,
   MatchBadge,
   Pill,
   PageHeader,
@@ -109,16 +107,8 @@ export default function BankTransactionDetailPage({
   const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   // ── Mutations ───────────────────────────────────────────────────
-  const confirmMutation = useMutation({
-    mutationFn: (categoryId: number | null) => confirmBankTransaction(txId, categoryId),
-    onSuccess: (updated) => {
-      queryClient.setQueryData(["bank-transaction", txId], updated);
-      queryClient.invalidateQueries({ queryKey: ["bank-transactions"] });
-    },
-  });
-
-  const reopenMutation = useMutation({
-    mutationFn: () => reopenBankTransaction(txId),
+  const saveCategoryMutation = useMutation({
+    mutationFn: (categoryId: number | null) => saveBankTransactionCategory(txId, categoryId),
     onSuccess: (updated) => {
       queryClient.setQueryData(["bank-transaction", txId], updated);
       queryClient.invalidateQueries({ queryKey: ["bank-transactions"] });
@@ -160,7 +150,6 @@ export default function BankTransactionDetailPage({
     mutationFn: () => deleteBankTransaction(txId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["bank-transactions"] });
-      queryClient.invalidateQueries({ queryKey: ["bank-transactions-counts"] });
       router.push("/bank-transactions");
     },
   });
@@ -228,7 +217,6 @@ export default function BankTransactionDetailPage({
       {/* ── Summary row ──────────────────────────────────────────── */}
       <div className="flex items-center gap-4 mb-6">
         <Amount value={tx.amount} currency={tx.currency} className="text-2xl" />
-        <StatusBadge status={tx.status} />
         {tx.category_name && (
           <Pill variant="category-secondary" size="md">{tx.category_name}</Pill>
         )}
@@ -287,27 +275,6 @@ export default function BankTransactionDetailPage({
                 label="Zarządzaj kategoriami w paragonie"
                 variant="forward"
               />
-              <div>
-                {tx.status === "to_confirm" ? (
-                  <Button
-                    variant="primary"
-                    size="md"
-                    disabled={confirmMutation.isPending}
-                    onClick={() => confirmMutation.mutate(null)}
-                  >
-                    {confirmMutation.isPending ? "Zapisywanie…" : "Potwierdź"}
-                  </Button>
-                ) : (
-                  <Button
-                    variant="secondary"
-                    size="md"
-                    disabled={reopenMutation.isPending}
-                    onClick={() => reopenMutation.mutate()}
-                  >
-                    {reopenMutation.isPending ? "…" : "Cofnij potwierdzenie"}
-                  </Button>
-                )}
-              </div>
             </div>
           ) : (
             <>
@@ -338,25 +305,14 @@ export default function BankTransactionDetailPage({
                     }))}
                   />
                 </div>
-                {tx.status === "to_confirm" ? (
-                  <Button
-                    variant="primary"
-                    size="md"
-                    disabled={!selectedCategory || confirmMutation.isPending}
-                    onClick={() => selectedCategory && confirmMutation.mutate(selectedCategory)}
-                  >
-                    {confirmMutation.isPending ? "Zapisywanie…" : "Potwierdź"}
-                  </Button>
-                ) : (
-                  <Button
-                    variant="secondary"
-                    size="md"
-                    disabled={reopenMutation.isPending}
-                    onClick={() => reopenMutation.mutate()}
-                  >
-                    {reopenMutation.isPending ? "…" : "Cofnij potwierdzenie"}
-                  </Button>
-                )}
+                <Button
+                  variant="primary"
+                  size="md"
+                  disabled={!selectedCategory || saveCategoryMutation.isPending}
+                  onClick={() => selectedCategory && saveCategoryMutation.mutate(selectedCategory)}
+                >
+                  {saveCategoryMutation.isPending ? "Zapisywanie…" : "Zapisz kategorię"}
+                </Button>
               </div>
             </>
           )}

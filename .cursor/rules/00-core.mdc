@@ -1,0 +1,66 @@
+---
+description: Always-on ground rules for the entire eye-budget monorepo
+globs:
+alwaysApply: true
+---
+
+# Core — eye-budget Monorepo
+
+## Repo Layout
+
+```
+eye-budget/
+├── frontend/   # Next.js 14, App Router, TypeScript strict, npm
+└── backend/    # FastAPI, Pydantic, psycopg2, Celery, Python 3.x
+```
+
+No monorepo tool (no Turborepo/Nx). Each app has its own package manager / dependency file.
+
+## Language Boundaries
+
+- TypeScript lives exclusively in `frontend/`. Python lives exclusively in `backend/`.
+- Never introduce Python patterns (dataclasses, snake_case models) into TypeScript files.
+- Never introduce JavaScript/TypeScript patterns (callbacks, promises) into Python files.
+
+## API Contract — both sides must stay in sync
+
+When adding or changing an endpoint, update **all four** of:
+1. `backend/src/main.py` — route definition
+2. `backend/src/data.py` — Pydantic request/response models
+3. `frontend/app/api/<resource>/route.ts` — Next.js proxy route handler
+4. `frontend/lib/api.ts` + `frontend/lib/types.ts` — typed client function + Zod schema
+
+## UI Primitives
+
+Before creating any UI component, check `frontend/components/ui/index.ts`.
+The design system already provides: Button, Input, Textarea, Modal, ConfirmDeleteModal,
+Card, Badge (StatusBadge, SourceBadge, MatchBadge, CountBadge), Pill, FilterTabs,
+PageHeader, SectionLabel, ThreeDotsMenu, Amount, NavLink, PrevNextNav, DateInput.
+
+Do not create parallel or duplicate primitives.
+
+## UI Language
+
+All user-facing strings are in **Polish**. Do not introduce English copy in page/component text.
+
+## Secrets & Credentials
+
+- **Never read or modify `.env`** (contains real DB, OpenAI, MinIO credentials).
+- Use `.env.example` as the reference for available environment variables.
+- `backend/yoyo.ini` contains live DB credentials — treat it as secret.
+
+## Request Flow (summary)
+
+```
+Browser → "use client" page → useQuery/useMutation → lib/api.ts
+       → /api/... route handler → lib/proxy.ts → FastAPI backend
+       → App() → service → repository → PostgreSQL
+```
+
+## Canonical References
+
+- `frontend/components/ui/index.ts` — full list of available UI primitives
+- `backend/src/main.py` — canonical route structure
+- `backend/src/app.py` — App class wiring pattern
+- `docker-compose.yml` — all runtime services (Redis, Soketi, backend, celery-worker)
+- `.env.example` — all required environment variables

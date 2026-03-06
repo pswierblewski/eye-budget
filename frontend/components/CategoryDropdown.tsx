@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { listCategories, listCategoryGroups, createCategory } from "@/lib/api";
+import { listCategories, createCategory } from "@/lib/api";
 import { CategoryItem } from "@/lib/types";
 
 type CategoryCandidate = {
@@ -18,7 +18,7 @@ interface CategoryDropdownProps {
 }
 
 function breadcrumb(c: CategoryItem): string {
-  return [c.group_name, c.parent_name, c.name].filter(Boolean).join(" / ");
+  return [c.parent_name, c.name].filter(Boolean).join(" / ");
 }
 
 export function CategoryDropdown({
@@ -30,7 +30,6 @@ export function CategoryDropdown({
   const [search, setSearch] = useState("");
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
-  const [newGroup, setNewGroup] = useState("");
   const [newParentId, setNewParentId] = useState<number | "">("");
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -43,31 +42,21 @@ export function CategoryDropdown({
     enabled: open,
   });
 
-  const { data: groups = [] } = useQuery({
-    queryKey: ["category-groups"],
-    queryFn: listCategoryGroups,
-    enabled: showCreate,
-  });
-
   const addMutation = useMutation({
     mutationFn: ({
       name,
-      group_name,
       parent_id,
     }: {
       name: string;
-      group_name: string;
       parent_id: number | null;
-    }) => createCategory(name, group_name, parent_id),
+    }) => createCategory(name, parent_id),
     onSuccess: (cat) => {
       queryClient.invalidateQueries({ queryKey: ["categories"] });
-      queryClient.invalidateQueries({ queryKey: ["category-groups"] });
       onChange(cat.id);
       setOpen(false);
       setSearch("");
       setShowCreate(false);
       setNewName("");
-      setNewGroup("");
       setNewParentId("");
     },
   });
@@ -124,10 +113,9 @@ export function CategoryDropdown({
   );
 
   const handleSubmitCreate = () => {
-    if (!newName.trim() || !newGroup.trim()) return;
+    if (!newName.trim()) return;
     addMutation.mutate({
       name: newName.trim(),
-      group_name: newGroup.trim(),
       parent_id: newParentId !== "" ? Number(newParentId) : null,
     });
   };
@@ -217,9 +205,7 @@ export function CategoryDropdown({
 
                 {/* All categories */}
                 {filteredAll.map((c) => {
-                  const prefix = [c.group_name, c.parent_name]
-                    .filter(Boolean)
-                    .join(" / ");
+                  const prefix = c.parent_name ?? "";
                   return (
                     <li key={c.id}>
                       <button
@@ -286,24 +272,6 @@ export function CategoryDropdown({
               </label>
 
               <label className="block text-xs text-gray-600">
-                Grupa
-                <input
-                  list="cat-groups"
-                  type="text"
-                  value={newGroup}
-                  onChange={(e) => setNewGroup(e.target.value)}
-                  placeholder="e.g. Żywność"
-                  className="mt-1 w-full text-sm border border-gray-200 rounded-md px-2 py-1
-                    focus:outline-none focus:ring-2 focus:ring-[#635bff]"
-                />
-                <datalist id="cat-groups">
-                  {groups.map((g) => (
-                    <option key={g} value={g} />
-                  ))}
-                </datalist>
-              </label>
-
-              <label className="block text-xs text-gray-600">
                 Nadrzędna (opcjonalnie)
                 <select
                   value={newParentId}
@@ -318,7 +286,6 @@ export function CategoryDropdown({
                   <option value="">Brak</option>
                   {parentLevelCategories.map((c) => (
                     <option key={c.id} value={c.id}>
-                      {c.group_name ? `${c.group_name} / ` : ""}
                       {c.name}
                     </option>
                   ))}
@@ -330,7 +297,6 @@ export function CategoryDropdown({
                   type="button"
                   disabled={
                     !newName.trim() ||
-                    !newGroup.trim() ||
                     addMutation.isPending
                   }
                   onClick={handleSubmitCreate}

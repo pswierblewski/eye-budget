@@ -41,14 +41,12 @@ Please analyze the transaction and return category_ids with a name and a confide
         ids = ['category_id']
         category_names = ['category_name']
         parent_names = ['category_parent_name']
-        category_groups = ['category_group_name']
         for category in categories:
             ids.append(category[0])
             category_names.append(category[1])
             parent_names.append(category[2])
-            category_groups.append(category[3])
         table = self.markdown_table_service.table(
-            [ids, category_names, parent_names, category_groups]
+            [ids, category_names, parent_names]
         )
         return table
 

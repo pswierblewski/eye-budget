@@ -1,0 +1,89 @@
+---
+description: Pydantic model conventions, response_model usage, and HTTPException error handling
+globs: ["backend/src/data.py", "backend/src/main.py"]
+alwaysApply: false
+---
+
+# API Contracts and Error Handling
+
+## Pydantic Models (`src/data.py`)
+
+- **All request and response models live in `src/data.py`.** Do not define Pydantic models inline in route handlers or in other files.
+- All models extend `pydantic.BaseModel`.
+- Use `Field(..., description="…")` for fields that are part of a public API contract or LLM schema.
+
+## Naming Conventions
+
+| Suffix / Prefix | Use case |
+|---|---|
+| `*ListItem` | Compact shape for list/collection responses |
+| `*Detail` | Full shape for single-resource GET responses |
+| `*Request` | Generic inbound request body |
+| `Create*` | POST / creation request body |
+| `Update*` | PUT / PATCH request body |
+| `*Response` | Response shape when the above don't apply |
+
+Examples from the codebase: `ReceiptScanListItem`, `ReceiptScanDetail`, `ConfirmReceiptRequest`, `CashTransactionCreate`.
+
+## Generic Pagination
+
+Use `PaginatedResponse[T]` for all list endpoints:
+
+```python
+# src/data.py
+class PaginatedResponse(BaseModel, Generic[T]):
+    items: list[T]
+    total: int
+    limit: int
+    offset: int
+```
+
+```python
+# src/main.py
+@app.get("/receipts", response_model=PaginatedResponse[ReceiptScanListItem])
+def list_receipts(limit: int = 20, offset: int = 0): …
+```
+
+## `response_model` is Required
+
+- Every route decorator must declare `response_model=`. Do not return raw dicts.
+- For 202 Accepted (background task enqueued), use `response_model=TaskResponse`.
+
+## Optional Fields
+
+- Use `Optional[T]` (or `T | None`) with a default of `None` for optional fields.
+- Use Python `StrEnum` (or `str` with `Literal[...]`) for enumerated string values (e.g. `ReceiptsScanStatus`).
+
+## Error Handling at the HTTP Layer
+
+Errors are raised with `HTTPException` in `src/main.py`. Follow these status code conventions:
+
+| Status | When |
+|---|---|
+| `404` | Repository returns `None` (resource not found) |
+| `409` | Business logic raises `ValueError` (conflict / duplicate) |
+| `500` | Any unhandled `Exception` |
+
+```python
+# canonical pattern
+my_app = App()
+try:
+    result = my_app.get_receipt(receipt_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Receipt not found")
+    return result
+except ValueError as e:
+    raise HTTPException(status_code=409, detail=str(e))
+except Exception as e:
+    raise HTTPException(status_code=500, detail=str(e))
+finally:
+    my_app.dispose()
+```
+
+- Use `str(e)` as the `detail` — do not expose stack traces.
+- There is no global exception handler; each route handles its own errors.
+
+## Canonical References
+
+- `backend/src/data.py` — all Pydantic models, naming conventions, `PaginatedResponse`
+- `backend/src/main.py` — `response_model` usage, `HTTPException` pattern, 404/409/500 handling

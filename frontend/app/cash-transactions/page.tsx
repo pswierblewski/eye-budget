@@ -5,14 +5,12 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   listCashTransactions,
   createCashTransaction,
-  confirmCashTransaction,
-  reopenCashTransaction,
+  saveCashTransactionCategory,
   deleteCashTransaction,
   updateCashTransaction,
   getCashReceiptCandidates,
   linkCashToReceipt,
   unlinkCashTransaction,
-  getCashTransactionCounts,
   updateCashTransactionTags,
   getAllTags,
   listVendors,
@@ -31,13 +29,11 @@ import { DataTable, Column } from "@/components/DataTable";
 import Link from "next/link";
 import { Plus } from "lucide-react";
 import {
-  StatusBadge,
   SourceBadge,
   MatchBadge,
   CountBadge,
   Pill,
   PageHeader,
-  FilterTabs,
   SectionLabel,
   NavLink,
   Button,
@@ -47,9 +43,6 @@ import {
   ConfirmDeleteModal,
   DateInput,
 } from "@/components/ui";
-
-const STATUS_FILTERS = ["all", "to_confirm", "done"] as const;
-type StatusFilter = (typeof STATUS_FILTERS)[number];
 
 // ---------------------------------------------------------------------------
 // Add Transaction Modal
@@ -248,16 +241,8 @@ function ExpandedRowContent({ tx, allTags = [] }: ExpandedRowProps) {
     enabled: showCandidates,
   });
 
-  const confirmMutation = useMutation({
-    mutationFn: (categoryId: number | null) => confirmCashTransaction(tx.id, categoryId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["cash-transactions"] });
-      queryClient.invalidateQueries({ queryKey: ["cash-transactions-counts"] });
-    },
-  });
-
-  const reopenMutation = useMutation({
-    mutationFn: () => reopenCashTransaction(tx.id),
+  const saveCategoryMutation = useMutation({
+    mutationFn: (categoryId: number | null) => saveCashTransactionCategory(tx.id, categoryId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["cash-transactions"] });
       queryClient.invalidateQueries({ queryKey: ["cash-transaction", tx.id] });
@@ -268,7 +253,6 @@ function ExpandedRowContent({ tx, allTags = [] }: ExpandedRowProps) {
     mutationFn: () => deleteCashTransaction(tx.id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["cash-transactions"] });
-      queryClient.invalidateQueries({ queryKey: ["cash-transactions-counts"] });
     },
   });
 
@@ -497,30 +481,20 @@ function ExpandedRowContent({ tx, allTags = [] }: ExpandedRowProps) {
           )}
         </div>
 
-        {/* Confirm / reopen */}
-        <div className="flex gap-2">
-          {tx.status === "to_confirm" ? (
+        {/* Save category */}
+        {!receiptLink && (
+          <div className="flex gap-2">
             <Button
               variant="primary"
               size="sm"
-              disabled={(receiptLink ? false : !selectedCategory) || confirmMutation.isPending}
-              onClick={() => confirmMutation.mutate(receiptLink ? null : (selectedCategory ?? null))}
+              disabled={!selectedCategory || saveCategoryMutation.isPending}
+              onClick={() => saveCategoryMutation.mutate(selectedCategory ?? null)}
               className="flex-1"
             >
-              {confirmMutation.isPending ? "Zapisywanie…" : "Potwierdź"}
+              {saveCategoryMutation.isPending ? "Zapisywanie…" : "Zapisz kategorię"}
             </Button>
-          ) : (
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={reopenMutation.isPending}
-              onClick={() => reopenMutation.mutate()}
-              className="flex-1"
-            >
-              {reopenMutation.isPending ? "…" : "Cofnij potwierdzenie"}
-            </Button>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Receipt linking */}
         <div>
@@ -615,18 +589,16 @@ export default function CashTransactionsPage() {
   const queryClient = useQueryClient();
   const PAGE_SIZE = 50;
   const [page, setPage] = useState(1);
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [sortBy, setSortBy] = useState("booking_date");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [showAddModal, setShowAddModal] = useState(false);
 
   const { data, isLoading } = useQuery({
-    queryKey: ["cash-transactions", page, statusFilter, sortBy, sortDir],
+    queryKey: ["cash-transactions", page, sortBy, sortDir],
     queryFn: () =>
       listCashTransactions({
         page,
         limit: PAGE_SIZE,
-        status: statusFilter !== "all" ? statusFilter : undefined,
         sort_by: sortBy,
         sort_dir: sortDir,
       }),
@@ -634,13 +606,6 @@ export default function CashTransactionsPage() {
   });
   const transactions = data?.items ?? [];
   const total = data?.total ?? 0;
-
-  const { data: statusCounts = {} } = useQuery({
-    queryKey: ["cash-transactions-counts"],
-    queryFn: getCashTransactionCounts,
-    staleTime: 30_000,
-  });
-  const totalAll = Object.values(statusCounts).reduce<number>((sum, v) => sum + v, 0);
 
   const { data: allTags = [] } = useQuery({
     queryKey: ["tags"],
@@ -719,11 +684,6 @@ export default function CashTransactionsPage() {
           </div>
         ) : null,
     },
-    {
-      header: "Status",
-      accessor: (t) => <StatusBadge status={t.status} />,
-      serverSortKey: "status",
-    },
   ];
 
   return (
@@ -743,19 +703,6 @@ export default function CashTransactionsPage() {
           </Button>
         }
       />
-
-      {/* Status filter tabs */}
-      <div className="flex items-center gap-2 mt-4 mb-4">
-        <FilterTabs
-          tabs={[
-            { value: "all", label: <span>Wszystkie <span className="ml-1 text-xs bg-gray-100 text-gray-600 rounded-full px-1.5 py-0.5">{totalAll}</span></span> },
-            { value: "to_confirm", label: <span>Do potwierdzenia <span className="ml-1 text-xs bg-gray-100 text-gray-600 rounded-full px-1.5 py-0.5">{statusCounts["to_confirm"] ?? 0}</span></span> },
-            { value: "done", label: <span>Potwierdzone <span className="ml-1 text-xs bg-gray-100 text-gray-600 rounded-full px-1.5 py-0.5">{statusCounts["done"] ?? 0}</span></span> },
-          ]}
-          value={statusFilter}
-          onChange={(v) => { setStatusFilter(v as StatusFilter); setPage(1); }}
-        />
-      </div>
 
       {/* Table */}
       {isLoading ? (
@@ -790,7 +737,6 @@ export default function CashTransactionsPage() {
           onClose={() => setShowAddModal(false)}
           onSuccess={() => {
             queryClient.invalidateQueries({ queryKey: ["cash-transactions"] });
-            queryClient.invalidateQueries({ queryKey: ["cash-transactions-counts"] });
           }}
         />
       )}

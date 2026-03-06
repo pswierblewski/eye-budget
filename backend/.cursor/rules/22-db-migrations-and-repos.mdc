@@ -1,0 +1,132 @@
+---
+description: Repository SQL patterns (psycopg2), connection lifecycle, and Yoyo migration conventions
+globs: ["backend/src/repositories/**/*.py", "backend/migrations/**/*.sql"]
+alwaysApply: false
+---
+
+# DB Access, Repositories, and Migrations
+
+## Repository Structure
+
+- One file per domain in `src/repositories/` (e.g., `receipts_scans.py`, `products.py`).
+- Each repository receives `db_context` in its constructor and stores the connection:
+
+```python
+class ReceiptsScansRepository:
+    def __init__(self, db_context: EyeBudgetDbContext):
+        self.conn = db_context.conn
+        self.table = "receipts_scans"
+```
+
+- `dispose()` is defined on every repository. It is `pass` for repos that own no resources beyond the shared connection.
+
+## SQL Style
+
+- **Parameterized queries only** — use `%s` placeholders. Never use f-strings or `.format()` for query values.
+- Use `with self.conn.cursor() as cur:` as the cursor context manager.
+- For JSONB columns use `psycopg2.extras.Json(value)`.
+- For complex queries with dynamic filters, build the WHERE clause by appending to a conditions list and params tuple.
+
+```python
+# canonical pattern
+with self.conn.cursor() as cur:
+    cur.execute(
+        "INSERT INTO receipts_scans (filename, status) VALUES (%s, %s) RETURNING id",
+        (filename, "new"),
+    )
+    row = cur.fetchone()
+self.conn.commit()
+return row[0] if row else None
+```
+
+## Connection Lifecycle and Error Handling
+
+- `conn.commit()` after every successful write.
+- `conn.rollback()` in every `except` block that follows a write.
+- Return a safe fallback (`None`, `False`, `[]`) on error — do not re-raise from repositories.
+- Log errors with `print(f"[RepositoryName.method_name] error: {e}")` at minimum.
+
+```python
+try:
+    with self.conn.cursor() as cur:
+        cur.execute(sql, params)
+    self.conn.commit()
+    return True
+except Exception as e:
+    print(f"[ProductsRepository.insert] error: {e}")
+    self.conn.rollback()
+    return False
+```
+
+## Guard against missing connection
+
+Repositories must guard at the top of write methods:
+
+```python
+if not self.conn:
+    return None
+```
+
+## Idempotent Inserts
+
+Use `ON CONFLICT … DO NOTHING RETURNING id` for INSERT operations that may race:
+
+```python
+cur.execute(
+    "INSERT INTO products (name) VALUES (%s) ON CONFLICT (name) DO NOTHING RETURNING id",
+    (name,),
+)
+```
+
+## Yoyo Migrations (`migrations/`)
+
+### File Naming
+
+`YYYYMMDD_XX_short-description.sql`
+
+Examples: `20241010_01_receipts_scans.sql`, `20260226_01_new-tables.sql`
+
+### File Structure
+
+```sql
+-- Migration: <human-readable title>
+-- depends: 20241010_01_receipts_scans   ← base name of the previous migration
+
+-- DDL goes here
+CREATE TABLE IF NOT EXISTS my_table ( … );
+```
+
+### DDL Guards
+
+Always use safety guards so migrations are re-runnable:
+
+```sql
+CREATE TABLE IF NOT EXISTS …
+ALTER TABLE t ADD COLUMN IF NOT EXISTS col VARCHAR;
+DROP COLUMN IF EXISTS col;
+CREATE INDEX IF NOT EXISTS idx_name ON t(col);
+DROP INDEX IF EXISTS idx_name;
+```
+
+### One concern per file
+
+Do not bundle unrelated table changes. Separate migrations are easier to review and roll back.
+
+### Applying migrations
+
+```bash
+cd backend && yoyo apply    # reads yoyo.ini for DB credentials
+```
+
+## DB Context (`src/db_contexts/eye_budget.py`)
+
+- `EyeBudgetDbContext` opens a single `psycopg2` connection in `__init__`.
+- `dispose()` closes the connection if it exists.
+- Connection parameters come from env vars: `POSTGRESQL_HOST`, `POSTGRESQL_PORT`, `POSTGRESQL_DB`, `POSTGRESQL_USER`, `POSTGRESQL_PASSWORD`.
+
+## Canonical References
+
+- `backend/src/repositories/receipts_scans.py` — dynamic filters, JSONB, commit/rollback
+- `backend/src/repositories/products.py` — simple CRUD, `ON CONFLICT`
+- `backend/src/db_contexts/eye_budget.py` — connection creation and disposal
+- `backend/migrations/20241010_01_receipts_scans.sql` — migration structure and DDL guards

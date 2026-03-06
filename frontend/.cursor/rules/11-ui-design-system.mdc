@@ -1,0 +1,84 @@
+---
+description: Tailwind design tokens, UI primitives, and component conventions
+globs: ["frontend/components/**/*.ts", "frontend/components/**/*.tsx", "frontend/app/**/*.tsx"]
+alwaysApply: false
+---
+
+# UI Design System
+
+## Primitives — always check first
+
+Before building any UI element, verify it already exists in `frontend/components/ui/`.
+
+Available exports from `@/components/ui`:
+
+| Export | File | Use for |
+|---|---|---|
+| `Button` | `Button.tsx` | All buttons; supports `variant` + `size` |
+| `Input`, `Textarea` | `Input.tsx` | Text inputs; supports `inputSize` |
+| `Modal` | `Modal.tsx` | Dialogs; controlled via `open`/`onClose` |
+| `ConfirmDeleteModal` | `ConfirmDeleteModal.tsx` | Destructive-action confirmation |
+| `Card` | `Card.tsx` | Content sections |
+| `StatusBadge`, `SourceBadge`, `MatchBadge`, `CountBadge` | `Badge.tsx` | Status chips |
+| `Pill` | `Pill.tsx` | Compact label tags |
+| `FilterTabs` | `FilterTabs.tsx` | Horizontal filter bar |
+| `PageHeader` | `PageHeader.tsx` | Page-level h1 + actions |
+| `SectionLabel` | `SectionLabel.tsx` | Section headings within a page |
+| `ThreeDotsMenu` | `ThreeDotsMenu.tsx` | Overflow action menus |
+| `Amount` | `Amount.tsx` | Formatted currency amounts |
+| `NavLink` | `NavLink.tsx` | Sidebar navigation links |
+| `PrevNextNav` | `PrevNextNav.tsx` | Prev/next pagination on detail pages |
+| `DateInput` | `DateInput.tsx` | Date picker input |
+
+**Do not create a new primitive** unless none of the above serves the need.
+
+## Styling Rules
+
+- **Tailwind CSS only** for all styling. No inline `style={{}}` except where Tailwind cannot express the value.
+- Use `clsx` for conditional class composition:
+
+```tsx
+import clsx from "clsx";
+<div className={clsx("base-classes", condition && "conditional-class")} />
+```
+
+- Never use `tailwind-merge` directly — `clsx` is the established convention here.
+
+## Design Tokens (defined in `tailwind.config.ts`)
+
+- **Accent color:** `bg-accent` / `text-accent` / `border-accent` → `#635bff`; hover: `bg-accent-hover` → `#5248db`. **Never hardcode `#635bff`.**
+- **Sidebar background:** `bg-sidebar` → `#f6f9fc`
+- **Status colors:** `bg-status-{pending,processing,done,failed,to_confirm}` and `text-status-{…}`
+- **Font:** Inter is configured as `fontFamily.sans`; no other font should be imported.
+
+## Component Variant Pattern
+
+New components that need variants should follow the `Record<Variant, string>` pattern used in `Button.tsx` and `Input.tsx`:
+
+```tsx
+const variantClasses: Record<"primary" | "secondary", string> = {
+  primary: "bg-accent text-white",
+  secondary: "bg-white border border-gray-200 text-gray-700",
+};
+```
+
+## Icons
+
+- Use `lucide-react` exclusively. Do not install other icon libraries.
+- Import individual icons: `import { ChevronRight, Plus } from "lucide-react"`.
+
+## Feature Components
+
+- Feature-level components live in `frontend/components/` (not `components/ui/`).
+- They may use React Query, local state, and domain logic.
+- Use `"use client"` when the component uses hooks or browser APIs.
+
+## Canonical References
+
+- `frontend/components/ui/Button.tsx` — variant + size pattern
+- `frontend/components/ui/Input.tsx` — inputSize pattern
+- `frontend/components/ui/Modal.tsx` — controlled modal, Escape key handler
+- `frontend/components/ui/index.ts` — full list of exports
+- `frontend/tailwind.config.ts` — all design tokens
+- `frontend/components/CategoryDropdown.tsx` — complex feature component with React Query
+- `frontend/components/DataTable.tsx` — generic table component
