@@ -132,7 +132,7 @@ class UnifiedTransactionsRepository:
                             bt.category_id,
                             c.name AS category_name,
                             bt.tags,
-                            bt.status,
+                            NULL::text AS status,
                             (rbl.bank_transaction_id IS NOT NULL) AS has_receipt,
                             rbl_scan.scan_id AS receipt_scan_id,
                             bt.currency,
@@ -187,7 +187,7 @@ class UnifiedTransactionsRepository:
                             ct.category_id,
                             c.name AS category_name,
                             ct.tags,
-                            ct.status,
+                            NULL::text AS status,
                             (rcl.cash_transaction_id IS NOT NULL) AS has_receipt,
                             rcl_scan.scan_id AS receipt_scan_id,
                             ct.currency,
@@ -235,10 +235,10 @@ class UnifiedTransactionsRepository:
                         SELECT
                             rs.id,
                             'receipt'::text AS source_type,
-                            rt.date::date AS date,
-                            -(rt.total)::float AS amount,
-                            COALESCE(v.name, rt.raw_vendor_name, rs.filename) AS description,
-                            COALESCE(v.name, rt.raw_vendor_name) AS vendor_name,
+                            COALESCE(rt.date::date, (rs.result->>'date')::date) AS date,
+                            -COALESCE(rt.total, (rs.result->>'total')::numeric)::float AS amount,
+                            COALESCE(v.name, rt.raw_vendor_name, rs.result->>'vendor', rs.filename) AS description,
+                            COALESCE(v.name, rt.raw_vendor_name, rs.result->>'vendor') AS vendor_name,
                             NULL::int AS category_id,
                             NULL::text AS category_name,
                             rs.tags,
@@ -250,7 +250,7 @@ class UnifiedTransactionsRepository:
                             NULL::int AS receipt_category_count,
                             NULL::json AS receipt_categories
                         FROM receipts_scans rs
-                        JOIN receipt_transactions rt ON rt.scan_id = rs.id
+                        LEFT JOIN receipt_transactions rt ON rt.scan_id = rs.id
                         LEFT JOIN vendors v ON v.id = rt.vendor_id
                         LEFT JOIN receipt_bank_links rbl ON rbl.receipt_transaction_id = rt.id
                         LEFT JOIN receipt_cash_links rcl ON rcl.receipt_transaction_id = rt.id

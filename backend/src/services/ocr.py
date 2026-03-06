@@ -26,7 +26,13 @@ class OCRService(ABC):
             "     add them as a separate product entry with that negative price. "
             "   - In all cases, discounts and rebates must appear in the product list with a negative price. "
             "5. Total amount. "
-            "6. Transaction date (only date without time). Format: YYYY-MM-DD."
+            "6. Transaction date (only date without time). Output format: YYYY-MM-DD. "
+            "   Receipts use various date formats — always convert to YYYY-MM-DD: "
+            "   - 'dn.25r10.30' → 2025-10-30  (dn=dzień day, r=rok year; pattern dn.YYrMM.DD). "
+            "   - '2025-10-31' → 2025-10-31  (ISO date, use as-is). "
+            "   - '2025-10-30 08:22' → 2025-10-30  (ISO datetime, drop the time part). "
+            "   - '28-11-2025' → 2025-11-28  (DD-MM-YYYY). "
+            "   - '27-01-2026' → 2026-01-27  (DD-MM-YYYY). "
             "Return only valid data; omit missing fields."
         )
         self.model = os.getenv("MODEL", "gpt-5.2")

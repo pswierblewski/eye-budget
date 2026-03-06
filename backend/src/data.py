@@ -272,6 +272,16 @@ class UpdateTransactionItemRequest(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Evaluation request models
+# ---------------------------------------------------------------------------
+
+class RunEvaluationRequest(BaseModel):
+    """Optional body for POST /receipts/evaluate. When entry_ids is provided,
+    only those ground truth entries are evaluated."""
+    entry_ids: list[int] | None = None
+
+
+# ---------------------------------------------------------------------------
 # Evaluation list/detail models (lighter than EvaluationRunSummary)
 # ---------------------------------------------------------------------------
 
@@ -510,7 +520,7 @@ class UnifiedTransaction(BaseModel):
     category_id: int | None = None
     category_name: str | None = None
     tags: list[str] = []
-    status: str
+    status: str | None = None
     has_receipt: bool = False  # True when bank/cash row has a linked receipt
     receipt_scan_id: int | None = None  # set when has_receipt=True or source_type='receipt'
     currency: str = "PLN"
@@ -554,3 +564,50 @@ class AnalyticsSummary(BaseModel):
     by_vendor: list[VendorBreakdown]
     by_category: list[CategoryBreakdown]
     month_over_month: MonthOverMonth
+
+
+# ---------------------------------------------------------------------------
+# Prompt analytics models
+# ---------------------------------------------------------------------------
+
+class CategoryConfusionItem(BaseModel):
+    """One AI→user category confusion pair with frequency count."""
+    ai_category_name: str
+    user_category_name: str
+    count: int
+
+
+class ProductNameCorrectionItem(BaseModel):
+    """One AI→user product name correction pair with frequency count."""
+    ai_normalized_name: str
+    user_normalized_name: str
+    count: int
+
+
+class PromptAnalyticsRow(BaseModel):
+    """Single receipt analytics row (for the paginated list)."""
+    id: int
+    scan_id: int
+    vendor_name: str | None
+    category_corrections_count: int
+    product_name_corrections_count: int
+    ocr_product_count: int
+    confirmed_product_count: int
+    details: dict
+    created_at: str | None
+
+
+class PromptAnalyticsSummary(BaseModel):
+    """Aggregated prompt analytics returned by GET /prompt-analytics."""
+    total_receipts: int
+    total_category_corrections: int
+    total_product_name_corrections: int
+    receipts_with_added_products: int
+    receipts_with_removed_products: int
+    receipts_with_product_count_mismatch: int
+    avg_category_corrections: float
+    avg_product_name_corrections: float
+    avg_ocr_product_count: float
+    top_category_confusions: list[CategoryConfusionItem]
+    top_product_name_corrections: list[ProductNameCorrectionItem]
+    recent: list[PromptAnalyticsRow]

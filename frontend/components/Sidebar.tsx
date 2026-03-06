@@ -9,6 +9,7 @@ import {
   Landmark,
   Wallet,
   ArrowLeftRight,
+  ChartBar,
 } from "lucide-react";
 
 const navItems = [
@@ -21,6 +22,7 @@ const navItems = [
 const adminItems = [
   { href: "/ground-truth", label: "Dane wzorcowe", icon: BookMarked },
   { href: "/evaluations", label: "Ewaluacje", icon: FlaskConical },
+  { href: "/analytics", label: "Analityka promptów", icon: ChartBar },
 ];
 
 export function Sidebar() {

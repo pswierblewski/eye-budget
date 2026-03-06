@@ -33,7 +33,7 @@ class EvaluationService:
         self.preprocessing_service = preprocessing_service
         self.ocr_service = ocr_service
 
-    def run_evaluation(self, on_progress=None) -> EvaluationRunSummary:
+    def run_evaluation(self, on_progress=None, entry_ids: list[int] | None = None) -> EvaluationRunSummary:
         """Run evaluation mode: process ground truth entries and compare OCR results."""
         model_used = self.ocr_service.model
         
@@ -48,8 +48,11 @@ class EvaluationService:
             }
         )
         
-        # Load all ground truth entries
-        ground_truth_entries = self.ground_truth_repository.get_all()
+        # Load ground truth entries (selected or all)
+        if entry_ids is not None:
+            ground_truth_entries = self.ground_truth_repository.get_by_ids(entry_ids)
+        else:
+            ground_truth_entries, _ = self.ground_truth_repository.get_all(limit=10000)
         if not ground_truth_entries:
             print("No ground truth entries to evaluate.")
             return self._create_empty_summary(run_id, model_used)
@@ -80,7 +83,7 @@ class EvaluationService:
         
         return summary
 
-    async def run_evaluation_async(self, on_progress=None) -> EvaluationRunSummary:
+    async def run_evaluation_async(self, on_progress=None, entry_ids: list[int] | None = None) -> EvaluationRunSummary:
         """Async version of run_evaluation: processes ground truth entries in parallel."""
         CONCURRENT_LLM_CALLS = 5
 
@@ -97,7 +100,10 @@ class EvaluationService:
             },
         )
 
-        ground_truth_entries = self.ground_truth_repository.get_all()
+        if entry_ids is not None:
+            ground_truth_entries = self.ground_truth_repository.get_by_ids(entry_ids)
+        else:
+            ground_truth_entries, _ = self.ground_truth_repository.get_all(limit=10000)
         if not ground_truth_entries:
             print("No ground truth entries to evaluate.")
             return self._create_empty_summary(run_id, model_used)

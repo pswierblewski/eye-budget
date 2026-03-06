@@ -46,7 +46,7 @@ const calendarClassNames = {
   week: "flex gap-0.5",
   weekdays: "flex gap-0.5 mb-1",
   weekday: "w-8 text-center text-xs font-medium text-gray-400 uppercase py-1",
-  day: "flex items-center justify-center",
+  day: "flex items-center justify-center w-8",
   day_button:
     "w-8 h-8 rounded-md text-sm text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer",
   selected:

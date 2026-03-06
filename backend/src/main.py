@@ -42,6 +42,8 @@ from src.data import (
     UpdateTagsRequest,
     UnifiedTransaction,
     AnalyticsSummary,
+    RunEvaluationRequest,
+    PromptAnalyticsSummary,
 )
 from fastapi import FastAPI, File, UploadFile, HTTPException, Query
 from fastapi.responses import StreamingResponse
@@ -70,9 +72,9 @@ def process_receipts():
 
 
 @app.post("/receipts/evaluate", response_model=TaskResponse, status_code=202)
-def evaluate_receipts():
+def evaluate_receipts(request: RunEvaluationRequest = RunEvaluationRequest()):
     """Dispatch evaluation run to a background Celery worker. Returns immediately."""
-    task = run_evaluation_task.delay()
+    task = run_evaluation_task.delay(entry_ids=request.entry_ids)
     return TaskResponse(task_id=task.id)
 
 
@@ -923,5 +925,15 @@ def get_transactions_analytics(
     my_app = App()
     try:
         return my_app.get_transactions_analytics(date_from=date_from, date_to=date_to)
+    finally:
+        my_app.dispose()
+
+
+@app.get("/prompt-analytics", response_model=PromptAnalyticsSummary)
+def get_prompt_analytics() -> PromptAnalyticsSummary:
+    """Return aggregated AI prompt quality analytics."""
+    my_app = App()
+    try:
+        return my_app.get_prompt_analytics()
     finally:
         my_app.dispose()
