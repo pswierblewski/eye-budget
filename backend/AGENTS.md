@@ -1,5 +1,20 @@
 # eye-budget Backend — AI Agent README
 
+## TL;DR — Highest-Priority Rules
+
+1. **All routes live in `src/main.py`** — do not create separate router files.
+2. **`App()` is instantiated per request** in a `try/finally` block; always call `my_app.dispose()`.
+3. **All Pydantic models live in `src/data.py`** — never define models inline in handlers.
+4. **Every route must declare `response_model=`** — do not return raw dicts.
+5. **SQL is raw parameterized** (`%s` placeholders via psycopg2) — no ORM, no f-strings for values.
+6. **`conn.commit()` on success, `conn.rollback()` in `except`** — never skip either.
+7. **Migrations: one concern per file**, `IF NOT EXISTS` guards, `depends:` header.
+8. **Services use constructor injection** — no globals, no `App()` inside a service.
+9. **Background tasks (Celery) follow the same `App()`/`dispose()` pattern** and push Pusher events.
+10. **No hardcoded credentials** — always read from `os.environ`.
+
+Full rules: `.cursor/rules/backend/` (20–22 series).
+
 ## Stack
 
 | | |
@@ -69,16 +84,21 @@ HTTP request
 | Repository | `src/repositories/` | SQL queries, DB reads/writes |
 | DB context | `src/db_contexts/` | Connection creation and disposal |
 
-## Key Rules (summary — full rules in .cursor/rules/)
-
-- All routes live in `src/main.py`. Do not create separate router files.
-- `App()` is instantiated **per request** in a `try/finally` block.
-- All Pydantic models live in `src/data.py`.
-- SQL is raw parameterized (`%s` placeholders) — no ORM.
-- Migrations: one file per concern, `IF NOT EXISTS` guards, `depends:` header.
-- Background tasks return `TaskResponse(task_id=task.id)` with HTTP 202.
-
 ## Environment Variables
 
 See `.env.example` at the repo root for the full list.
 Key vars: `POSTGRESQL_*`, `OPENAI_API_KEY`, `MINIO_*`, `REDIS_URL`, `SOKETI_*`.
+
+## Canonical References
+
+- `backend/src/main.py` — all route definitions, per-request App lifecycle, HTTPException patterns
+- `backend/src/data.py` — all Pydantic models, naming conventions, `PaginatedResponse`
+- `backend/src/app.py` — App wiring: repositories, services, dispose
+- `backend/src/repositories/receipts_scans.py` — dynamic filters, JSONB, commit/rollback
+- `backend/src/repositories/products.py` — simple CRUD, `ON CONFLICT`
+- `backend/src/services/categories.py` — service with `build()` preloading
+- `backend/src/services/ocr.py` — OpenAI tool-call pattern
+- `backend/src/tasks/process_receipts.py` — Celery task with App + Pusher
+- `backend/src/db_contexts/eye_budget.py` — connection creation and disposal
+- `backend/migrations/20241010_01_receipts_scans.sql` — migration structure and DDL guards
+- `MIGRATIONS.md` — migration workflow documentation
