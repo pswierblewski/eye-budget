@@ -3,7 +3,7 @@ description: Tailwind design tokens, UI primitives, and component conventions
 globs: ["frontend/components/**/*.ts", "frontend/components/**/*.tsx", "frontend/app/**/*.tsx"]
 alwaysApply: false
 ---
-
+When this rule is applied, the FIRST LINE of every response must be: RULE_APPLIED: 11-ui-design-system.mdc.
 # UI Design System
 
 ## Primitives — always check first

@@ -3,7 +3,7 @@ description: Pydantic model conventions, response_model usage, and HTTPException
 globs: ["backend/src/data.py", "backend/src/main.py"]
 alwaysApply: false
 ---
-
+When this rule is applied, the FIRST LINE of every response must be: RULE_APPLIED: 21-api-contracts-errors.mdc.
 # API Contracts and Error Handling
 
 ## Pydantic Models (`src/data.py`)
