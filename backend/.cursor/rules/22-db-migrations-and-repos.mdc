@@ -3,7 +3,7 @@ description: Repository SQL patterns (psycopg2), connection lifecycle, and Yoyo 
 globs: ["backend/src/repositories/**/*.py", "backend/migrations/**/*.sql"]
 alwaysApply: false
 ---
-
+When this rule is applied, the FIRST LINE of every response must be: RULE_APPLIED: 22-db-migrations-and-repos.mdc.
 # DB Access, Repositories, and Migrations
 
 ## Repository Structure

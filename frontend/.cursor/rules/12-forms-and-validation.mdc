@@ -3,7 +3,7 @@ description: Form patterns, Zod validation, and type inference conventions for t
 globs: ["frontend/**/*.ts", "frontend/**/*.tsx"]
 alwaysApply: false
 ---
-
+When this rule is applied, the FIRST LINE of every response must be: RULE_APPLIED: 12-forms-and-validation.mdc.
 # Forms and Validation
 
 ## No Form Library

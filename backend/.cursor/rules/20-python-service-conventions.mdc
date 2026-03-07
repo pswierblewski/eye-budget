@@ -3,7 +3,7 @@ description: FastAPI route conventions, App class lifecycle, service and task pa
 globs: ["backend/src/**/*.py"]
 alwaysApply: false
 ---
-
+When this rule is applied, the FIRST LINE of every response must be: RULE_APPLIED: 20-python-service-conventions.mdc.
 # Python Service Conventions
 
 ## Route Organization

@@ -3,7 +3,7 @@ description: Always-on ground rules for the entire eye-budget monorepo
 globs:
 alwaysApply: true
 ---
-
+When this rule is applied, the FIRST LINE of every response must be: RULE_APPLIED: 00-core.mdc.
 # Core — eye-budget Monorepo
 
 ## Repo Layout

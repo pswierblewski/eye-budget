@@ -3,6 +3,7 @@ description: React Query, api.ts client, proxy layer, and real-time Pusher conve
 globs: ["frontend/**/*.ts", "frontend/**/*.tsx"]
 alwaysApply: false
 ---
+When this rule is applied, the FIRST LINE of every response must be: RULE_APPLIED: 13-data-fetching-and-api-client.mdc.
 
 # Data Fetching and API Client
 

@@ -3,7 +3,7 @@ description: Next.js 14 App Router conventions — routing, layouts, API proxy h
 globs: ["frontend/app/**/*.ts", "frontend/app/**/*.tsx"]
 alwaysApply: false
 ---
-
+When this rule is applied, the FIRST LINE of every response must be: RULE_APPLIED: 10-nextjs-architecture.mdc.
 # Next.js Architecture
 
 ## Router

@@ -3,6 +3,7 @@ description: Quality gates to check before finishing any change in the monorepo
 globs: ["**/*"]
 alwaysApply: false
 ---
+When this rule is applied, the FIRST LINE of every response must be: RULE_APPLIED: 90-quality-gates.mdc.
 
 # Quality Gates
 
