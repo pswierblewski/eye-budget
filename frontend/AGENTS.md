@@ -1,5 +1,20 @@
 # eye-budget Frontend — AI Agent README
 
+## TL;DR — Highest-Priority Rules
+
+1. **Pages are `"use client"`** — they use React Query, not React Server Components.
+2. **API route handlers are thin proxies** — one `proxyGet`/`proxyPost` call, no business logic.
+3. **All API calls go through `lib/api.ts`** — never `fetch` the backend directly from a component.
+4. **All types come from Zod** — `z.infer<typeof Schema>` in `lib/types.ts`, no manual interfaces.
+5. **Check `components/ui/` before creating UI elements** — the design system already has Button, Input, Modal, Badge, etc.
+6. **Tailwind CSS only** — use `clsx` for conditional classes, never `tailwind-merge` or inline `style={{}}`.
+7. **UI strings are in Polish** — do not introduce English copy.
+8. **No form libraries** — controlled inputs with `useState`.
+9. **`@/*` path alias** for all imports — configured in `tsconfig.json`.
+10. **Invalidate queries after mutations** — always call `queryClient.invalidateQueries()` on success.
+
+Full rules: `.cursor/rules/frontend/` (10–13 series).
+
 ## Stack
 
 | | |
@@ -27,29 +42,15 @@ frontend/
 │   ├── evaluations/            # Evaluation list + detail pages
 │   ├── ground-truth/           # Ground truth list + detail pages
 │   └── api/                    # Next.js Route Handlers (thin proxies to backend)
-│       ├── bank-transactions/
-│       ├── cash-transactions/
-│       ├── receipts/
-│       ├── categories/
-│       ├── products/
-│       ├── vendors/
-│       ├── tags/
-│       ├── transactions/
-│       └── evaluations/
 ├── components/
 │   ├── ui/                     # Design-system primitives (see index.ts)
-│   ├── AnalyticsPanel.tsx
-│   ├── CategoryDropdown.tsx
-│   ├── DataTable.tsx
-│   ├── QueryProvider.tsx
-│   ├── Sidebar.tsx
-│   └── ...
+│   └── ...                     # Feature-level components
 └── lib/
-    ├── api.ts                  # Typed API client — all client-side data calls go here
+    ├── api.ts                  # Typed API client
     ├── types.ts                # Zod schemas + inferred TypeScript types
-    ├── proxy.ts                # Server-side proxy helpers (proxyGet, proxyPost, …)
+    ├── proxy.ts                # Server-side proxy helpers
     ├── pusher.ts               # Pusher/Soketi real-time client
-    ├── utils.ts                # Date helpers (isoToDisplay, displayToIso)
+    ├── utils.ts                # Date helpers
     └── sourceConfig.ts
 ```
 
@@ -76,17 +77,24 @@ Page component ("use client")
                                 └─ FastAPI backend
 ```
 
-## Key Rules (summary — full rules in .cursor/rules/)
-
-- **Pages are `"use client"`** and use React Query; they are NOT React Server Components.
-- **API route handlers** are thin proxies — one `proxyGet`/`proxyPost`/etc. call, nothing more.
-- **All API calls** go through `lib/api.ts` — never `fetch` the backend directly from a component.
-- **All types** come from `z.infer<typeof Schema>` in `lib/types.ts` — no manual interfaces.
-- **UI strings are in Polish.**
-
 ## Design Tokens (tailwind.config.ts)
 
 - Accent: `bg-accent` / `text-accent` → `#635bff`
 - Sidebar background: `bg-sidebar` → `#f6f9fc`
 - Status colors: `status.pending`, `status.processing`, `status.done`, `status.failed`, `status.to_confirm`
 - Font: Inter (via `fontFamily.sans`)
+
+## Canonical References
+
+- `frontend/components/ui/Button.tsx` — variant + size pattern
+- `frontend/components/ui/Input.tsx` — inputSize pattern
+- `frontend/components/ui/Modal.tsx` — controlled modal, Escape key handler
+- `frontend/components/ui/index.ts` — full list of design-system exports
+- `frontend/lib/api.ts` — `apiFetch`, all domain API functions
+- `frontend/lib/types.ts` — Zod schemas + `paginatedSchema` helper
+- `frontend/lib/proxy.ts` — `proxyGet` / `proxyPost` / etc.
+- `frontend/app/layout.tsx` — root layout with providers
+- `frontend/app/bank-transactions/page.tsx` — representative list page with Pusher
+- `frontend/app/bank-transactions/[id]/page.tsx` — representative detail page with mutations
+- `frontend/app/receipts/[id]/page.tsx` — complex multi-field edit form
+- `frontend/tailwind.config.ts` — all design tokens

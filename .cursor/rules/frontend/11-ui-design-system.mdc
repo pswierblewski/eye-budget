@@ -1,6 +1,6 @@
 ---
 description: Tailwind design tokens, UI primitives, and component conventions
-globs: ["frontend/components/**/*.ts", "frontend/components/**/*.tsx", "frontend/app/**/*.tsx"]
+globs: ["frontend/components/**/*.ts", "frontend/components/**/*.tsx", "frontend/app/**/*.tsx", "frontend/tailwind.config.ts"]
 alwaysApply: false
 ---
 When this rule is applied, the FIRST LINE of every response must be: RULE_APPLIED: 11-ui-design-system.mdc.
