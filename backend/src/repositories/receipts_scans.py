@@ -376,7 +376,8 @@ class ReceiptsScansRepository(ABC):
             with self.conn.cursor() as cursor:
                 cursor.execute(
                     """
-                    SELECT id, filename, status, result, categories_candidates, minio_object_key, tags
+                    SELECT id, filename, status, result, categories_candidates,
+                           minio_object_key, tags
                     FROM """ + self.table + """
                     WHERE id = %s
                     """,
