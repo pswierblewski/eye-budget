@@ -8,7 +8,11 @@ interface ReceiptImageViewerProps {
   onReuploadImage?: () => Promise<void>;
 }
 
-export function ReceiptImageViewer({ scanId, refreshKey = 0, onReuploadImage }: ReceiptImageViewerProps) {
+export function ReceiptImageViewer({
+  scanId,
+  refreshKey = 0,
+  onReuploadImage,
+}: ReceiptImageViewerProps) {
   const [error, setError] = useState(false);
   const [reuploading, setReuploading] = useState(false);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
@@ -210,29 +214,29 @@ export function ReceiptImageViewer({ scanId, refreshKey = 0, onReuploadImage }: 
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
       >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={imageUrl}
-          alt={`Receipt ${scanId}`}
-          className="w-full object-contain block"
-          style={{
-            transform: `translate(${translate.x}px, ${translate.y}px) scale(${scale})`,
-            transformOrigin: "0 0",
-            transition: isDragging ? "none" : "transform 0.08s ease-out",
-            willChange: "transform",
-          }}
-          draggable={false}
-          loading="lazy"
-          onError={() => {
-            // If presigned URL fails (expired / network), try the proxy as last resort.
-            const proxyUrl = `/api/receipts/${scanId}/image${refreshKey > 0 ? `?t=${refreshKey}` : ""}`;
-            if (imageUrl !== proxyUrl) {
-              setImageUrl(proxyUrl);
-            } else {
-              setError(true);
-            }
-          }}
-        />
+        <div style={{
+          transform: `translate(${translate.x}px, ${translate.y}px) scale(${scale})`,
+          transformOrigin: "0 0",
+          transition: isDragging ? "none" : "transform 0.08s ease-out",
+          willChange: "transform",
+        }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={imageUrl}
+            alt={`Receipt ${scanId}`}
+            className="w-full object-contain block"
+            draggable={false}
+            loading="lazy"
+            onError={() => {
+              const proxyUrl = `/api/receipts/${scanId}/image${refreshKey > 0 ? `?t=${refreshKey}` : ""}`;
+              if (imageUrl !== proxyUrl) {
+                setImageUrl(proxyUrl);
+              } else {
+                setError(true);
+              }
+            }}
+          />
+        </div>
       </div>
     </div>
   );
