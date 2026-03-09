@@ -865,7 +865,10 @@ export default function ReceiptReviewPage({
                   }
 
                   return (
-                    <div key={item.id} className="flex flex-col gap-1 rounded-lg border border-gray-200 p-3 bg-white">
+                    <div
+                      key={item.id}
+                      className="flex flex-col gap-1 rounded-lg border border-gray-200 p-3 bg-white transition-colors hover:border-red-200 hover:bg-red-50/30"
+                    >
                       <div className="flex items-start justify-between gap-2">
                         <p className="text-sm font-medium text-gray-900">
                           {item.normalized_product_name ?? item.raw_product_name}
@@ -1111,7 +1114,10 @@ export default function ReceiptReviewPage({
                     (editedNormalizedProducts[product.name] ?? "").toLowerCase().includes(productSearch.toLowerCase())
                   )
                   .map(({ product, index }) => (
-                  <div key={index} className="rounded-lg border border-gray-200 bg-white">
+                  <div
+                    key={index}
+                    className="rounded-lg border border-gray-200 bg-white transition-colors hover:border-red-200 hover:bg-red-50/30"
+                  >
                     {/* Product name + price — always visible at the top */}
                     <div className="px-3 pt-3 pb-2 min-w-0">
                       <div className="flex items-start justify-between gap-2">

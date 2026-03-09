@@ -241,7 +241,6 @@ class App(ABC):
                             self.receipts_scans_repository.set_minio_key, file, object_key
                         )
 
-                    # Dominant latency — run async OCR call outside the db_lock
                     ocr_result = await self.ocr_service.process_image_async(preprocessed_image_path)
 
                     async with db_lock:
