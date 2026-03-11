@@ -584,6 +584,9 @@ export default function BankTransactionsPage() {
                 {(importResult.auto_linked ?? 0) > 0 && (
                   <>, powiązano paragonów: {importResult.auto_linked}</>
                 )}
+                {(importResult.needs_manual_link ?? 0) > 0 && (
+                  <>, wymaga ręcznego powiązania: {importResult.needs_manual_link}</>
+                )}
               </span>
               {progress && (
                 <div className="flex flex-col gap-0.5 min-w-[220px]">

@@ -212,7 +212,7 @@ export default function ReceiptReviewPage({
   const { data: bankCandidates = [], isFetching: bankCandidatesLoading } = useQuery<BankTxCandidateItem[]>({
     queryKey: ["receipt-bank-candidates", scanId],
     queryFn: () => getBankTxCandidates(scanId),
-    enabled: showBankCandidates,
+    enabled: showBankCandidates || ((scan?.bank_candidate_count ?? 0) > 0 && !scan?.bank_link),
   });
 
   const linkBankMutation = useMutation({
@@ -238,7 +238,7 @@ export default function ReceiptReviewPage({
   const { data: cashCandidates = [], isFetching: cashCandidatesLoading } = useQuery<CashTxCandidateItem[]>({
     queryKey: ["receipt-cash-candidates", scanId],
     queryFn: () => getCashTxCandidatesForReceipt(scanId),
-    enabled: showCashCandidates,
+    enabled: showCashCandidates || ((scan?.cash_candidate_count ?? 0) > 0 && !scan?.cash_link && !scan?.bank_link),
   });
 
   const createCashMutation = useMutation({
@@ -516,8 +516,8 @@ export default function ReceiptReviewPage({
                       {unlinkBankMutation.isPending ? "…" : "Odepnij"}
                     </button>
                   </div>
-                ) : showBankCandidates ? (
-                  /* Candidate list */
+                ) : (scan.bank_candidate_count ?? 0) > 0 || showBankCandidates ? (
+                  /* Candidate list — auto-loaded when bank_candidate_count > 0 */
                   bankCandidatesLoading ? (
                     <p className="text-xs text-gray-400 animate-pulse">Szukanie…</p>
                   ) : bankCandidates.length === 0 ? (
@@ -526,6 +526,11 @@ export default function ReceiptReviewPage({
                     </p>
                   ) : (
                     <div className="space-y-1.5">
+                      {(scan.bank_candidate_count ?? 0) > 0 && (
+                        <div className="bg-amber-50 border border-amber-200 text-amber-700 rounded-md px-3 py-2 text-sm">
+                          Znaleziono {bankCandidates.length} pasujących {bankCandidates.length === 1 ? "transakcję bankową" : "transakcje bankowe"} — wybierz właściwą:
+                        </div>
+                      )}
                       {bankCandidates.map((c) => {
                         const scoreLabel =
                           c.match_score >= 3 ? "kwota + data + sklep" : "kwota + data";
@@ -625,7 +630,39 @@ export default function ReceiptReviewPage({
                     >
                       {createCashMutation.isPending ? "Tworzenie…" : "Utwórz transakcję gotówkową"}
                     </button>
-                    {!showCashCandidates ? (
+                    {(scan.cash_candidate_count ?? 0) > 0 || showCashCandidates ? (
+                      /* Candidate list — auto-loaded when cash_candidate_count > 0 */
+                      cashCandidatesLoading ? (
+                        <p className="text-xs text-gray-400 animate-pulse">Szukanie…</p>
+                      ) : cashCandidates.length === 0 ? (
+                        <p className="text-xs text-gray-400 italic">Brak pasujących transakcji.</p>
+                      ) : (
+                        <div className="space-y-1.5">
+                          {(scan.cash_candidate_count ?? 0) > 0 && (
+                            <div className="bg-amber-50 border border-amber-200 text-amber-700 rounded-md px-3 py-2 text-sm">
+                              Znaleziono {cashCandidates.length} pasujących {cashCandidates.length === 1 ? "transakcję gotówkową" : "transakcje gotówkowe"} — wybierz właściwą:
+                            </div>
+                          )}
+                          {cashCandidates.map((c) => (
+                            <div key={c.cash_transaction_id}
+                                 className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white px-3 py-2">
+                              <div className="text-xs space-y-0.5 min-w-0">
+                                <p className="font-medium text-gray-800">{c.description ?? "—"}</p>
+                                <p className="text-gray-500">{c.booking_date} · {c.amount.toFixed(2)} PLN</p>
+                              </div>
+                              <button
+                                disabled={linkCashMutation.isPending}
+                                onClick={() => linkCashMutation.mutate(c.cash_transaction_id)}
+                                className="shrink-0 px-2 py-1 text-[10px] rounded-md bg-accent
+                                           text-white hover:bg-accent-hover transition-colors disabled:opacity-50"
+                              >
+                                {linkCashMutation.isPending ? "…" : "Powiąż"}
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )
+                    ) : (
                       <button
                         onClick={() => setShowCashCandidates(true)}
                         className="block text-xs px-3 py-1.5 rounded-md border border-accent text-accent
@@ -633,30 +670,6 @@ export default function ReceiptReviewPage({
                       >
                         Powiąż z istniejącą transakcją gotówkową
                       </button>
-                    ) : cashCandidatesLoading ? (
-                      <p className="text-xs text-gray-400 animate-pulse">Szukanie…</p>
-                    ) : cashCandidates.length === 0 ? (
-                      <p className="text-xs text-gray-400 italic">Brak pasujących transakcji.</p>
-                    ) : (
-                      <div className="space-y-1.5">
-                        {cashCandidates.map((c) => (
-                          <div key={c.cash_transaction_id}
-                               className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white px-3 py-2">
-                            <div className="text-xs space-y-0.5 min-w-0">
-                              <p className="font-medium text-gray-800">{c.description ?? "—"}</p>
-                              <p className="text-gray-500">{c.booking_date} · {c.amount.toFixed(2)} PLN</p>
-                            </div>
-                            <button
-                              disabled={linkCashMutation.isPending}
-                              onClick={() => linkCashMutation.mutate(c.cash_transaction_id)}
-                              className="shrink-0 px-2 py-1 text-[10px] rounded-md bg-accent
-                                         text-white hover:bg-accent-hover transition-colors disabled:opacity-50"
-                            >
-                              {linkCashMutation.isPending ? "…" : "Powiąż"}
-                            </button>
-                          </div>
-                        ))}
-                      </div>
                     )}
                   </div>
                 ) : (

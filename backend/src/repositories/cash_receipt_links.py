@@ -126,7 +126,7 @@ class CashReceiptLinksRepository:
         Return the single best-matching receipt_transaction for the given cash transaction.
 
         Excludes receipts already linked to any bank transaction OR any cash transaction.
-        Returns None when no match exists.
+        Returns None when no match exists OR when more than one candidate exists (ambiguous).
         """
         if not self.conn:
             return None
@@ -160,13 +160,14 @@ class CashReceiptLinksRepository:
                       AND rcl.id IS NULL
                       AND rbl.id IS NULL
                     ORDER BY match_score DESC, rt.date DESC
-                    LIMIT 1
+                    LIMIT 2
                     """,
                     (cash_transaction_id,),
                 )
-                r = cur.fetchone()
-            if r is None:
+                rows = cur.fetchmany(2)
+            if len(rows) != 1:
                 return None
+            r = rows[0]
             return dict(
                 receipt_transaction_id=r[0],
                 scan_id=r[1],
@@ -185,7 +186,7 @@ class CashReceiptLinksRepository:
         Return the single best-matching cash_transaction for the given receipt.
 
         Excludes cash transactions already linked to any receipt.
-        Returns None when no match exists.
+        Returns None when no match exists OR when more than one candidate exists (ambiguous).
         """
         if not self.conn:
             return None
@@ -213,13 +214,14 @@ class CashReceiptLinksRepository:
                     WHERE rt.id = %s
                       AND rcl.id IS NULL
                     ORDER BY match_score DESC, ct.booking_date DESC
-                    LIMIT 1
+                    LIMIT 2
                     """,
                     (receipt_transaction_id,),
                 )
-                r = cur.fetchone()
-            if r is None:
+                rows = cur.fetchmany(2)
+            if len(rows) != 1:
                 return None
+            r = rows[0]
             return dict(
                 cash_transaction_id=r[0],
                 description=r[1],
