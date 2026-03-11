@@ -167,7 +167,7 @@ class BankReceiptLinksRepository:
         Return the single best-matching receipt_transaction for the given bank transaction.
 
         Excludes receipts already linked to any bank transaction OR any cash transaction.
-        Returns None when no match exists.
+        Returns None when no match exists OR when more than one candidate exists (ambiguous).
         """
         if not self.conn:
             return None
@@ -201,13 +201,14 @@ class BankReceiptLinksRepository:
                       AND rbl.id IS NULL
                       AND rcl.id IS NULL
                     ORDER BY match_score DESC, rt.date DESC
-                    LIMIT 1
+                    LIMIT 2
                     """,
                     (bank_transaction_id,),
                 )
-                r = cur.fetchone()
-            if r is None:
+                rows = cur.fetchmany(2)
+            if len(rows) != 1:
                 return None
+            r = rows[0]
             return ReceiptCandidate(
                 receipt_transaction_id=r[0],
                 scan_id=r[1],
@@ -226,7 +227,7 @@ class BankReceiptLinksRepository:
         Return the single best-matching bank_transaction for the given receipt.
 
         Excludes bank transactions already linked to any receipt.
-        Returns None when no match exists.
+        Returns None when no match exists OR when more than one candidate exists (ambiguous).
         """
         if not self.conn:
             return None
@@ -254,13 +255,14 @@ class BankReceiptLinksRepository:
                     WHERE rt.id = %s
                       AND rbl.id IS NULL
                     ORDER BY match_score DESC, bt.booking_date DESC
-                    LIMIT 1
+                    LIMIT 2
                     """,
                     (receipt_transaction_id,),
                 )
-                r = cur.fetchone()
-            if r is None:
+                rows = cur.fetchmany(2)
+            if len(rows) != 1:
                 return None
+            r = rows[0]
             return BankTxCandidate(
                 bank_transaction_id=r[0],
                 counterparty=r[1],

@@ -220,6 +220,10 @@ class ReceiptScanDetail(BaseModel):
     vendor_normalization: str | None = None
     product_normalizations: dict[str, str | None] | None = None
     tags: list[str] = []
+    # Number of unlinked matching bank/cash transactions found during candidate search.
+    # > 0 means auto-linking was skipped and the user must choose manually.
+    bank_candidate_count: int = 0
+    cash_candidate_count: int = 0
 
 
 class CategoryItem(BaseModel):
@@ -356,6 +360,7 @@ class BankImportResult(BaseModel):
     errors: int
     task_id: str | None = None  # Celery task ID for background categorization
     auto_linked: int = 0        # Number of receipts auto-linked during import
+    needs_manual_link: int = 0  # Transactions skipped because multiple receipt candidates exist
 
 
 class RecategorizeBankTransactionsResult(BaseModel):

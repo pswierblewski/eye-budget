@@ -380,6 +380,16 @@ class App(ABC):
             cash_link_data = self.cash_receipt_links_repository.get_cash_link_info(detail.transaction.id)
             if cash_link_data:
                 detail.cash_link = CashLinkInfo(**cash_link_data)
+            # Count unlinked candidates so the UI can prompt manual selection when > 0.
+            # Repositories return [] on error, so len() is always safe.
+            if detail.bank_link is None:
+                detail.bank_candidate_count = len(
+                    self.bank_receipt_links_repository.find_bank_tx_candidates(detail.transaction.id)
+                )
+            if detail.cash_link is None:
+                detail.cash_candidate_count = len(
+                    self.cash_receipt_links_repository.find_cash_tx_candidates(detail.transaction.id)
+                )
         return detail
 
     def get_receipt_image_bytes(self, scan_id: int) -> bytes | None:
@@ -793,9 +803,15 @@ class App(ABC):
         new_ids = self.bank_transactions_repository.get_new_ids_for_categorization()
 
         # Auto-link newly imported transactions to matching unlinked receipts
-        auto_linked = self._auto_link_bank_transactions(new_ids)
+        auto_linked, needs_manual_link = self._auto_link_bank_transactions(new_ids)
 
-        return BankImportResult(imported=inserted, duplicates=duplicates, errors=0, auto_linked=auto_linked), new_ids
+        return BankImportResult(
+            imported=inserted,
+            duplicates=duplicates,
+            errors=0,
+            auto_linked=auto_linked,
+            needs_manual_link=needs_manual_link,
+        ), new_ids
 
     def get_bank_tx_ids_for_recategorization(self) -> list[int]:
         """Return IDs of bank transactions that lack category candidates and have no receipt link."""
@@ -916,15 +932,21 @@ class App(ABC):
         except Exception as e:
             print(f"Warning: _auto_link_receipt failed for scan {scan_id}: {e}")
 
-    def _auto_link_bank_transactions(self, tx_ids: list[int]) -> int:
+    def _auto_link_bank_transactions(self, tx_ids: list[int]) -> tuple[int, int]:
         """
         For each newly imported bank transaction, try to auto-link the best unlinked receipt.
 
-        Returns the number of links created.
+        Returns (linked, skipped) where skipped counts transactions that had multiple receipt
+        candidates and were left for the user to resolve manually.
         """
         linked = 0
+        skipped = 0
         for tx_id in tx_ids:
             try:
+                candidates = self.bank_receipt_links_repository.find_receipt_candidates(tx_id)
+                if len(candidates) > 1:
+                    skipped += 1
+                    continue
                 match = self.bank_receipt_links_repository.find_auto_match_receipt(tx_id)
                 if match:
                     ok = self.bank_receipt_links_repository.create_link(
@@ -940,7 +962,7 @@ class App(ABC):
                         linked += 1
             except Exception as e:
                 print(f"Warning: _auto_link_bank_transactions failed for tx {tx_id}: {e}")
-        return linked
+        return linked, skipped
 
     def _auto_link_cash_transaction(self, tx_id: int) -> bool:
         """
