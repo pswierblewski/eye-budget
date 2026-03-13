@@ -8,6 +8,7 @@ from ..data import (
     TransactionModel,
     ReceiptScanListItem,
     ReceiptScanDetail,
+    TextRegionsResult,
 )
 
 
@@ -377,7 +378,7 @@ class ReceiptsScansRepository(ABC):
                 cursor.execute(
                     """
                     SELECT id, filename, status, result, categories_candidates,
-                           minio_object_key, tags
+                           minio_object_key, tags, text_regions
                     FROM """ + self.table + """
                     WHERE id = %s
                     """,
@@ -392,6 +393,12 @@ class ReceiptsScansRepository(ABC):
                         result_model = TransactionModel(**row[3])
                     except Exception:
                         pass
+                text_regions_model: TextRegionsResult | None = None
+                if row[7]:
+                    try:
+                        text_regions_model = TextRegionsResult(**row[7])
+                    except Exception:
+                        pass
                 return ReceiptScanDetail(
                     id=row[0],
                     filename=row[1],
@@ -401,6 +408,7 @@ class ReceiptsScansRepository(ABC):
                     minio_object_key=row[5],
                     tags=list(row[6]) if row[6] else [],
                     transaction=None,  # populated by endpoint handler
+                    text_regions=text_regions_model,
                 )
         except Exception as e:
             print("Failed to fetch scan by id:", e)
@@ -468,6 +476,22 @@ class ReceiptsScansRepository(ABC):
                 return True
         except Exception as e:
             print("Failed to update tags:", e)
+            self.conn.rollback()
+            return False
+
+    def set_text_regions(self, scan_id: int, result: TextRegionsResult) -> bool:
+        if not self.conn:
+            return False
+        try:
+            with self.conn.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE " + self.table + " SET text_regions = %s WHERE id = %s",
+                    (extras.Json(result.model_dump()), scan_id),
+                )
+                self.conn.commit()
+                return True
+        except Exception as e:
+            print("Failed to set text_regions:", e)
             self.conn.rollback()
             return False
 

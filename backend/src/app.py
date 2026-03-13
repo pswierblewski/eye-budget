@@ -11,6 +11,8 @@ from src.services.products import ProductsService
 from src.services.categories import CategoriesService
 from src.services.bank_categorization import BankCategorizationService
 from src.services.bank_csv_parser import PekaoCsvParser
+from src.services.text_localization import TextLocalizationService
+from src.services.text_matching import TextMatchingService
 from .repositories.files import FilesRepository
 from .repositories.vendors import VendorsRepository
 from .repositories.products import ProductsRepository
@@ -64,6 +66,7 @@ from .data import (
     UnifiedTransaction,
     AnalyticsSummary,
     PromptAnalyticsSummary,
+    TextRegionsResult,
 )
 from .db_contexts.eye_budget import EyeBudgetDbContext
 
@@ -94,6 +97,8 @@ class App(ABC):
         self.ocr_service = OCRService()
         self.preprocessing_service = PreprocessingService()
         self.minio_service = MinioStorageService()
+        self.text_localization_service = TextLocalizationService()
+        self.text_matching_service = TextMatchingService()
         self.vendors_service = VendorsService()
         self.products_service = ProductsService()
         self.categories_service = CategoriesService(self.eye_budget_db_context)
@@ -157,6 +162,18 @@ class App(ABC):
         else:
             self._run_production(on_progress=on_progress)
             return None
+
+    def _run_localization(self, scan_id: int, image_path: str, products: list) -> TextRegionsResult | None:
+        """
+        Run PaddleOCR localization for a single receipt and persist the result.
+
+        Always wrapped in try/except by callers — failure must never abort the
+        main receipt pipeline.  Returns the result on success, None on failure.
+        """
+        ocr_lines = self.text_localization_service.detect(image_path)
+        result = self.text_matching_service.match(ocr_lines, products, image_path)
+        self.receipts_scans_repository.set_text_regions(scan_id, result)
+        return result
 
     def _run_production(self, on_progress=None):
         """Run the standard production processing pipeline."""
@@ -284,6 +301,14 @@ class App(ABC):
                             self.receipts_scans_repository.set_category_candidates,
                             file, category_candidates,
                         )
+
+                    try:
+                        products = [p.model_dump() for p in transaction_model.products]
+                        await asyncio.to_thread(
+                            self._run_localization, scan_id, preprocessed_image_path, products
+                        )
+                    except Exception as loc_err:
+                        print(f"Text localization failed for {file} (non-fatal): {loc_err}")
 
                     status = "done"
                 except Exception as e:
@@ -717,6 +742,41 @@ class App(ABC):
         self._process_single_file(filename)
         return True
 
+    def localize_receipt(self, scan_id: int) -> TextRegionsResult:
+        """
+        Manually re-run text localization for a single receipt.
+
+        Downloads the preprocessed image from MinIO to a temp file, runs
+        PaddleOCR, matches LLM products to OCR lines, persists the result,
+        and returns it.  Raises HTTPException(404) if the scan is not found
+        or has no OCR result yet.  Other exceptions propagate as-is so the
+        endpoint can wrap them as 500.
+        """
+        import tempfile
+        from fastapi import HTTPException
+
+        scan = self.receipts_scans_repository.get_by_id(scan_id)
+        if scan is None or scan.result is None:
+            raise HTTPException(status_code=404, detail=f"Receipt scan {scan_id} not found or not yet processed")
+        if scan.minio_object_key is None:
+            raise HTTPException(status_code=404, detail=f"Receipt scan {scan_id} has no stored image")
+
+        with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
+            tmp_path = tmp.name
+
+        try:
+            image_data = self.minio_service.download_image(scan.minio_object_key)
+            with open(tmp_path, "wb") as f:
+                f.write(image_data)
+
+            products = [p.model_dump() for p in scan.result.products]
+            result = self._run_localization(scan_id, tmp_path, products)
+            return result
+        finally:
+            import os as _os_loc
+            if _os_loc.path.exists(tmp_path):
+                _os_loc.remove(tmp_path)
+
     def _process_single_file(self, filename: str) -> bool:
         """
         Run the production processing pipeline for one specific file.
@@ -757,6 +817,13 @@ class App(ABC):
 
             category_candidates = self.categories_service.assign_category_candidates(transaction_model)
             self.receipts_scans_repository.set_category_candidates(filename, category_candidates)
+
+            try:
+                products = [p.model_dump() for p in transaction_model.products]
+                self._run_localization(scan_id, preprocessed_image_path, products)
+            except Exception as loc_err:
+                print(f"Text localization failed for {filename} (non-fatal): {loc_err}")
+
             return True
         except Exception as e:
             print(f"Error processing file {filename}: {e}")
@@ -1291,5 +1358,6 @@ class App(ABC):
         self.products_service.dispose()
         self.evaluation_service.dispose()
         self.ground_truth_service.dispose()
+        self.text_localization_service.dispose()
         self.eye_budget_db_context.dispose()
         print("All resources disposed.")

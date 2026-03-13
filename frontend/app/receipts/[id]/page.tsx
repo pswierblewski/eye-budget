@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getReceipt, listReceipts, listCategories, listProducts, confirmReceipt, reopenReceipt, deleteReceipt, retryReceipt, reuployReceiptImage, getBankTxCandidates, linkBankToReceipt, unlinkBankTransaction, updateReceiptTags, getAllTags, createCashFromReceipt, getCashTxCandidatesForReceipt, linkCashToReceipt, unlinkCashTransaction, updateTransactionItem, deleteTransactionItem } from "@/lib/api";
+import { getReceipt, listReceipts, listCategories, listProducts, confirmReceipt, reopenReceipt, deleteReceipt, retryReceipt, reuployReceiptImage, getBankTxCandidates, linkBankToReceipt, unlinkBankTransaction, updateReceiptTags, getAllTags, createCashFromReceipt, getCashTxCandidatesForReceipt, linkCashToReceipt, unlinkCashTransaction, updateTransactionItem, deleteTransactionItem, localizeReceipt } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import { ReceiptImageViewer } from "@/components/ReceiptImageViewer";
 import { ProductCategoryRow } from "@/components/ProductCategoryRow";
@@ -302,6 +302,38 @@ export default function ReceiptReviewPage({
     setImageRefreshKey((k) => k + 1);
   };
 
+  // Bounding-box hover highlight
+  const [hoveredProductIndex, setHoveredProductIndex] = useState<number | null>(null);
+
+  const localizeMutation = useMutation({
+    mutationFn: () => localizeReceipt(scanId),
+    onSuccess: (result) => {
+      queryClient.setQueryData(["receipt", scanId], (old: typeof scan) =>
+        old ? { ...old, text_regions: result } : old
+      );
+    },
+  });
+
+  // Map confirmed transaction item index → OCR product index.
+  // Greedy name-match with a "used" set so duplicates (e.g. "Rabat") each get a unique slot.
+  const confirmedToOcrIndex = useMemo<Record<number, number>>(() => {
+    const ocrProducts = scan?.result?.products ?? [];
+    const items = scan?.transaction?.items ?? [];
+    const usedOcrIndices = new Set<number>();
+    const mapping: Record<number, number> = {};
+    items.forEach((item, itemIdx) => {
+      const rawName = item.raw_product_name.toLowerCase();
+      const ocrIdx = ocrProducts.findIndex(
+        (p, i) => !usedOcrIndices.has(i) && p.name.toLowerCase() === rawName
+      );
+      if (ocrIdx !== -1) {
+        usedOcrIndices.add(ocrIdx);
+        mapping[itemIdx] = ocrIdx;
+      }
+    });
+    return mapping;
+  }, [scan?.result?.products, scan?.transaction?.items]);
+
   if (scanLoading) {
     return (
       <div className="text-sm text-gray-400 py-16 text-center">Ładowanie…</div>
@@ -350,6 +382,13 @@ export default function ReceiptReviewPage({
   const calculatedTotal = editedProducts.reduce((sum, p) => sum + (p.price || 0), 0);
   const parsedTotal = parseFloat(editedTotal) || 0;
   const totalsMatch = Math.abs(calculatedTotal - parsedTotal) < 0.005;
+
+  const stickyTotal = scan.transaction ? scan.transaction.total : parsedTotal;
+  const stickyCalc  = scan.transaction
+    ? scan.transaction.items.reduce((s, i) => s + i.price, 0)
+    : calculatedTotal;
+  const stickyMatch = Math.abs(stickyCalc - stickyTotal) < 0.005;
+  const stickyDiff  = stickyTotal - stickyCalc;
 
   const allSelected = products.every(
     (p) => getSelection(p.name) !== undefined
@@ -454,10 +493,43 @@ export default function ReceiptReviewPage({
           scanId={scanId}
           refreshKey={imageRefreshKey}
           onReuploadImage={handleReuloadImage}
+          highlightRegion={
+            hoveredProductIndex !== null && scan.text_regions
+              ? scan.transaction
+                ? scan.text_regions.product_regions[String(confirmedToOcrIndex[hoveredProductIndex])]
+                : scan.text_regions.product_regions[String(hoveredProductIndex)]
+              : undefined
+          }
+          imageWidth={scan.text_regions?.image_width}
+          imageHeight={scan.text_regions?.image_height}
         />
 
         {/* Review panel */}
         <div className="flex flex-col gap-4 overflow-y-auto max-h-[calc(100vh-10rem)] pr-1">
+
+          {/* Sticky totals bar */}
+          <div className="sticky top-0 z-10 -mx-1 px-1 pt-0.5 pb-2 bg-white border-b border-gray-100">
+            <div className="flex items-center justify-start gap-4 rounded-lg bg-gray-50 px-3 py-2 text-xs">
+              <div className="flex items-center gap-1.5">
+                <span className="text-gray-500">Paragon:</span>
+                <span className="font-semibold text-gray-900">{stickyTotal.toFixed(2)} PLN</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-gray-500">Produkty:</span>
+                <span className="font-semibold text-gray-900">{stickyCalc.toFixed(2)} PLN</span>
+              </div>
+              {stickyMatch ? (
+                <span className="inline-flex items-center text-[10px] font-semibold text-green-700 bg-green-100 px-1.5 py-0.5 rounded-full">
+                  ✓ zgodne
+                </span>
+              ) : (
+                <span className="inline-flex items-center text-[10px] font-semibold text-red-600 bg-red-100 px-1.5 py-0.5 rounded-full">
+                  różnica {stickyDiff > 0 ? "+" : ""}{stickyDiff.toFixed(2)} PLN
+                </span>
+              )}
+            </div>
+          </div>
+
           {scan.transaction ? (
             /* Confirmed — read-only view */
             <>
@@ -748,6 +820,19 @@ export default function ReceiptReviewPage({
                     </span>
                   )}
                 </div>
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => localizeMutation.mutate()}
+                    disabled={localizeMutation.isPending}
+                    className="text-xs px-2.5 py-1 rounded-md border border-gray-300 bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                  >
+                    {localizeMutation.isPending ? "Wykrywam…" : "Wykryj pozycje na zdjęciu"}
+                  </button>
+                  {localizeMutation.isError && (
+                    <p className="mt-1 text-xs text-red-500">{(localizeMutation.error as Error).message}</p>
+                  )}
+                </div>
                 {scan.transaction.items.length > 5 && (
                   <input
                     type="search"
@@ -758,13 +843,14 @@ export default function ReceiptReviewPage({
                   />
                 )}
                 {scan.transaction.items
-                  .filter((i) =>
+                  .map((item, itemIdx) => ({ item, itemIdx }))
+                  .filter(({ item: i }) =>
                     !productSearch ||
                     [i.normalized_product_name, i.raw_product_name]
                       .filter(Boolean)
                       .some((n) => n!.toLowerCase().includes(productSearch.toLowerCase()))
                   )
-                  .map((item) => {
+                  .map(({ item, itemIdx }) => {
                   const cat = allCategories.find((c) => c.id === item.category_id);
                   const catLabel = cat
                     ? [cat.parent_name, cat.name].filter(Boolean).join(" / ")
@@ -881,6 +967,8 @@ export default function ReceiptReviewPage({
                     <div
                       key={item.id}
                       className="flex flex-col gap-1 rounded-lg border border-gray-200 p-3 bg-white transition-colors hover:border-red-200 hover:bg-red-50/30"
+                      onMouseEnter={() => setHoveredProductIndex(itemIdx)}
+                      onMouseLeave={() => setHoveredProductIndex(null)}
                     >
                       <div className="flex items-start justify-between gap-2">
                         <p className="text-sm font-medium text-gray-900">
@@ -1110,6 +1198,19 @@ export default function ReceiptReviewPage({
                     </span>
                   )}
                 </div>
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => localizeMutation.mutate()}
+                    disabled={localizeMutation.isPending}
+                    className="text-xs px-2.5 py-1 rounded-md border border-gray-300 bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                  >
+                    {localizeMutation.isPending ? "Wykrywam…" : "Wykryj pozycje na zdjęciu"}
+                  </button>
+                  {localizeMutation.isError && (
+                    <p className="mt-1 text-xs text-red-500">{(localizeMutation.error as Error).message}</p>
+                  )}
+                </div>
                 {products.length > 5 && (
                   <input
                     type="search"
@@ -1130,6 +1231,8 @@ export default function ReceiptReviewPage({
                   <div
                     key={index}
                     className="rounded-lg border border-gray-200 bg-white transition-colors hover:border-red-200 hover:bg-red-50/30"
+                    onMouseEnter={() => setHoveredProductIndex(index)}
+                    onMouseLeave={() => setHoveredProductIndex(null)}
                   >
                     {/* Product name + price — always visible at the top */}
                     <div className="px-3 pt-3 pb-2 min-w-0">

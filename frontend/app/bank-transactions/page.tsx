@@ -565,7 +565,7 @@ export default function BankTransactionsPage() {
   ];
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col gap-4">
       {/* Header */}
       <PageHeader
         title="Transakcje bankowe"
