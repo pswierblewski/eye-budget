@@ -1,15 +1,17 @@
 <!--
 SYNC IMPACT REPORT
 ==================
-Version change: [template] → 1.0.0 (initial ratification)
+Version change: 1.1.0 → 1.2.0 (MINOR — two new principles added; Principles I and III expanded)
 
-Modified principles: N/A (first population from template)
+Modified principles:
+  - I. Code Quality & Separation of Concerns: clarified TypeScript and Python
+    discipline; no change to non-negotiables, added precision on hardcoded values.
+  - III. User Experience Consistency: expanded with full design token inventory,
+    styling rules, icon library constraint, and form handling patterns.
 
 Added sections:
-  - Core Principles (I–IV)
-  - API Contract Integrity
-  - Development Workflow & Quality Gates
-  - Governance
+  - V. Frontend Architecture & Design System (new principle)
+  - VI. Backend Conventions (new principle)
 
 Removed sections: none
 
@@ -19,7 +21,8 @@ Templates requiring updates:
   - .specify/templates/tasks-template.md ✅ Phase structure supports testing discipline required by Principle II
 
 Follow-up TODOs:
-  - None. All placeholders resolved.
+  - Existing codebase unit-test coverage is acknowledged as a known gap.
+    A dedicated backlog task to retrofit unit tests for existing services is recommended.
 -->
 
 # Eye Budget Constitution
@@ -30,13 +33,16 @@ Follow-up TODOs:
 
 Every module MUST have a single, clearly stated responsibility.
 TypeScript lives exclusively in `frontend/`; Python lives exclusively in `backend/`.
-Strict TypeScript (`strict: true`) MUST be maintained — no `any` casts without a
-documented justification comment.
+Strict TypeScript (`"strict": true` in `tsconfig.json`) MUST be maintained.
+`any` casts MUST NOT be used without an inline comment explaining why the type is
+unknowable — silent `any` is never acceptable.
 Pydantic models in `backend/src/data.py` MUST be the canonical source of truth for
 all request/response shapes; no raw dict passing across service boundaries.
 Functions and classes MUST be kept small and focused — a function that cannot be
 described in one sentence MUST be refactored.
 Dead code, commented-out blocks, and debug prints MUST NOT be committed to main.
+No hardcoded URLs, API keys, credentials, hostnames, or ports in source files — all
+config MUST be read from environment variables.
 
 **Rationale**: A monorepo with two heterogeneous stacks (Next.js + FastAPI) is
 particularly vulnerable to cross-language pattern leakage and implicit coupling.
@@ -44,19 +50,29 @@ Strict boundaries reduce cognitive load and make each side independently deploya
 
 ### II. Testing Standards
 
-Every new API endpoint MUST be covered by at least one integration test that exercises
-the full request → service → repository → DB round trip.
+**⚠ Known gap**: The existing codebase may lack unit test coverage in places.
+This is acknowledged as technical debt. It does NOT grant permission to add more
+untested code — it is a backlog item to be addressed incrementally.
+
+Every piece of **new code** — whether it is a new feature, a bug fix, a refactor, or
+a patch — MUST be accompanied by unit tests before merging. No exceptions.
+Unit tests MUST cover:
+- All non-trivial functions and methods in `backend/src/services/`, `backend/src/repositories/`, and `backend/src/tasks/`.
+- All utility functions in `frontend/lib/` that contain conditional logic.
+- All React components that contain non-trivial state logic or conditional rendering.
+
+Every new API endpoint MUST additionally be covered by at least one integration test
+that exercises the full request → service → repository → DB round trip.
 Frontend API client functions in `lib/api.ts` MUST have type coverage validated via
 Zod schemas in `lib/types.ts` — schema mismatches MUST be caught at runtime boundaries.
-Unit tests MUST cover all non-trivial business logic in `backend/src/services/`.
-Tests MUST be written before or alongside the implementation — merging untested
-business logic to main is not permitted.
+Tests MUST be written before or alongside the implementation — merging untested code
+to main is not permitted.
 All tests MUST pass (`npm run lint` + backend test suite) before a feature branch is
 merged.
 
 **Rationale**: Eye Budget processes financial data from OCR pipelines. Regressions in
-transaction extraction or storage are high-impact. A disciplined test baseline prevents
-silent data corruption across releases.
+transaction extraction or storage are high-impact. The existing test gap is a known
+risk; halting its growth is the minimum viable safeguard while the backlog is addressed.
 
 ### III. User Experience Consistency
 
@@ -96,6 +112,137 @@ introduce new bundle-size regressions exceeding 10 % on any route chunk.
 loops reduce trust and adoption. Idempotent Celery tasks are essential given Redis
 broker restarts and at-least-once delivery semantics.
 
+### V. Frontend Architecture & Design System
+
+**Routing**: App Router only (`frontend/app/`). The `pages/` directory MUST NOT be
+created. All page and leaf route components are `"use client"` — do not use React
+Server Components for pages that display dynamic data.
+
+**API proxy layer**: Every Next.js route handler in `app/api/` is a thin proxy that
+calls one of `proxyGet`, `proxyPost`, `proxyPut`, `proxyPatch`, `proxyDelete` from
+`lib/proxy.ts`. Business logic, validation, and DB access MUST NOT appear in route
+handlers.
+
+**Data fetching**: All client-side data fetching uses `@tanstack/react-query v5`
+(`useQuery` / `useMutation`). Direct `fetch` calls from components or pages are
+forbidden — all API calls MUST go through a typed function in `frontend/lib/api.ts`.
+After every successful mutation, `queryClient.invalidateQueries()` MUST be called to
+keep the cache fresh.
+
+**Types**: Zod schemas in `frontend/lib/types.ts` are the single source of truth for
+all data shapes. TypeScript types MUST be inferred via `z.infer<typeof Schema>` —
+writing parallel `interface` or `type` aliases manually is forbidden. All schemas
+MUST live in `lib/types.ts`; scattering schema definitions across components is
+not permitted. Every `apiFetch` call MUST validate the response with `schema.parse()`
+— `as SomeType` casts on raw fetch responses MUST NOT be used.
+
+**Forms**: This project does NOT use react-hook-form, Formik, or any form library.
+Forms MUST be built with controlled React inputs and `useState`. Input and date
+fields MUST use `Input`, `Textarea`, and `DateInput` from `@/components/ui`.
+
+**Styling**: Tailwind CSS is the only permitted styling mechanism. Inline `style={{}}`
+MUST NOT be used except where Tailwind cannot express the value (document the
+exception). Conditional class composition MUST use `clsx` — never `tailwind-merge`.
+
+**Design tokens** (defined in `tailwind.config.ts` — use the token, never hardcode):
+- Accent color: `bg-accent` / `text-accent` / `border-accent` → `#635bff`;
+  hover: `bg-accent-hover` → `#5248db`. `#635bff` MUST NOT appear literally in code.
+- Sidebar background: `bg-sidebar` → `#f6f9fc`.
+- Status colors: `bg-status-{pending,processing,done,failed,to_confirm}` and
+  `text-status-{…}`.
+- Font: Inter (`fontFamily.sans`). No other font MUST be imported.
+
+**Icons**: `lucide-react` is the only permitted icon library. Other icon packages MUST
+NOT be installed. Import individual icons:
+`import { ChevronRight, Plus } from "lucide-react"`.
+
+**Component variants**: New components that need variants MUST follow the
+`Record<Variant, string>` pattern used in `Button.tsx` and `Input.tsx`.
+
+**Path alias**: `@/*` maps to `frontend/*`. All intra-project imports MUST use this
+alias; relative `../..` paths across feature boundaries are not permitted.
+
+**Navigation**: Internal links MUST use Next.js `<Link>`; programmatic navigation
+MUST use `useRouter()` from `next/navigation`.
+
+**Pusher cleanup**: WebSocket subscriptions opened in `useEffect` MUST be cleaned up
+in the effect teardown via `channel.unbind_all()` and `pusherClient.unsubscribe()`.
+
+**Canonical references (authoritative implementation examples):**
+- `frontend/components/ui/index.ts` — full primitive export list
+- `frontend/tailwind.config.ts` — design tokens
+- `frontend/lib/api.ts` — `apiFetch` and domain API functions
+- `frontend/lib/types.ts` — Zod schemas and `paginatedSchema` helper
+- `frontend/lib/proxy.ts` — proxy helpers
+- `frontend/lib/pusher.ts` — Pusher client
+- `frontend/app/bank-transactions/page.tsx` — list page with Pusher + mutations
+- `frontend/components/ui/Button.tsx` — variant + size pattern reference
+
+**Rationale**: A consistent frontend architecture minimises onboarding friction and
+prevents parallel patterns proliferating across a large component tree. The design
+token system ensures visual consistency without per-component hardcoded values.
+
+### VI. Backend Conventions
+
+**Route organisation**: All FastAPI routes MUST live in `backend/src/main.py`.
+`APIRouter` sub-packages MUST NOT be created. Routes MUST be grouped by domain with
+comment headers (e.g., `# --- Receipts ---`). Every route decorator MUST declare
+`response_model=` — returning raw dicts is forbidden.
+
+**App lifecycle**: `App` (in `src/app.py`) MUST be instantiated once per HTTP request
+and disposed in a `finally` block. It MUST NOT be stored as a module-level global.
+`App.__init__` creates the DB context, repositories, and services. `App.dispose()`
+closes the DB connection and all resources — it MUST always be called.
+
+**Services**: Services in `src/services/` receive dependencies via constructor
+injection — no globals, no `App()` inside a service. Services that preload data MUST
+expose a `build()` method called in `App.__init__`. Celery tasks MUST follow the same
+App lifecycle pattern as HTTP handlers.
+
+**Pydantic model naming** (all models in `src/data.py`):
+- `*ListItem` — compact shape for list responses
+- `*Detail` — full shape for single-resource GET
+- `*Request` — generic inbound body
+- `Create*` — POST creation body
+- `Update*` — PUT/PATCH body
+- `*Response` — any other response shape
+
+**Error handling**: HTTP layer errors MUST be raised as `HTTPException` with the
+following status codes: `404` when a repository returns `None`; `409` when business
+logic raises `ValueError`; `500` for any unhandled `Exception`. The `detail` field
+MUST be `str(e)` — stack traces MUST NOT be exposed.
+
+**Repository / SQL rules**:
+- Parameterized queries only (`%s` placeholders). f-strings and `.format()` for query
+  values are forbidden (SQL injection risk).
+- `conn.commit()` MUST follow every successful write. `conn.rollback()` MUST appear
+  in every `except` block that follows a write.
+- Repositories MUST return safe fallbacks (`None`, `False`, `[]`) on error and MUST
+  log the failure — re-raising from repository methods is not permitted.
+- Write methods MUST guard against a missing connection at their top:
+  `if not self.conn: return None`.
+- Use `ON CONFLICT … DO NOTHING RETURNING id` for inserts that may race.
+
+**Migrations**:
+- File naming: `YYYYMMDD_XX_short-description.sql`.
+- Every migration MUST declare `-- depends: <previous-migration-basename>`.
+- All DDL MUST use safety guards: `CREATE TABLE IF NOT EXISTS`,
+  `ADD COLUMN IF NOT EXISTS`, `DROP COLUMN IF EXISTS`, `CREATE INDEX IF NOT EXISTS`.
+- One concern per migration file — never bundle unrelated changes.
+- Applied migrations MUST NOT be modified — create a new file instead.
+
+**Canonical references:**
+- `backend/src/main.py` — route definitions, App lifecycle, error handling
+- `backend/src/app.py` — App wiring and dispose pattern
+- `backend/src/data.py` — Pydantic models and naming conventions
+- `backend/src/services/categories.py` — service with `build()` preloading
+- `backend/src/repositories/receipts_scans.py` — commit/rollback, dynamic filters
+- `backend/migrations/20241010_01_receipts_scans.sql` — migration style
+
+**Rationale**: Consistent service and repository patterns make the backend predictable
+and safe to extend. Parameterized queries eliminate SQL injection. The App lifecycle
+pattern ensures no leaked DB connections under any error condition.
+
 ## API Contract Integrity
 
 Every API change MUST update all four layers simultaneously:
@@ -107,6 +254,8 @@ Every API change MUST update all four layers simultaneously:
 Partial updates that leave any layer out of sync MUST NOT be merged.
 Breaking changes to existing endpoints MUST be discussed with the team before
 implementation; backward-compatible additions are preferred over field removal.
+Pagination responses MUST use the `PaginatedResponse[T]` shape on the backend and
+`paginatedSchema<T>()` on the frontend: `{ items, total, limit, offset }`.
 
 ## Development Workflow & Quality Gates
 
@@ -114,6 +263,7 @@ Database schema changes MUST be delivered as Yoyo migration files in
 `backend/migrations/`, named `YYYYMMDD_XX_description.sql`. Migrations MUST be
 applied before the corresponding code change is deployed.
 All PRs MUST pass:
+- `cd frontend && npx tsc --noEmit` — zero TypeScript errors
 - `npm run lint` (frontend) — zero errors
 - `npm run build` (frontend) — zero errors
 - Backend test suite — zero failures
@@ -135,8 +285,8 @@ Amendments require:
 3. Update of `LAST_AMENDED_DATE` and the Sync Impact Report.
 4. Propagation of changes to affected templates in `.specify/templates/`.
 
-All code reviews MUST verify compliance with the four Core Principles.
+All code reviews MUST verify compliance with the six Core Principles.
 Complexity that violates a principle MUST be justified in the PR description with a
 documented rationale; unexplained violations are grounds for rejection.
 
-**Version**: 1.0.0 | **Ratified**: 2026-03-13 | **Last Amended**: 2026-03-13
+**Version**: 1.2.0 | **Ratified**: 2026-03-13 | **Last Amended**: 2026-03-13
