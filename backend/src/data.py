@@ -205,6 +205,19 @@ class ReceiptTransaction(BaseModel):
     items: list[ReceiptTransactionItem]
 
 
+class ProductTextRegion(BaseModel):
+    """Bounding polygon for a single product on the receipt image."""
+    polygon: list[list[int]]
+
+
+class TextRegionsResult(BaseModel):
+    """PaddleOCR localization result: image dimensions + per-product polygons."""
+    image_width: int
+    image_height: int
+    # Keys are 0-based string indices ("0", "1", ...) matching products list order
+    product_regions: dict[str, ProductTextRegion]
+
+
 class ReceiptScanDetail(BaseModel):
     """Full scan detail including OCR result and confirmed transaction if available."""
     id: int
@@ -224,6 +237,7 @@ class ReceiptScanDetail(BaseModel):
     # > 0 means auto-linking was skipped and the user must choose manually.
     bank_candidate_count: int = 0
     cash_candidate_count: int = 0
+    text_regions: Optional[TextRegionsResult] = None
 
 
 class CategoryItem(BaseModel):

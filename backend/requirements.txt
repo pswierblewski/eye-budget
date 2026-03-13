@@ -1,4 +1,6 @@
 openai>=1.60.0
+paddlepaddle>=3.0.0,<3.3.0
+paddleocr>=2.10.0
 python-dotenv>=1.0.0
 pillow>=11.1.0
 psycopg2-binary>=2.9.10

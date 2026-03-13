@@ -1,17 +1,24 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import type { ProductTextRegion } from "@/lib/types";
 
 interface ReceiptImageViewerProps {
   scanId: number;
   refreshKey?: number;
   onReuploadImage?: () => Promise<void>;
+  highlightRegion?: ProductTextRegion;
+  imageWidth?: number;
+  imageHeight?: number;
 }
 
 export function ReceiptImageViewer({
   scanId,
   refreshKey = 0,
   onReuploadImage,
+  highlightRegion,
+  imageWidth,
+  imageHeight,
 }: ReceiptImageViewerProps) {
   const [error, setError] = useState(false);
   const [reuploading, setReuploading] = useState(false);
@@ -220,22 +227,40 @@ export function ReceiptImageViewer({
           transition: isDragging ? "none" : "transform 0.08s ease-out",
           willChange: "transform",
         }}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={imageUrl}
-            alt={`Receipt ${scanId}`}
-            className="w-full object-contain block"
-            draggable={false}
-            loading="lazy"
-            onError={() => {
-              const proxyUrl = `/api/receipts/${scanId}/image${refreshKey > 0 ? `?t=${refreshKey}` : ""}`;
-              if (imageUrl !== proxyUrl) {
-                setImageUrl(proxyUrl);
-              } else {
-                setError(true);
-              }
-            }}
-          />
+          {/* Image + SVG overlay wrapper — position:relative so the SVG can be absolute */}
+          <div style={{ position: "relative", lineHeight: 0 }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={imageUrl}
+              alt={`Receipt ${scanId}`}
+              className="w-full object-contain block"
+              draggable={false}
+              loading="lazy"
+              onError={() => {
+                const proxyUrl = `/api/receipts/${scanId}/image${refreshKey > 0 ? `?t=${refreshKey}` : ""}`;
+                if (imageUrl !== proxyUrl) {
+                  setImageUrl(proxyUrl);
+                } else {
+                  setError(true);
+                }
+              }}
+            />
+            {highlightRegion && imageWidth && imageHeight && (
+              <svg
+                style={{ position: "absolute", inset: 0, width: "100%", height: "100%", overflow: "hidden" }}
+                viewBox={`0 0 ${imageWidth} ${imageHeight}`}
+                preserveAspectRatio="xMinYMin meet"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <polygon
+                  points={highlightRegion.polygon.map((pt) => pt.join(",")).join(" ")}
+                  fill="rgba(239, 68, 68, 0.25)"
+                  stroke="rgb(239, 68, 68)"
+                  strokeWidth="3"
+                />
+              </svg>
+            )}
+          </div>
         </div>
       </div>
     </div>

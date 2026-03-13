@@ -45,6 +45,7 @@ from src.data import (
     AnalyticsSummary,
     RunEvaluationRequest,
     PromptAnalyticsSummary,
+    TextRegionsResult,
 )
 from fastapi import FastAPI, File, UploadFile, HTTPException, Query
 from fastapi.responses import StreamingResponse
@@ -307,6 +308,23 @@ def retry_receipt(scan_id: int):
     """
     task = retry_receipt_task.delay(scan_id)
     return TaskResponse(task_id=task.id)
+
+
+@app.post("/receipts/{scan_id}/localize", response_model=TextRegionsResult)
+def localize_receipt(scan_id: int) -> TextRegionsResult:
+    """
+    Run (or re-run) PaddleOCR text localization for a receipt and return
+    bounding-box polygons matched to each product in the LLM result.
+    """
+    my_app = App()
+    try:
+        return my_app.localize_receipt(scan_id)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        my_app.dispose()
 
 
 # ------------------------------------------------------------------
