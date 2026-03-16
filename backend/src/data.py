@@ -637,3 +637,250 @@ class PromptAnalyticsSummary(BaseModel):
     top_category_confusions: list[CategoryConfusionItem]
     top_product_name_corrections: list[ProductNameCorrectionItem]
     recent: list[PromptAnalyticsRow]
+
+
+# ---------------------------------------------------------------------------
+# Budget Analysis models
+# ---------------------------------------------------------------------------
+
+class CategoryClassificationItem(BaseModel):
+    category_id: int
+    category_name: str
+    classification: str
+    is_user_override: bool
+
+
+class UpdateCategoryClassificationRequest(BaseModel):
+    classification: str
+
+
+class FinancialFocusResponse(BaseModel):
+    id: Optional[int]
+    label: str
+    description: Optional[str]
+    is_active: bool
+
+
+class SetFinancialFocusRequest(BaseModel):
+    label: str
+    description: Optional[str] = None
+
+
+class BudgetCategoryMonthlyItem(BaseModel):
+    category_id: Optional[int]
+    category_name: str
+    classification: str
+    total_pln: float
+    pct_of_total: float
+    prev_month_pln: float
+    change_pct: float
+
+
+class BudgetMonthlyResponse(BaseModel):
+    year: int
+    month: int
+    total_expenses_pln: float
+    total_income_pln: float
+    surplus_pln: float
+    categories: list[BudgetCategoryMonthlyItem]
+    prev_month_total_pln: float
+    month_over_month_change_pct: float
+
+
+class RecurringExpenseItem(BaseModel):
+    vendor_name: str
+    category_name: Optional[str]
+    frequency: str
+    avg_amount_pln: float
+    last_occurrence_date: str
+    next_expected_date: str
+    amount_min_pln: float
+    amount_max_pln: float
+    occurrence_count: int
+
+
+class CyclicalAlertItem(BaseModel):
+    vendor_name: str
+    category_name: Optional[str]
+    next_expected_date: str
+    days_until: int
+    expected_amount_pln: float
+    amount_range_pln: str
+
+
+class AffordabilityCheckRequest(BaseModel):
+    amount_pln: float
+    description: Optional[str] = None
+
+
+class AffordabilityCheckResponse(BaseModel):
+    verdict: str
+    amount_pln: float
+    available_this_month_pln: float
+    upcoming_obligations_30d_pln: float
+    active_goal_allocations_pln: float
+    freely_available_pln: float
+    financial_focus_label: Optional[str]
+    narrative: str
+
+
+class FinancialGoalListItem(BaseModel):
+    id: int
+    name: str
+    target_amount_pln: float
+    target_date: Optional[str]
+    priority_rank: int
+    monthly_allocation_amount_pln: float
+    accumulated_progress_pln: float
+    progress_pct: float
+    months_to_completion: Optional[int]
+    projected_completion_date: Optional[str]
+    is_active: bool
+
+
+class CreateFinancialGoalRequest(BaseModel):
+    name: str
+    target_amount_pln: float
+    target_date: Optional[str] = None
+    priority_rank: int = 0
+    monthly_allocation_amount_pln: float = 0.0
+
+
+class UpdateFinancialGoalRequest(BaseModel):
+    name: Optional[str] = None
+    target_amount_pln: Optional[float] = None
+    target_date: Optional[str] = None
+    priority_rank: Optional[int] = None
+    monthly_allocation_amount_pln: Optional[float] = None
+    is_active: Optional[bool] = None
+
+
+class MonthlySurplusResponse(BaseModel):
+    avg_income_3m_pln: float
+    avg_expenses_3m_pln: float
+    avg_surplus_3m_pln: float
+    current_month_income_pln: float
+    current_month_expenses_pln: float
+    current_month_surplus_pln: float
+    total_monthly_goal_allocations_pln: float
+    unallocated_surplus_pln: float
+
+
+class CreateBudgetSimulationRequest(BaseModel):
+    name: str
+    expense_name: str
+    expense_amount_pln: float
+    expense_type: str
+    expense_start_date: str
+
+
+class SimulationMonthlyPoint(BaseModel):
+    month: str
+    baseline_surplus_pln: float
+    simulated_surplus_pln: float
+
+
+class SimulationGoalImpact(BaseModel):
+    goal_id: int
+    goal_name: str
+    baseline_completion_date: Optional[str]
+    simulated_completion_date: Optional[str]
+    delay_months: int
+
+
+class SimulationSuggestion(BaseModel):
+    description: str
+    monthly_saving_pln: float
+    months_required: int
+
+
+class SimulationResultPayload(BaseModel):
+    projection: list[SimulationMonthlyPoint]
+    goal_impacts: list[SimulationGoalImpact]
+    ai_summary: str
+    ai_implications: str
+    ai_suggestions: list[SimulationSuggestion]
+
+
+class BudgetSimulationListItem(BaseModel):
+    id: int
+    name: str
+    expense_name: str
+    expense_amount_pln: float
+    expense_type: str
+    expense_start_date: str
+    status: str
+    created_at: str
+
+
+class BudgetSimulationDetail(BaseModel):
+    id: int
+    name: str
+    expense_name: str
+    expense_amount_pln: float
+    expense_type: str
+    expense_start_date: str
+    status: str
+    result: Optional[SimulationResultPayload]
+    error_message: Optional[str]
+    created_at: str
+
+
+class SimulationNarrative(BaseModel):
+    summary: str
+    implications: str
+    suggestions: list[SimulationSuggestion]
+
+
+class SimulationTaskResponse(BaseModel):
+    task_id: str
+    simulation_id: int
+
+
+class AIInsightItem(BaseModel):
+    title: str
+    body: str
+    amount_pln: Optional[float]
+    insight_type: str
+
+
+class AIRecommendationsResponse(BaseModel):
+    insights: list[AIInsightItem]
+    generated_at: Optional[str]
+    data_through_date: Optional[str]
+    months_of_data: int
+    has_sufficient_data: bool
+
+
+class AIRecommendationsPayload(BaseModel):
+    insights: list[AIInsightItem]
+
+
+class EmergencyAdvisorRequest(BaseModel):
+    amount_pln: float
+    description: Optional[str] = None
+
+
+class EmergencyReductionOption(BaseModel):
+    category_name: str
+    classification: str
+    avg_monthly_spend_pln: float
+    suggested_cut_pln: float
+    months_to_cover: float
+
+
+class EmergencyGoalImpact(BaseModel):
+    goal_id: int
+    goal_name: str
+    monthly_allocation_pln: float
+    impact_description: str
+
+
+class EmergencyAdvisorResponse(BaseModel):
+    amount_pln: float
+    fully_coverable_by_cuts: bool
+    discretionary_cuts: list[EmergencyReductionOption]
+    total_cuttable_pln: float
+    goal_impacts: list[EmergencyGoalImpact]
+    recovery_months: Optional[int]
+    narrative: str
