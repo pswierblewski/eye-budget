@@ -28,6 +28,12 @@ from .repositories.cash_transactions import CashTransactionsRepository
 from .repositories.cash_receipt_links import CashReceiptLinksRepository
 from .repositories.unified_transactions import UnifiedTransactionsRepository
 from .repositories.prompt_analytics import PromptAnalyticsRepository
+from .repositories.budget_analysis import BudgetAnalysisRepository
+from .repositories.budget_goals import BudgetGoalsRepository
+from .repositories.budget_simulations import BudgetSimulationsRepository
+from .services.budget_analysis import BudgetAnalysisService
+from .services.budget_goals import BudgetGoalsService
+from .services.budget_simulation import BudgetSimulationService
 from .data import (
     ReceiptsScanStatus,
     TransactionModel,
@@ -67,6 +73,26 @@ from .data import (
     AnalyticsSummary,
     PromptAnalyticsSummary,
     TextRegionsResult,
+    BudgetMonthlyResponse,
+    CategoryClassificationItem,
+    UpdateCategoryClassificationRequest,
+    FinancialFocusResponse,
+    SetFinancialFocusRequest,
+    RecurringExpenseItem,
+    CyclicalAlertItem,
+    AffordabilityCheckResponse,
+    FinancialGoalListItem,
+    CreateFinancialGoalRequest,
+    UpdateFinancialGoalRequest,
+    MonthlySurplusResponse,
+    BudgetSimulationListItem,
+    BudgetSimulationDetail,
+    CreateBudgetSimulationRequest,
+    SimulationResultPayload,
+    SimulationTaskResponse,
+    AIRecommendationsResponse,
+    EmergencyAdvisorRequest,
+    EmergencyAdvisorResponse,
 )
 from .db_contexts.eye_budget import EyeBudgetDbContext
 
@@ -106,6 +132,24 @@ class App(ABC):
         self.bank_categorization_service = BankCategorizationService(self.eye_budget_db_context)
         self.bank_categorization_service.build()
         self.bank_csv_parser = PekaoCsvParser()
+
+        # Budget Analysis repositories and services
+        self.budget_analysis_repository = BudgetAnalysisRepository(self.eye_budget_db_context)
+        self.budget_goals_repository = BudgetGoalsRepository(self.eye_budget_db_context)
+        self.budget_simulations_repository = BudgetSimulationsRepository(self.eye_budget_db_context)
+        self.budget_analysis_service = BudgetAnalysisService(
+            budget_analysis_repo=self.budget_analysis_repository,
+            categories_repo=self.categories_repository,
+        )
+        self.budget_goals_service = BudgetGoalsService(
+            budget_goals_repo=self.budget_goals_repository,
+            budget_analysis_repo=self.budget_analysis_repository,
+        )
+        self.budget_simulation_service = BudgetSimulationService(
+            budget_analysis_repo=self.budget_analysis_repository,
+            budget_goals_repo=self.budget_goals_repository,
+            budget_simulations_repo=self.budget_simulations_repository,
+        )
 
         # High-level services
         self.evaluation_service = EvaluationService(
@@ -1338,6 +1382,133 @@ class App(ABC):
             print(f"App.get_all_tags error: {e}")
             return []
 
+    # ------------------------------------------------------------------
+    # Budget Analysis methods
+    # ------------------------------------------------------------------
+
+    def get_monthly_breakdown(self, year: int, month: int) -> BudgetMonthlyResponse:
+        return self.budget_analysis_service.get_monthly_breakdown(year, month)
+
+    def seed_and_get_classifications(self) -> list[CategoryClassificationItem]:
+        return self.budget_analysis_service.seed_and_get_classifications()
+
+    def update_category_classification(
+        self, category_id: int, classification: str
+    ) -> CategoryClassificationItem:
+        return self.budget_analysis_service.update_category_classification(category_id, classification)
+
+    def get_financial_focus(self) -> FinancialFocusResponse:
+        return self.budget_analysis_service.get_financial_focus()
+
+    def set_financial_focus(self, req: SetFinancialFocusRequest) -> FinancialFocusResponse:
+        return self.budget_analysis_service.set_financial_focus(req.label, req.description)
+
+    def get_recurring_expenses(self) -> list[RecurringExpenseItem]:
+        return self.budget_analysis_service.get_recurring_expenses()
+
+    def get_cyclical_alerts(self) -> list[CyclicalAlertItem]:
+        return self.budget_analysis_service.get_cyclical_alerts()
+
+    def check_affordability(self, amount_pln: float) -> AffordabilityCheckResponse:
+        focus = self.budget_analysis_service.get_financial_focus()
+        focus_label = focus.label if focus.id is not None else None
+        goal_allocations = self.budget_goals_repository.get_active_goal_allocations_total()
+        return self.budget_analysis_service.check_affordability(
+            amount_pln=amount_pln,
+            financial_focus_label=focus_label,
+            goal_allocations_pln=goal_allocations,
+        )
+
+    def get_emergency_advice(self, amount_pln: float) -> EmergencyAdvisorResponse:
+        active_goals = self.budget_goals_repository.get_all_goals()
+        return self.budget_analysis_service.get_emergency_advice(amount_pln, active_goals)
+
+    # ------------------------------------------------------------------
+    # Budget Goals methods
+    # ------------------------------------------------------------------
+
+    def get_monthly_surplus(self) -> MonthlySurplusResponse:
+        return self.budget_goals_service.get_monthly_surplus()
+
+    def get_goals(self) -> list[FinancialGoalListItem]:
+        return self.budget_goals_service.get_goals()
+
+    def create_goal(self, req: CreateFinancialGoalRequest) -> FinancialGoalListItem:
+        return self.budget_goals_service.create_goal(req)
+
+    def update_goal(self, goal_id: int, req: UpdateFinancialGoalRequest):
+        return self.budget_goals_service.update_goal(goal_id, req)
+
+    def delete_goal(self, goal_id: int) -> bool:
+        return self.budget_goals_service.delete_goal(goal_id)
+
+    # ------------------------------------------------------------------
+    # Budget Simulations methods
+    # ------------------------------------------------------------------
+
+    def create_simulation(self, req: CreateBudgetSimulationRequest) -> dict:
+        return self.budget_simulations_repository.create_simulation(
+            name=req.name,
+            expense_name=req.expense_name,
+            amount=req.expense_amount_pln,
+            expense_type=req.expense_type,
+            start_date=req.expense_start_date,
+        )
+
+    def get_simulation(self, sim_id: int) -> BudgetSimulationDetail | None:
+        row = self.budget_simulations_repository.get_simulation(sim_id)
+        if row is None:
+            return None
+        return self._simulation_row_to_detail(row)
+
+    def get_all_simulations(self) -> list[BudgetSimulationListItem]:
+        rows = self.budget_simulations_repository.get_all_simulations()
+        return [
+            BudgetSimulationListItem(
+                id=r["id"],
+                name=r["name"],
+                expense_name=r["expense_name"],
+                expense_amount_pln=r["expense_amount"],
+                expense_type=r["expense_type"],
+                expense_start_date=str(r["expense_start_date"]),
+                status=r["status"],
+                created_at=str(r["created_at"]),
+            )
+            for r in rows
+        ]
+
+    def delete_simulation(self, sim_id: int) -> bool:
+        return self.budget_simulations_repository.delete_simulation(sim_id)
+
+    def _simulation_row_to_detail(self, row: dict) -> BudgetSimulationDetail:
+        import json as _json
+        result = None
+        if row.get("result_json"):
+            try:
+                result_data = row["result_json"] if isinstance(row["result_json"], dict) else _json.loads(row["result_json"])
+                result = SimulationResultPayload(**result_data)
+            except Exception as e:
+                print(f"App._simulation_row_to_detail parse error: {e}")
+        return BudgetSimulationDetail(
+            id=row["id"],
+            name=row["name"],
+            expense_name=row["expense_name"],
+            expense_amount_pln=row["expense_amount"],
+            expense_type=row["expense_type"],
+            expense_start_date=str(row["expense_start_date"]),
+            status=row["status"],
+            result=result,
+            error_message=row.get("error_message"),
+            created_at=str(row["created_at"]),
+        )
+
+    # ------------------------------------------------------------------
+    # AI Recommendations
+    # ------------------------------------------------------------------
+
+    def get_ai_recommendations(self) -> AIRecommendationsResponse:
+        return self.budget_simulation_service.get_ai_recommendations_from_db()
+
     def dispose(self):
         self.files_repository.dispose()
         self.receipts_scans_repository.dispose()
@@ -1359,5 +1530,11 @@ class App(ABC):
         self.evaluation_service.dispose()
         self.ground_truth_service.dispose()
         self.text_localization_service.dispose()
+        self.budget_analysis_repository.dispose()
+        self.budget_goals_repository.dispose()
+        self.budget_simulations_repository.dispose()
+        self.budget_analysis_service.dispose()
+        self.budget_goals_service.dispose()
+        self.budget_simulation_service.dispose()
         self.eye_budget_db_context.dispose()
         print("All resources disposed.")
