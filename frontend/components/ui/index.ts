@@ -14,3 +14,4 @@ export { Amount, formatAmount } from "./Amount";
 export { NavLink } from "./NavLink";
 export { PrevNextNav } from "./PrevNextNav";
 export { DateInput } from "./DateInput";
+export { Tooltip } from "./Tooltip";

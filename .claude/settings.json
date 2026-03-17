@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(.specify/scripts/bash/create-new-feature.sh \"Obok pola ''priorytet'' w formularzu celów finansowych ma pojawić się ikonka ''i'' w kółeczku. Po najechaniu kursorem na tę ikonkę wyświetla się popup/tooltip z informacją, jak priorytet powinien być traktowany \\(niższy numer = wyższy priorytet, np. 1 to najważniejszy cel\\).\" --json --short-name \"goal-priority-tooltip\")"
+    ]
+  }
+}

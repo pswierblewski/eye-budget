@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Input, Button, DateInput } from "@/components/ui";
+import { Input, Button, DateInput, Tooltip } from "@/components/ui";
+import { Info } from "lucide-react";
 import { createGoal, updateGoal } from "@/lib/api";
 import { FinancialGoalListItem } from "@/lib/types";
 
@@ -87,7 +88,14 @@ export function GoalForm({ goal, onSuccess }: Props) {
         <DateInput value={targetDate} onChange={setTargetDate} />
       </div>
       <div>
-        <label className="block text-xs font-medium text-gray-600 mb-1">Priorytet</label>
+        <label className="flex items-center gap-1 text-xs font-medium text-gray-600 mb-1">
+          Priorytet
+          <Tooltip content="Niższy numer oznacza wyższy priorytet. Priorytet 1 to cel najważniejszy, wyższe liczby oznaczają mniejsze znaczenie (np. 5 = cel drugorzędny).">
+            <span tabIndex={0} className="inline-flex cursor-help focus:outline-none">
+              <Info className="w-3.5 h-3.5 text-gray-400" />
+            </span>
+          </Tooltip>
+        </label>
         <Input
           type="number"
           value={priorityRank}
