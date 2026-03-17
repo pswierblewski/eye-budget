@@ -552,7 +552,7 @@ export default function TransactionsPage() {
       serverSortKey: "status",
       accessor: (r) => (
         <div className="flex items-center gap-1.5">
-          {r.source_type === "receipt" && <StatusBadge status={r.status} />}
+          {r.source_type === "receipt" && r.status != null && <StatusBadge status={r.status} />}
           {r.has_receipt && (() => {
             const { icon: Icon, style } = SOURCE_CONFIG.receipt;
             return (

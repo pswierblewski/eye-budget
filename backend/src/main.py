@@ -9,6 +9,9 @@ from src.tasks.process_receipts import process_receipts_task
 from src.tasks.run_evaluation import run_evaluation_task
 from src.tasks.retry_receipt import retry_receipt_task
 from src.tasks.categorize_bank_transactions import categorize_bank_transactions_task
+from src.tasks.run_budget_simulation import run_budget_simulation_task
+from src.tasks.refresh_ai_recommendations import refresh_ai_recommendations_task
+from src.tasks.advance_goal_progress import advance_goal_progress_task
 from src.data import (
     EvaluationRunSummary,
     GroundTruthResponse,
@@ -46,6 +49,25 @@ from src.data import (
     RunEvaluationRequest,
     PromptAnalyticsSummary,
     TextRegionsResult,
+    BudgetMonthlyResponse,
+    CategoryClassificationItem,
+    UpdateCategoryClassificationRequest,
+    FinancialFocusResponse,
+    SetFinancialFocusRequest,
+    RecurringExpenseItem,
+    CyclicalAlertItem,
+    AffordabilityCheckResponse,
+    FinancialGoalListItem,
+    CreateFinancialGoalRequest,
+    UpdateFinancialGoalRequest,
+    MonthlySurplusResponse,
+    BudgetSimulationListItem,
+    BudgetSimulationDetail,
+    CreateBudgetSimulationRequest,
+    SimulationTaskResponse,
+    AIRecommendationsResponse,
+    EmergencyAdvisorRequest,
+    EmergencyAdvisorResponse,
 )
 from fastapi import FastAPI, File, UploadFile, HTTPException, Query
 from fastapi.responses import StreamingResponse
@@ -976,3 +998,229 @@ def get_prompt_analytics() -> PromptAnalyticsSummary:
         return my_app.get_prompt_analytics()
     finally:
         my_app.dispose()
+
+
+# --- Budget Analysis ---
+
+@app.get("/budget/analysis/monthly", response_model=BudgetMonthlyResponse)
+def get_budget_monthly(year: int = Query(...), month: int = Query(...)) -> BudgetMonthlyResponse:
+    """Return monthly per-category spending breakdown."""
+    my_app = App()
+    try:
+        return my_app.get_monthly_breakdown(year, month)
+    finally:
+        my_app.dispose()
+
+
+@app.get("/budget/category-classifications", response_model=list[CategoryClassificationItem])
+def get_category_classifications() -> list[CategoryClassificationItem]:
+    """Return all category classifications, seeding missing ones on first call."""
+    my_app = App()
+    try:
+        return my_app.seed_and_get_classifications()
+    finally:
+        my_app.dispose()
+
+
+@app.put("/budget/category-classifications/{category_id}", response_model=CategoryClassificationItem)
+def update_category_classification(
+    category_id: int, request: UpdateCategoryClassificationRequest
+) -> CategoryClassificationItem:
+    """Update the essential/discretionary classification for a category."""
+    my_app = App()
+    try:
+        result = my_app.update_category_classification(category_id, request.classification)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    finally:
+        my_app.dispose()
+
+
+@app.get("/budget/financial-focus", response_model=FinancialFocusResponse)
+def get_financial_focus() -> FinancialFocusResponse:
+    """Return the current active financial focus."""
+    my_app = App()
+    try:
+        return my_app.get_financial_focus()
+    finally:
+        my_app.dispose()
+
+
+@app.put("/budget/financial-focus", response_model=FinancialFocusResponse)
+def set_financial_focus(request: SetFinancialFocusRequest) -> FinancialFocusResponse:
+    """Set the active financial focus label."""
+    my_app = App()
+    try:
+        return my_app.set_financial_focus(request)
+    except ValueError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        my_app.dispose()
+
+
+@app.get("/budget/analysis/recurring-expenses", response_model=list[RecurringExpenseItem])
+def get_recurring_expenses() -> list[RecurringExpenseItem]:
+    """Return auto-detected recurring and cyclical expenses."""
+    my_app = App()
+    try:
+        return my_app.get_recurring_expenses()
+    finally:
+        my_app.dispose()
+
+
+@app.get("/budget/analysis/cyclical-alerts", response_model=list[CyclicalAlertItem])
+def get_cyclical_alerts() -> list[CyclicalAlertItem]:
+    """Return annual cyclical expenses due within 90 days."""
+    my_app = App()
+    try:
+        return my_app.get_cyclical_alerts()
+    finally:
+        my_app.dispose()
+
+
+@app.get("/budget/analysis/affordability", response_model=AffordabilityCheckResponse)
+def check_affordability(amount_pln: float = Query(..., gt=0)) -> AffordabilityCheckResponse:
+    """Check if the user can afford a given amount right now."""
+    my_app = App()
+    try:
+        return my_app.check_affordability(amount_pln)
+    finally:
+        my_app.dispose()
+
+
+@app.get("/budget/goals/surplus", response_model=MonthlySurplusResponse)
+def get_budget_surplus() -> MonthlySurplusResponse:
+    """Return 3-month rolling average surplus and current month actuals."""
+    my_app = App()
+    try:
+        return my_app.get_monthly_surplus()
+    finally:
+        my_app.dispose()
+
+
+@app.get("/budget/goals", response_model=list[FinancialGoalListItem])
+def list_goals() -> list[FinancialGoalListItem]:
+    """Return all active financial goals with computed progress."""
+    my_app = App()
+    try:
+        return my_app.get_goals()
+    finally:
+        my_app.dispose()
+
+
+@app.post("/budget/goals", response_model=FinancialGoalListItem, status_code=201)
+def create_goal(request: CreateFinancialGoalRequest) -> FinancialGoalListItem:
+    """Create a new financial goal."""
+    if request.target_amount_pln <= 0:
+        raise HTTPException(status_code=422, detail="target_amount_pln must be > 0")
+    my_app = App()
+    try:
+        return my_app.create_goal(request)
+    except ValueError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        my_app.dispose()
+
+
+@app.put("/budget/goals/{goal_id}", response_model=FinancialGoalListItem)
+def update_goal(goal_id: int, request: UpdateFinancialGoalRequest) -> FinancialGoalListItem:
+    """Update a financial goal."""
+    my_app = App()
+    try:
+        result = my_app.update_goal(goal_id, request)
+        if result is None:
+            raise HTTPException(status_code=404, detail=f"Goal {goal_id} not found")
+        return result
+    finally:
+        my_app.dispose()
+
+
+@app.delete("/budget/goals/{goal_id}", status_code=204)
+def delete_goal(goal_id: int) -> None:
+    """Soft-delete a financial goal."""
+    my_app = App()
+    try:
+        ok = my_app.delete_goal(goal_id)
+        if not ok:
+            raise HTTPException(status_code=404, detail=f"Goal {goal_id} not found")
+    finally:
+        my_app.dispose()
+
+
+@app.post("/budget/simulations", response_model=SimulationTaskResponse, status_code=202)
+def create_simulation(request: CreateBudgetSimulationRequest) -> SimulationTaskResponse:
+    """Create a budget simulation and enqueue projection task."""
+    my_app = App()
+    try:
+        sim = my_app.create_simulation(request)
+        if sim is None:
+            raise HTTPException(status_code=500, detail="Failed to create simulation")
+        task = run_budget_simulation_task.delay(sim["id"])
+        return SimulationTaskResponse(task_id=str(task.id), simulation_id=sim["id"])
+    finally:
+        my_app.dispose()
+
+
+@app.get("/budget/simulations", response_model=list[BudgetSimulationListItem])
+def list_simulations() -> list[BudgetSimulationListItem]:
+    """Return all budget simulations."""
+    my_app = App()
+    try:
+        return my_app.get_all_simulations()
+    finally:
+        my_app.dispose()
+
+
+@app.get("/budget/simulations/{sim_id}", response_model=BudgetSimulationDetail)
+def get_simulation(sim_id: int) -> BudgetSimulationDetail:
+    """Get full detail for a budget simulation including result when done."""
+    my_app = App()
+    try:
+        result = my_app.get_simulation(sim_id)
+        if result is None:
+            raise HTTPException(status_code=404, detail=f"Simulation {sim_id} not found")
+        return result
+    finally:
+        my_app.dispose()
+
+
+@app.delete("/budget/simulations/{sim_id}", status_code=204)
+def delete_simulation(sim_id: int) -> None:
+    """Delete a budget simulation."""
+    my_app = App()
+    try:
+        ok = my_app.delete_simulation(sim_id)
+        if not ok:
+            raise HTTPException(status_code=404, detail=f"Simulation {sim_id} not found")
+    finally:
+        my_app.dispose()
+
+
+@app.post("/budget/emergency-advisor", response_model=EmergencyAdvisorResponse)
+def get_emergency_advice(request: EmergencyAdvisorRequest) -> EmergencyAdvisorResponse:
+    """Get emergency expense advice with discretionary cuts and goal impacts."""
+    if request.amount_pln <= 0:
+        raise HTTPException(status_code=422, detail="amount_pln must be > 0")
+    my_app = App()
+    try:
+        return my_app.get_emergency_advice(request.amount_pln)
+    finally:
+        my_app.dispose()
+
+
+@app.get("/budget/ai-recommendations", response_model=AIRecommendationsResponse)
+def get_ai_recommendations() -> AIRecommendationsResponse:
+    """Return latest AI-generated budget recommendations."""
+    my_app = App()
+    try:
+        return my_app.get_ai_recommendations()
+    finally:
+        my_app.dispose()
+
+
+@app.post("/budget/ai-recommendations/refresh", response_model=TaskResponse, status_code=202)
+def refresh_ai_recommendations() -> TaskResponse:
+    """Enqueue background AI recommendations generation."""
+    task = refresh_ai_recommendations_task.delay()
+    return TaskResponse(task_id=str(task.id))

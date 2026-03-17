@@ -10,6 +10,10 @@ import {
   Wallet,
   ArrowLeftRight,
   ChartBar,
+  PiggyBank,
+  Target,
+  Sliders,
+  Sparkles,
 } from "lucide-react";
 
 const navItems = [
@@ -17,6 +21,13 @@ const navItems = [
   { href: "/receipts", label: "Paragony", icon: ReceiptText },
   { href: "/bank-transactions", label: "Transakcje bankowe", icon: Landmark },
   { href: "/cash-transactions", label: "Transakcje gotówkowe", icon: Wallet },
+  { href: "/budget", label: "Budżet", icon: PiggyBank },
+];
+
+const budgetSubItems = [
+  { href: "/budget/goals", label: "Cele finansowe", icon: Target },
+  { href: "/budget/simulations", label: "Symulacje", icon: Sliders },
+  { href: "/budget/ai-insights", label: "Rekomendacje AI", icon: Sparkles },
 ];
 
 const adminItems = [
@@ -40,6 +51,7 @@ export function Sidebar() {
           {navItems.map(({ href, label, icon: Icon }) => {
             const active =
               href === "/" ? pathname === "/" : pathname.startsWith(href);
+            const isBudget = href === "/budget";
             return (
               <li key={href}>
                 <Link
@@ -53,6 +65,28 @@ export function Sidebar() {
                   <Icon className="h-4 w-4 shrink-0" />
                   {label}
                 </Link>
+                {isBudget && active && (
+                  <ul className="mt-1 ml-4 space-y-1">
+                    {budgetSubItems.map(({ href: subHref, label: subLabel, icon: SubIcon }) => {
+                      const subActive = pathname.startsWith(subHref);
+                      return (
+                        <li key={subHref}>
+                          <Link
+                            href={subHref}
+                            className={`flex items-center gap-3 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                              subActive
+                                ? "bg-[#635bff]/20 text-[#635bff]"
+                                : "text-gray-500 hover:bg-gray-100"
+                            }`}
+                          >
+                            <SubIcon className="h-3.5 w-3.5 shrink-0" />
+                            {subLabel}
+                          </Link>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
               </li>
             );
           })}
