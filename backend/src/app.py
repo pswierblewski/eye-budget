@@ -98,68 +98,107 @@ from .db_contexts.eye_budget import EyeBudgetDbContext
 
 
 class App(ABC):
-    def __init__(self):
+    def __init__(
+        self,
+        eye_budget_db_context=None,
+        # Repositories
+        files_repository=None,
+        receipts_scans_repository=None,
+        evaluations_repository=None,
+        ground_truth_repository=None,
+        vendors_repository=None,
+        products_repository=None,
+        transactions_repository=None,
+        categories_repository=None,
+        bank_transactions_repository=None,
+        bank_receipt_links_repository=None,
+        cash_transactions_repository=None,
+        cash_receipt_links_repository=None,
+        unified_transactions_repository=None,
+        prompt_analytics_repository=None,
+        budget_analysis_repository=None,
+        budget_goals_repository=None,
+        budget_simulations_repository=None,
+        # Services
+        ocr_service=None,
+        preprocessing_service=None,
+        minio_service=None,
+        text_localization_service=None,
+        text_matching_service=None,
+        vendors_service=None,
+        products_service=None,
+        categories_service=None,
+        bank_categorization_service=None,
+        bank_csv_parser=None,
+        budget_analysis_service=None,
+        budget_goals_service=None,
+        budget_simulation_service=None,
+        evaluation_service=None,
+        ground_truth_service=None,
+    ):
         # Database contexts
-        self.eye_budget_db_context = EyeBudgetDbContext()
+        self.eye_budget_db_context = eye_budget_db_context or EyeBudgetDbContext()
 
         # Repositories
-        self.files_repository = FilesRepository()
-        self.receipts_scans_repository = ReceiptsScansRepository(self.eye_budget_db_context)
-        self.evaluations_repository = EvaluationsRepository(self.eye_budget_db_context)
-        self.ground_truth_repository = GroundTruthRepository(self.eye_budget_db_context)
-        self.vendors_repository = VendorsRepository(self.eye_budget_db_context)
-        self.products_repository = ProductsRepository(self.eye_budget_db_context)
-        self.transactions_repository = TransactionsRepository(self.eye_budget_db_context)
-        self.categories_repository = CategoriesRepository(self.eye_budget_db_context)
+        self.files_repository = files_repository or FilesRepository()
+        self.receipts_scans_repository = receipts_scans_repository or ReceiptsScansRepository(self.eye_budget_db_context)
+        self.evaluations_repository = evaluations_repository or EvaluationsRepository(self.eye_budget_db_context)
+        self.ground_truth_repository = ground_truth_repository or GroundTruthRepository(self.eye_budget_db_context)
+        self.vendors_repository = vendors_repository or VendorsRepository(self.eye_budget_db_context)
+        self.products_repository = products_repository or ProductsRepository(self.eye_budget_db_context)
+        self.transactions_repository = transactions_repository or TransactionsRepository(self.eye_budget_db_context)
+        self.categories_repository = categories_repository or CategoriesRepository(self.eye_budget_db_context)
 
-        self.bank_transactions_repository = BankTransactionsRepository(self.eye_budget_db_context)
-        self.bank_receipt_links_repository = BankReceiptLinksRepository(self.eye_budget_db_context)
-        self.cash_transactions_repository = CashTransactionsRepository(self.eye_budget_db_context)
-        self.cash_receipt_links_repository = CashReceiptLinksRepository(self.eye_budget_db_context)
-        self.unified_transactions_repository = UnifiedTransactionsRepository(self.eye_budget_db_context)
-        self.prompt_analytics_repository = PromptAnalyticsRepository(self.eye_budget_db_context)
+        self.bank_transactions_repository = bank_transactions_repository or BankTransactionsRepository(self.eye_budget_db_context)
+        self.bank_receipt_links_repository = bank_receipt_links_repository or BankReceiptLinksRepository(self.eye_budget_db_context)
+        self.cash_transactions_repository = cash_transactions_repository or CashTransactionsRepository(self.eye_budget_db_context)
+        self.cash_receipt_links_repository = cash_receipt_links_repository or CashReceiptLinksRepository(self.eye_budget_db_context)
+        self.unified_transactions_repository = unified_transactions_repository or UnifiedTransactionsRepository(self.eye_budget_db_context)
+        self.prompt_analytics_repository = prompt_analytics_repository or PromptAnalyticsRepository(self.eye_budget_db_context)
 
         # Core services
-        self.ocr_service = OCRService()
-        self.preprocessing_service = PreprocessingService()
-        self.minio_service = MinioStorageService()
-        self.text_localization_service = TextLocalizationService()
-        self.text_matching_service = TextMatchingService()
-        self.vendors_service = VendorsService()
-        self.products_service = ProductsService()
-        self.categories_service = CategoriesService(self.eye_budget_db_context)
-        self.categories_service.build()
-        self.bank_categorization_service = BankCategorizationService(self.eye_budget_db_context)
-        self.bank_categorization_service.build()
-        self.bank_csv_parser = PekaoCsvParser()
+        self.ocr_service = ocr_service or OCRService()
+        self.preprocessing_service = preprocessing_service or PreprocessingService()
+        self.minio_service = minio_service or MinioStorageService()
+        self.text_localization_service = text_localization_service or TextLocalizationService()
+        self.text_matching_service = text_matching_service or TextMatchingService()
+        self.vendors_service = vendors_service or VendorsService()
+        self.products_service = products_service or ProductsService()
+        self.categories_service = categories_service or CategoriesService(self.eye_budget_db_context)
+        if categories_service is None:
+            self.categories_service.build()
+        self.bank_categorization_service = bank_categorization_service or BankCategorizationService(self.eye_budget_db_context)
+        if bank_categorization_service is None:
+            self.bank_categorization_service.build()
+        self.bank_csv_parser = bank_csv_parser or PekaoCsvParser()
 
         # Budget Analysis repositories and services
-        self.budget_analysis_repository = BudgetAnalysisRepository(self.eye_budget_db_context)
-        self.budget_goals_repository = BudgetGoalsRepository(self.eye_budget_db_context)
-        self.budget_simulations_repository = BudgetSimulationsRepository(self.eye_budget_db_context)
-        self.budget_analysis_service = BudgetAnalysisService(
+        self.budget_analysis_repository = budget_analysis_repository or BudgetAnalysisRepository(self.eye_budget_db_context)
+        self.budget_goals_repository = budget_goals_repository or BudgetGoalsRepository(self.eye_budget_db_context)
+        self.budget_simulations_repository = budget_simulations_repository or BudgetSimulationsRepository(self.eye_budget_db_context)
+        self.budget_analysis_service = budget_analysis_service or BudgetAnalysisService(
             budget_analysis_repo=self.budget_analysis_repository,
             categories_repo=self.categories_repository,
         )
-        self.budget_goals_service = BudgetGoalsService(
+        self.budget_goals_service = budget_goals_service or BudgetGoalsService(
             budget_goals_repo=self.budget_goals_repository,
             budget_analysis_repo=self.budget_analysis_repository,
         )
-        self.budget_simulation_service = BudgetSimulationService(
+        self.budget_simulation_service = budget_simulation_service or BudgetSimulationService(
             budget_analysis_repo=self.budget_analysis_repository,
             budget_goals_repo=self.budget_goals_repository,
             budget_simulations_repo=self.budget_simulations_repository,
         )
 
         # High-level services
-        self.evaluation_service = EvaluationService(
+        self.evaluation_service = evaluation_service or EvaluationService(
             evaluations_repository=self.evaluations_repository,
             ground_truth_repository=self.ground_truth_repository,
             minio_service=self.minio_service,
             preprocessing_service=self.preprocessing_service,
             ocr_service=self.ocr_service
         )
-        self.ground_truth_service = GroundTruthService(
+        self.ground_truth_service = ground_truth_service or GroundTruthService(
             ground_truth_repository=self.ground_truth_repository,
             minio_service=self.minio_service,
             preprocessing_service=self.preprocessing_service,
