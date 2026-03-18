@@ -47,15 +47,18 @@ def _setup_no_transaction(app):
 
 @pytest.mark.unit
 def test_confirm_receipt_applies_vendor_override():
+    # Arrange
     app = make_app()
     scan = make_scan_detail()
     app.receipts_scans_repository.get_by_id.return_value = scan
     app.transactions_repository.create_transaction.return_value = 42
     _setup_no_transaction(app)
-
     request = make_confirm_request(vendor="Override Store")
+
+    # Act
     app.confirm_receipt(1, request)
 
+    # Assert
     call_args = app.receipts_scans_repository.set_result_by_id.call_args
     assert call_args is not None
     dumped = call_args[0][1]  # second positional arg
@@ -64,16 +67,19 @@ def test_confirm_receipt_applies_vendor_override():
 
 @pytest.mark.unit
 def test_confirm_receipt_creates_transaction_with_correct_args():
+    # Arrange
     import datetime as dt
     app = make_app()
     scan = make_scan_detail(vendor="Lidl", date="2024-03-10", total=99.5)
     app.receipts_scans_repository.get_by_id.return_value = scan
     app.transactions_repository.create_transaction.return_value = 5
     _setup_no_transaction(app)
-
     request = make_confirm_request()
+
+    # Act
     app.confirm_receipt(1, request)
 
+    # Assert
     app.transactions_repository.create_transaction.assert_called_once()
     _, kwargs = app.transactions_repository.create_transaction.call_args
     assert kwargs["scan_id"] == 1
@@ -83,6 +89,7 @@ def test_confirm_receipt_creates_transaction_with_correct_args():
 
 @pytest.mark.unit
 def test_confirm_receipt_normalized_vendor_path():
+    # Arrange
     app = make_app()
     scan = make_scan_detail(vendor="BIEDRONKA 1234")
     app.receipts_scans_repository.get_by_id.return_value = scan
@@ -90,110 +97,135 @@ def test_confirm_receipt_normalized_vendor_path():
     app.vendors_repository.get_vendor_by_name.return_value = None
     app.vendors_repository.insert_vendor.return_value = 99
     _setup_no_transaction(app)
-
     request = make_confirm_request(normalized_vendor="Biedronka")
+
+    # Act
     app.confirm_receipt(1, request)
 
+    # Assert
     app.vendors_repository.insert_vendor.assert_called_once_with("Biedronka")
     app.vendors_repository.insert_alternative_name.assert_called_once_with("BIEDRONKA 1234", 99)
 
 
 @pytest.mark.unit
 def test_confirm_receipt_standard_vendor_lookup_path():
+    # Arrange
     app = make_app()
     scan = make_scan_detail()
     app.receipts_scans_repository.get_by_id.return_value = scan
     app.transactions_repository.create_transaction.return_value = 8
     _setup_no_transaction(app)
-
     request = make_confirm_request()
+
+    # Act
     app.confirm_receipt(1, request)
 
+    # Assert
     app.transactions_repository.lookup_vendor_id.assert_called_once_with("Biedronka")
 
 
 @pytest.mark.unit
 def test_confirm_receipt_analytics_exception_is_swallowed():
+    # Arrange
     app = make_app()
     scan = make_scan_detail()
     app.receipts_scans_repository.get_by_id.return_value = scan
     app.transactions_repository.create_transaction.return_value = 9
     app.prompt_analytics_repository.upsert.side_effect = Exception("boom")
     _setup_no_transaction(app)
-
     request = make_confirm_request()
-    result = app.confirm_receipt(1, request)
 
-    # confirm_receipt should still return without raising (analytics non-fatal)
+    # Act
+    app.confirm_receipt(1, request)
+
+    # Assert — confirm_receipt should still complete without raising (analytics non-fatal)
     app.receipts_scans_repository.get_by_id.assert_called()
 
 
 @pytest.mark.unit
 def test_confirm_receipt_returns_none_when_scan_missing():
+    # Arrange
     app = make_app()
     app.receipts_scans_repository.get_by_id.return_value = None
-
     request = make_confirm_request()
+
+    # Act
     result = app.confirm_receipt(1, request)
 
+    # Assert
     assert result is None
 
 
 @pytest.mark.unit
 def test_confirm_receipt_calls_auto_link():
+    # Arrange
     app = make_app()
     scan = make_scan_detail()
     app.receipts_scans_repository.get_by_id.return_value = scan
     app.transactions_repository.create_transaction.return_value = 42
     _setup_no_transaction(app)
-
     request = make_confirm_request()
+
+    # Act
     app.confirm_receipt(1, request)
 
+    # Assert
     app.bank_receipt_links_repository.find_auto_match_bank_tx.assert_called()
 
 
 @pytest.mark.unit
 def test_reopen_receipt_deletes_transaction_and_resets_status():
+    # Arrange
     app = make_app()
     scan = make_scan_detail()
     app.receipts_scans_repository.get_by_id.return_value = scan
     _setup_no_transaction(app)
 
+    # Act
     app.reopen_receipt(1)
 
+    # Assert
     app.transactions_repository.delete_by_scan_id.assert_called_once_with(1)
     app.receipts_scans_repository.set_status_to_confirm_by_id.assert_called_once_with(1)
 
 
 @pytest.mark.unit
 def test_delete_receipt_removes_minio_image():
+    # Arrange
     app = make_app()
     scan = make_scan_detail(minio_object_key="images/receipt.jpg")
     app.receipts_scans_repository.get_by_id.return_value = scan
     app.receipts_scans_repository.delete_scan_by_id.return_value = True
 
+    # Act
     result = app.delete_receipt(1)
 
+    # Assert
     app.minio_service.delete_image.assert_called_once_with("images/receipt.jpg")
     app.receipts_scans_repository.delete_scan_by_id.assert_called_once_with(1)
 
 
 @pytest.mark.unit
 def test_delete_receipt_returns_false_when_scan_missing():
+    # Arrange
     app = make_app()
     app.receipts_scans_repository.get_by_id.return_value = None
 
+    # Act
     result = app.delete_receipt(1)
 
+    # Assert
     assert result is False
 
 
 @pytest.mark.unit
 def test_retry_receipt_returns_false_when_scan_missing():
+    # Arrange
     app = make_app()
     app.receipts_scans_repository.reset_for_retry.return_value = None
 
+    # Act
     result = app.retry_receipt(1)
 
+    # Assert
     assert result is False
