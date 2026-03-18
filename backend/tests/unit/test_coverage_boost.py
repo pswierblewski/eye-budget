@@ -14,25 +14,32 @@ from tests.unit.conftest import make_app
 @pytest.mark.unit
 def test_run_production_already_added_file():
     """File already in DB (add_receipt returns False/falsy) → printed, not in new_files."""
+    # Arrange
     app = make_app()
     app.files_repository.list_input_files.return_value = ["old.jpg"]
     app.receipts_scans_repository.add_receipt.return_value = False
+
+    # Act
     app._run_production()
-    # No files to process — _process_single_file never called
+
+    # Assert — no files to process, _process_single_file never called
     app.preprocessing_service.preprocess_image.assert_not_called()
 
 
 @pytest.mark.unit
 def test_run_production_calls_on_progress():
     """on_progress callback is called after processing each file."""
+    # Arrange
     app = make_app()
     app.files_repository.list_input_files.return_value = ["img.jpg"]
     app.receipts_scans_repository.add_receipt.return_value = True
-    # Make _process_single_file succeed quickly via preprocessing side_effect
     app.preprocessing_service.preprocess_image.side_effect = Exception("skip")
-
     callback = MagicMock()
+
+    # Act
     app._run_production(on_progress=callback)
+
+    # Assert
     callback.assert_called_once()
 
 
@@ -42,6 +49,7 @@ def test_run_production_calls_on_progress():
 
 @pytest.mark.unit
 def test_get_receipt_by_id_with_transaction_and_bank_link():
+    # Arrange
     from src.data import ReceiptScanDetail, TransactionModel
     app = make_app()
     tx_model = TransactionModel(
@@ -49,29 +57,29 @@ def test_get_receipt_by_id_with_transaction_and_bank_link():
     )
     scan = ReceiptScanDetail(id=1, filename="f.jpg", status="done", result=tx_model)
     app.receipts_scans_repository.get_by_id.return_value = scan
-
     tx_mock = MagicMock()
     tx_mock.id = 42
     app.transactions_repository.get_by_scan_id.return_value = tx_mock
-
-    # Simulate bank link present
     app.bank_receipt_links_repository.get_bank_link_info.return_value = {
         "bank_transaction_id": 10,
         "counterparty": "Store",
         "booking_date": "2024-01-01",
         "amount": -10.0,
     }
-    # Simulate no cash link
     app.cash_receipt_links_repository.get_cash_link_info.return_value = None
     app.cash_receipt_links_repository.find_cash_tx_candidates.return_value = []
 
+    # Act
     result = app.get_receipt_by_id(1)
+
+    # Assert
     assert result is not None
     assert result.bank_link is not None
 
 
 @pytest.mark.unit
 def test_get_receipt_by_id_with_transaction_and_cash_link():
+    # Arrange
     from src.data import ReceiptScanDetail, TransactionModel
     app = make_app()
     tx_model = TransactionModel(
@@ -79,15 +87,11 @@ def test_get_receipt_by_id_with_transaction_and_cash_link():
     )
     scan = ReceiptScanDetail(id=1, filename="f.jpg", status="done", result=tx_model)
     app.receipts_scans_repository.get_by_id.return_value = scan
-
     tx_mock = MagicMock()
     tx_mock.id = 42
     app.transactions_repository.get_by_scan_id.return_value = tx_mock
-
-    # No bank link
     app.bank_receipt_links_repository.get_bank_link_info.return_value = None
     app.bank_receipt_links_repository.find_bank_tx_candidates.return_value = []
-    # Cash link present
     app.cash_receipt_links_repository.get_cash_link_info.return_value = {
         "cash_transaction_id": 7,
         "description": None,
@@ -95,13 +99,17 @@ def test_get_receipt_by_id_with_transaction_and_cash_link():
         "amount": -5.0,
     }
 
+    # Act
     result = app.get_receipt_by_id(1)
+
+    # Assert
     assert result is not None
     assert result.cash_link is not None
 
 
 @pytest.mark.unit
 def test_get_receipt_by_id_counts_candidates():
+    # Arrange
     from src.data import ReceiptScanDetail, TransactionModel
     app = make_app()
     tx_model = TransactionModel(
@@ -109,18 +117,18 @@ def test_get_receipt_by_id_counts_candidates():
     )
     scan = ReceiptScanDetail(id=1, filename="f.jpg", status="done", result=tx_model)
     app.receipts_scans_repository.get_by_id.return_value = scan
-
     tx_mock = MagicMock()
     tx_mock.id = 42
     app.transactions_repository.get_by_scan_id.return_value = tx_mock
-
-    # No links → count candidates
     app.bank_receipt_links_repository.get_bank_link_info.return_value = None
     app.bank_receipt_links_repository.find_bank_tx_candidates.return_value = [MagicMock(), MagicMock()]
     app.cash_receipt_links_repository.get_cash_link_info.return_value = None
     app.cash_receipt_links_repository.find_cash_tx_candidates.return_value = [MagicMock()]
 
+    # Act
     result = app.get_receipt_by_id(1)
+
+    # Assert
     assert result.bank_candidate_count == 2
     assert result.cash_candidate_count == 1
 
@@ -131,6 +139,7 @@ def test_get_receipt_by_id_counts_candidates():
 
 @pytest.mark.unit
 def test_get_receipt_image_url_returns_url_when_key_exists():
+    # Arrange
     from src.data import ReceiptScanDetail
     app = make_app()
     scan = ReceiptScanDetail(
@@ -138,7 +147,11 @@ def test_get_receipt_image_url_returns_url_when_key_exists():
     )
     app.receipts_scans_repository.get_by_id.return_value = scan
     app.minio_service.get_presigned_url.return_value = "http://minio/receipt.jpg"
+
+    # Act
     result = app.get_receipt_image_url(1)
+
+    # Assert
     assert result == "http://minio/receipt.jpg"
     app.minio_service.get_presigned_url.assert_called_once_with("receipts/1.jpg", expires_sec=3600)
 
@@ -149,23 +162,30 @@ def test_get_receipt_image_url_returns_url_when_key_exists():
 
 @pytest.mark.unit
 def test_reupload_receipt_image_returns_false_when_scan_missing():
+    # Arrange
     app = make_app()
     app.receipts_scans_repository.get_by_id.return_value = None
+
+    # Act / Assert
     assert app.reupload_receipt_image(1) is False
 
 
 @pytest.mark.unit
 def test_reupload_receipt_image_returns_false_when_preprocessing_fails():
+    # Arrange
     from src.data import ReceiptScanDetail
     app = make_app()
     scan = ReceiptScanDetail(id=1, filename="f.jpg", status="done")
     app.receipts_scans_repository.get_by_id.return_value = scan
     app.preprocessing_service.preprocess_image.side_effect = Exception("fail")
+
+    # Act / Assert
     assert app.reupload_receipt_image(1) is False
 
 
 @pytest.mark.unit
 def test_reupload_receipt_image_returns_false_when_upload_fails(tmp_path):
+    # Arrange
     from src.data import ReceiptScanDetail
     img = tmp_path / "img.jpg"
     img.write_bytes(b"data")
@@ -174,11 +194,14 @@ def test_reupload_receipt_image_returns_false_when_upload_fails(tmp_path):
     app.receipts_scans_repository.get_by_id.return_value = scan
     app.preprocessing_service.preprocess_image.return_value = str(img)
     app.minio_service.upload_image.side_effect = Exception("upload fail")
+
+    # Act / Assert
     assert app.reupload_receipt_image(1) is False
 
 
 @pytest.mark.unit
 def test_reupload_receipt_image_success(tmp_path):
+    # Arrange
     from src.data import ReceiptScanDetail
     img = tmp_path / "img.jpg"
     img.write_bytes(b"data")
@@ -186,7 +209,11 @@ def test_reupload_receipt_image_success(tmp_path):
     scan = ReceiptScanDetail(id=1, filename="test.jpg", status="done")
     app.receipts_scans_repository.get_by_id.return_value = scan
     app.preprocessing_service.preprocess_image.return_value = str(img)
+
+    # Act
     result = app.reupload_receipt_image(1)
+
+    # Assert
     assert result is True
     app.receipts_scans_repository.set_minio_key.assert_called_once()
 
@@ -197,20 +224,30 @@ def test_reupload_receipt_image_success(tmp_path):
 
 @pytest.mark.unit
 def test_get_ground_truth_image_bytes_returns_none_when_missing():
+    # Arrange
     app = make_app()
     app.ground_truth_repository.get_by_id.return_value = None
+
+    # Act
     result = app.get_ground_truth_image_bytes(1)
+
+    # Assert
     assert result is None
 
 
 @pytest.mark.unit
 def test_get_ground_truth_image_bytes_downloads():
+    # Arrange
     app = make_app()
     entry = MagicMock()
     entry.minio_object_key = "gt/1.jpg"
     app.ground_truth_repository.get_by_id.return_value = entry
     app.minio_service.download_image.return_value = b"imgdata"
+
+    # Act
     result = app.get_ground_truth_image_bytes(1)
+
+    # Assert
     assert result == b"imgdata"
     app.minio_service.download_image.assert_called_once_with("gt/1.jpg")
 
@@ -233,28 +270,39 @@ def _make_scan_with_result():
 
 @pytest.mark.unit
 def test_confirm_receipt_returns_none_when_no_scan():
+    # Arrange
     app = make_app()
     app.receipts_scans_repository.get_by_id.return_value = None
     from src.data import ConfirmReceiptRequest
     req = ConfirmReceiptRequest(product_categories={})
+
+    # Act
     result = app.confirm_receipt(1, req)
+
+    # Assert
     assert result is None
 
 
 @pytest.mark.unit
 def test_confirm_receipt_returns_none_when_transaction_create_fails():
+    # Arrange
     app = make_app()
     app.receipts_scans_repository.get_by_id.return_value = _make_scan_with_result()
     app.transactions_repository.create_transaction.return_value = -1
     app.transactions_repository.get_by_scan_id.return_value = None
     from src.data import ConfirmReceiptRequest
     req = ConfirmReceiptRequest(product_categories={"Apple": 1})
+
+    # Act
     result = app.confirm_receipt(1, req)
+
+    # Assert
     assert result is None
 
 
 @pytest.mark.unit
 def test_confirm_receipt_applies_vendor_override():
+    # Arrange
     app = make_app()
     scan = _make_scan_with_result()
     app.receipts_scans_repository.get_by_id.return_value = scan
@@ -262,13 +310,17 @@ def test_confirm_receipt_applies_vendor_override():
     app.transactions_repository.get_by_scan_id.return_value = None
     from src.data import ConfirmReceiptRequest
     req = ConfirmReceiptRequest(product_categories={"Apple": 1}, vendor="Override Vendor")
+
+    # Act
     app.confirm_receipt(1, req)
-    # set_result_by_id should have been called because override was applied
+
+    # Assert — set_result_by_id called because override was applied
     app.receipts_scans_repository.set_result_by_id.assert_called_once()
 
 
 @pytest.mark.unit
 def test_confirm_receipt_normalized_vendor_path():
+    # Arrange
     app = make_app()
     app.receipts_scans_repository.get_by_id.return_value = _make_scan_with_result()
     app.transactions_repository.create_transaction.return_value = 99
@@ -280,13 +332,18 @@ def test_confirm_receipt_normalized_vendor_path():
         product_categories={"Apple": 1},
         normalized_vendor="Normal Vendor",
     )
+
+    # Act
     app.confirm_receipt(1, req)
+
+    # Assert
     app.vendors_repository.insert_vendor.assert_called_once_with("Normal Vendor")
     app.vendors_repository.insert_alternative_name.assert_called_once()
 
 
 @pytest.mark.unit
 def test_confirm_receipt_normalized_vendor_already_exists():
+    # Arrange
     app = make_app()
     app.receipts_scans_repository.get_by_id.return_value = _make_scan_with_result()
     app.transactions_repository.create_transaction.return_value = 99
@@ -297,7 +354,11 @@ def test_confirm_receipt_normalized_vendor_already_exists():
         product_categories={"Apple": 1},
         normalized_vendor="Normal Vendor",
     )
+
+    # Act
     app.confirm_receipt(1, req)
+
+    # Assert
     app.vendors_repository.insert_vendor.assert_not_called()
     app.vendors_repository.insert_alternative_name.assert_called_once()
 
@@ -305,6 +366,7 @@ def test_confirm_receipt_normalized_vendor_already_exists():
 @pytest.mark.unit
 def test_confirm_receipt_normalized_product_path():
     """normalized_products triggers look-up/insert path for product_id."""
+    # Arrange
     app = make_app()
     app.receipts_scans_repository.get_by_id.return_value = _make_scan_with_result()
     app.transactions_repository.create_transaction.return_value = 99
@@ -316,7 +378,11 @@ def test_confirm_receipt_normalized_product_path():
         product_categories={"Apple": 1},
         normalized_products={"Apple": "Apple Normalized"},
     )
+
+    # Act
     app.confirm_receipt(1, req)
+
+    # Assert
     app.products_repository.insert_product.assert_called_once_with("Apple Normalized")
     app.products_repository.insert_alternative_name.assert_called_once()
 
@@ -324,6 +390,7 @@ def test_confirm_receipt_normalized_product_path():
 @pytest.mark.unit
 def test_confirm_receipt_date_parse_failure():
     """Invalid date string → today's date used without crash."""
+    # Arrange
     from src.data import ReceiptScanDetail, TransactionModel, ProductItem
     app = make_app()
     tx_model = TransactionModel(
@@ -336,22 +403,29 @@ def test_confirm_receipt_date_parse_failure():
     app.transactions_repository.get_by_scan_id.return_value = None
     from src.data import ConfirmReceiptRequest
     req = ConfirmReceiptRequest(product_categories={"Item": 1})
-    # Should not raise
+
+    # Act — should not raise
     app.confirm_receipt(1, req)
+
+    # Assert
     app.transactions_repository.create_transaction.assert_called_once()
 
 
 @pytest.mark.unit
 def test_confirm_receipt_product_with_no_category_skipped():
     """Product not in product_categories dict → continue (line 631)."""
+    # Arrange
     app = make_app()
     app.receipts_scans_repository.get_by_id.return_value = _make_scan_with_result()
     app.transactions_repository.create_transaction.return_value = 99
     app.transactions_repository.get_by_scan_id.return_value = None
     from src.data import ConfirmReceiptRequest
-    # Apple has no category mapped
-    req = ConfirmReceiptRequest(product_categories={})
+    req = ConfirmReceiptRequest(product_categories={})  # Apple has no category mapped
+
+    # Act
     app.confirm_receipt(1, req)
+
+    # Assert
     app.transactions_repository.create_transaction_item.assert_not_called()
 
 
@@ -361,9 +435,12 @@ def test_confirm_receipt_product_with_no_category_skipped():
 
 @pytest.mark.unit
 def test_localize_receipt_raises_404_when_scan_missing():
+    # Arrange
     from fastapi import HTTPException
     app = make_app()
     app.receipts_scans_repository.get_by_id.return_value = None
+
+    # Act / Assert
     with pytest.raises(HTTPException) as exc_info:
         app.localize_receipt(1)
     assert exc_info.value.status_code == 404
@@ -371,12 +448,15 @@ def test_localize_receipt_raises_404_when_scan_missing():
 
 @pytest.mark.unit
 def test_localize_receipt_raises_404_when_no_minio_key():
+    # Arrange
     from fastapi import HTTPException
     from src.data import ReceiptScanDetail, TransactionModel
     app = make_app()
     tx = TransactionModel(vendor="V", title="P", date="2024-01-01", total=1.0, products=[])
     scan = ReceiptScanDetail(id=1, filename="f.jpg", status="done", result=tx, minio_object_key=None)
     app.receipts_scans_repository.get_by_id.return_value = scan
+
+    # Act / Assert
     with pytest.raises(HTTPException) as exc_info:
         app.localize_receipt(1)
     assert exc_info.value.status_code == 404
@@ -384,6 +464,7 @@ def test_localize_receipt_raises_404_when_no_minio_key():
 
 @pytest.mark.unit
 def test_localize_receipt_success(tmp_path):
+    # Arrange
     from src.data import ReceiptScanDetail, TransactionModel
     app = make_app()
     tx = TransactionModel(vendor="V", title="P", date="2024-01-01", total=1.0, products=[])
@@ -397,7 +478,10 @@ def test_localize_receipt_success(tmp_path):
     app.text_matching_service.match.return_value = expected_result
     app.receipts_scans_repository.set_text_regions.return_value = None
 
+    # Act
     result = app.localize_receipt(1)
+
+    # Assert
     app.minio_service.download_image.assert_called_once_with("receipts/1.jpg")
 
 
@@ -407,21 +491,31 @@ def test_localize_receipt_success(tmp_path):
 
 @pytest.mark.unit
 def test_import_bank_csv_empty_returns_zeros():
+    # Arrange
     app = make_app()
     app.bank_csv_parser.parse_bytes.return_value = []
+
+    # Act
     result, ids = app.import_bank_csv(b"data")
+
+    # Assert
     assert result.imported == 0
     assert ids == []
 
 
 @pytest.mark.unit
 def test_import_bank_csv_with_rows():
+    # Arrange
     app = make_app()
     app.bank_csv_parser.parse_bytes.return_value = [MagicMock()]
     app.bank_transactions_repository.insert_transactions.return_value = (2, 0)
     app.bank_transactions_repository.get_new_ids_for_categorization.return_value = [1, 2]
     app.bank_receipt_links_repository.find_auto_match_receipt.return_value = None
+
+    # Act
     result, ids = app.import_bank_csv(b"data")
+
+    # Assert
     assert result.imported == 2
     assert ids == [1, 2]
 
@@ -432,29 +526,41 @@ def test_import_bank_csv_with_rows():
 
 @pytest.mark.unit
 def test_categorize_bank_transactions_skips_missing_tx():
+    # Arrange
     app = make_app()
     app.bank_transactions_repository.get_by_id.return_value = None
+
+    # Act
     app.categorize_bank_transactions([1])
+
+    # Assert
     app.bank_categorization_service.assign_candidates.assert_not_called()
 
 
 @pytest.mark.unit
 def test_categorize_bank_transactions_updates_candidates():
+    # Arrange
     app = make_app()
     tx = MagicMock()
     app.bank_transactions_repository.get_by_id.return_value = tx
     app.bank_categorization_service.assign_candidates.return_value = {"candidates": []}
+
+    # Act
     app.categorize_bank_transactions([1])
+
+    # Assert
     app.bank_transactions_repository.update_candidates.assert_called_once_with(1, {"candidates": []})
 
 
 @pytest.mark.unit
 def test_categorize_bank_transactions_swallows_exception():
+    # Arrange
     app = make_app()
     tx = MagicMock()
     app.bank_transactions_repository.get_by_id.return_value = tx
     app.bank_categorization_service.assign_candidates.side_effect = Exception("LLM down")
-    # Should not raise
+
+    # Act / Assert — should not raise
     app.categorize_bank_transactions([1])
 
 
@@ -464,6 +570,7 @@ def test_categorize_bank_transactions_swallows_exception():
 
 @pytest.mark.unit
 def test_get_bank_transaction_by_id_with_receipt_link():
+    # Arrange
     from src.data import BankTransactionDetail
     app = make_app()
     detail = BankTransactionDetail(
@@ -479,7 +586,11 @@ def test_get_bank_transaction_by_id_with_receipt_link():
         "date": "2024-01-01",
         "total": 100.0,
     }
+
+    # Act
     result = app.get_bank_transaction_by_id(1)
+
+    # Assert
     assert result is not None
     assert result.receipt_link is not None
 
@@ -490,6 +601,7 @@ def test_get_bank_transaction_by_id_with_receipt_link():
 
 @pytest.mark.unit
 def test_update_bank_transaction_category_skips_linked():
+    # Arrange
     from src.data import BankTransactionDetail, UpdateBankTransactionCategoryRequest
     app = make_app()
     detail = BankTransactionDetail(
@@ -497,14 +609,22 @@ def test_update_bank_transaction_category_skips_linked():
         amount=10.0, currency="PLN"
     )
     app.bank_transactions_repository.get_by_id.return_value = detail
-    app.bank_receipt_links_repository.get_receipt_link_info.return_value = {"scan_id": 1, "receipt_transaction_id": 1, "scan_filename": "f.jpg", "vendor_name": "V", "date": "2024-01-01", "total": 10.0}
+    app.bank_receipt_links_repository.get_receipt_link_info.return_value = {
+        "scan_id": 1, "receipt_transaction_id": 1, "scan_filename": "f.jpg",
+        "vendor_name": "V", "date": "2024-01-01", "total": 10.0,
+    }
     req = UpdateBankTransactionCategoryRequest(category_id=3)
+
+    # Act
     app.update_bank_transaction_category(1, req)
+
+    # Assert
     app.bank_transactions_repository.update_category.assert_not_called()
 
 
 @pytest.mark.unit
 def test_update_bank_transaction_category_updates_when_not_linked():
+    # Arrange
     from src.data import BankTransactionDetail, UpdateBankTransactionCategoryRequest
     app = make_app()
     detail = BankTransactionDetail(
@@ -514,7 +634,11 @@ def test_update_bank_transaction_category_updates_when_not_linked():
     app.bank_transactions_repository.get_by_id.return_value = detail
     app.bank_receipt_links_repository.get_receipt_link_info.return_value = None
     req = UpdateBankTransactionCategoryRequest(category_id=3)
+
+    # Act
     app.update_bank_transaction_category(1, req)
+
+    # Assert
     app.bank_transactions_repository.update_category.assert_called_once_with(1, 3)
 
 
@@ -524,6 +648,7 @@ def test_update_bank_transaction_category_updates_when_not_linked():
 
 @pytest.mark.unit
 def test_get_receipt_candidates_for_bank_tx_returns_items():
+    # Arrange
     app = make_app()
     candidate = MagicMock()
     candidate.receipt_transaction_id = 1
@@ -534,7 +659,11 @@ def test_get_receipt_candidates_for_bank_tx_returns_items():
     candidate.total = 10.0
     candidate.match_score = 3
     app.bank_receipt_links_repository.find_receipt_candidates.return_value = [candidate]
+
+    # Act
     result = app.get_receipt_candidates_for_bank_tx(1)
+
+    # Assert
     assert len(result) == 1
     assert result[0].receipt_transaction_id == 1
 
@@ -545,6 +674,7 @@ def test_get_receipt_candidates_for_bank_tx_returns_items():
 
 @pytest.mark.unit
 def test_get_bank_tx_candidates_for_receipt_returns_items():
+    # Arrange
     app = make_app()
     tx_mock = MagicMock()
     tx_mock.id = 10
@@ -556,7 +686,11 @@ def test_get_bank_tx_candidates_for_receipt_returns_items():
     candidate.amount = -10.0
     candidate.match_score = 2
     app.bank_receipt_links_repository.find_bank_tx_candidates.return_value = [candidate]
+
+    # Act
     result = app.get_bank_tx_candidates_for_receipt(1)
+
+    # Assert
     assert len(result) == 1
     assert result[0].bank_transaction_id == 5
 
@@ -567,20 +701,25 @@ def test_get_bank_tx_candidates_for_receipt_returns_items():
 
 @pytest.mark.unit
 def test_link_bank_to_receipt_returns_none_on_conflict():
+    # Arrange
     app = make_app()
     app.bank_receipt_links_repository.create_link.return_value = False
     from src.data import LinkReceiptRequest
     req = LinkReceiptRequest(receipt_transaction_id=5)
+
+    # Act
     result = app.link_bank_to_receipt(1, req)
+
+    # Assert
     assert result is None
 
 
 @pytest.mark.unit
 def test_link_bank_to_receipt_returns_detail_on_success():
+    # Arrange
     from src.data import BankTransactionDetail, LinkReceiptRequest
     app = make_app()
     app.bank_receipt_links_repository.create_link.return_value = True
-    # Simulate tag merge path (link_info present)
     app.bank_receipt_links_repository.get_receipt_link_info.return_value = {
         "scan_id": 2,
         "receipt_transaction_id": 5,
@@ -597,7 +736,11 @@ def test_link_bank_to_receipt_returns_detail_on_success():
     )
     app.bank_transactions_repository.get_by_id.return_value = detail
     req = LinkReceiptRequest(receipt_transaction_id=5)
+
+    # Act
     result = app.link_bank_to_receipt(1, req)
+
+    # Assert
     assert result is not None
 
 
@@ -607,16 +750,22 @@ def test_link_bank_to_receipt_returns_detail_on_success():
 
 @pytest.mark.unit
 def test_create_cash_transaction_returns_none_when_insert_fails():
+    # Arrange
     from src.data import CashTransactionCreate
     app = make_app()
     app.cash_transactions_repository.insert_transaction.return_value = None
     data = CashTransactionCreate(booking_date="2024-01-01", amount=-10.0)
+
+    # Act
     result = app.create_cash_transaction(data)
+
+    # Assert
     assert result is None
 
 
 @pytest.mark.unit
 def test_create_cash_transaction_success():
+    # Arrange
     from src.data import CashTransactionCreate
     app = make_app()
     app.cash_transactions_repository.insert_transaction.return_value = 7
@@ -624,7 +773,11 @@ def test_create_cash_transaction_success():
     app.cash_receipt_links_repository.get_receipt_link_info.return_value = None
     app.cash_receipt_links_repository.find_auto_match_receipt.return_value = None
     data = CashTransactionCreate(booking_date="2024-01-01", amount=-10.0)
+
+    # Act
     app.create_cash_transaction(data)
+
+    # Assert
     app.cash_transactions_repository.insert_transaction.assert_called_once()
 
 
@@ -634,14 +787,20 @@ def test_create_cash_transaction_success():
 
 @pytest.mark.unit
 def test_create_cash_transaction_from_receipt_returns_none_when_no_tx():
+    # Arrange
     app = make_app()
     app.transactions_repository.get_by_scan_id.return_value = None
+
+    # Act
     result = app.create_cash_transaction_from_receipt(1)
+
+    # Assert
     assert result is None
 
 
 @pytest.mark.unit
 def test_create_cash_transaction_from_receipt_success():
+    # Arrange
     app = make_app()
     tx = MagicMock()
     tx.items = []
@@ -655,7 +814,11 @@ def test_create_cash_transaction_from_receipt_success():
     app.cash_transactions_repository.insert_transaction.return_value = 8
     app.cash_transactions_repository.get_by_id.return_value = MagicMock()
     app.cash_receipt_links_repository.get_receipt_link_info.return_value = None
+
+    # Act
     app.create_cash_transaction_from_receipt(1)
+
+    # Assert
     app.cash_transactions_repository.insert_transaction.assert_called_once()
     app.cash_receipt_links_repository.create_link.assert_called_once()
     app.cash_transactions_repository.update_tags.assert_called_once()
@@ -667,6 +830,7 @@ def test_create_cash_transaction_from_receipt_success():
 
 @pytest.mark.unit
 def test_get_cash_transaction_by_id_with_link():
+    # Arrange
     from src.data import CashTransactionDetail
     app = make_app()
     detail = CashTransactionDetail(
@@ -681,7 +845,11 @@ def test_get_cash_transaction_by_id_with_link():
         "date": "2024-01-01",
         "total": 10.0,
     }
+
+    # Act
     result = app.get_cash_transaction_by_id(1)
+
+    # Assert
     assert result is not None
     assert result.receipt_link is not None
 
@@ -692,23 +860,33 @@ def test_get_cash_transaction_by_id_with_link():
 
 @pytest.mark.unit
 def test_update_cash_transaction_delegates():
+    # Arrange
     from src.data import CashTransactionUpdate
     app = make_app()
     app.cash_transactions_repository.get_by_id.return_value = MagicMock()
     app.cash_receipt_links_repository.get_receipt_link_info.return_value = None
     data = CashTransactionUpdate(booking_date="2024-02-01", amount=-20.0)
+
+    # Act
     app.update_cash_transaction(1, data)
+
+    # Assert
     app.cash_transactions_repository.update.assert_called_once()
 
 
 @pytest.mark.unit
 def test_update_cash_transaction_no_booking_date():
+    # Arrange
     from src.data import CashTransactionUpdate
     app = make_app()
     app.cash_transactions_repository.get_by_id.return_value = MagicMock()
     app.cash_receipt_links_repository.get_receipt_link_info.return_value = None
     data = CashTransactionUpdate(amount=-5.0)
+
+    # Act
     app.update_cash_transaction(1, data)
+
+    # Assert
     app.cash_transactions_repository.update.assert_called_once()
 
 
@@ -718,24 +896,36 @@ def test_update_cash_transaction_no_booking_date():
 
 @pytest.mark.unit
 def test_update_cash_transaction_category_skips_when_linked():
+    # Arrange
     app = make_app()
-    app.cash_receipt_links_repository.get_receipt_link_info.return_value = {"scan_id": 1}
     app.cash_transactions_repository.get_by_id.return_value = MagicMock()
-    app.cash_receipt_links_repository.get_receipt_link_info.return_value = {"receipt_transaction_id": 1, "scan_id": 1, "scan_filename": "f.jpg", "vendor_name": "V", "date": "2024-01-01", "total": 5.0}
+    app.cash_receipt_links_repository.get_receipt_link_info.return_value = {
+        "receipt_transaction_id": 1, "scan_id": 1, "scan_filename": "f.jpg",
+        "vendor_name": "V", "date": "2024-01-01", "total": 5.0,
+    }
     from src.data import UpdateCashTransactionCategoryRequest
     req = UpdateCashTransactionCategoryRequest(category_id=2)
+
+    # Act
     app.update_cash_transaction_category(1, req)
+
+    # Assert
     app.cash_transactions_repository.update_category.assert_not_called()
 
 
 @pytest.mark.unit
 def test_update_cash_transaction_category_updates_when_not_linked():
+    # Arrange
     app = make_app()
     app.cash_receipt_links_repository.get_receipt_link_info.return_value = None
     app.cash_transactions_repository.get_by_id.return_value = MagicMock()
     from src.data import UpdateCashTransactionCategoryRequest
     req = UpdateCashTransactionCategoryRequest(category_id=2)
+
+    # Act
     app.update_cash_transaction_category(1, req)
+
+    # Assert
     app.cash_transactions_repository.update_category.assert_called_once_with(1, 2)
 
 
@@ -745,6 +935,7 @@ def test_update_cash_transaction_category_updates_when_not_linked():
 
 @pytest.mark.unit
 def test_get_cash_tx_candidates_for_receipt_returns_items():
+    # Arrange
     app = make_app()
     tx_mock = MagicMock()
     tx_mock.id = 10
@@ -758,7 +949,11 @@ def test_get_cash_tx_candidates_for_receipt_returns_items():
             "match_score": 2,
         }
     ]
+
+    # Act
     result = app.get_cash_tx_candidates_for_receipt(1)
+
+    # Assert
     assert len(result) == 1
     assert result[0].cash_transaction_id == 3
 
@@ -769,13 +964,18 @@ def test_get_cash_tx_candidates_for_receipt_returns_items():
 
 @pytest.mark.unit
 def test_link_cash_to_receipt_success():
+    # Arrange
     app = make_app()
     app.cash_receipt_links_repository.create_link.return_value = True
     app.cash_transactions_repository.get_by_id.return_value = MagicMock()
     app.cash_receipt_links_repository.get_receipt_link_info.return_value = None
     from src.data import LinkCashReceiptRequest
     req = LinkCashReceiptRequest(receipt_transaction_id=5)
+
+    # Act
     result = app.link_cash_to_receipt(1, req)
+
+    # Assert
     assert result is not None
 
 
@@ -785,11 +985,16 @@ def test_link_cash_to_receipt_success():
 
 @pytest.mark.unit
 def test_update_receipt_tags_merges_cash_tags():
+    # Arrange
     app = make_app()
     app.bank_receipt_links_repository.get_bank_tx_id_for_scan.return_value = None
     app.cash_receipt_links_repository.get_cash_tx_id_for_scan.return_value = 20
     app.cash_transactions_repository.get_tags_for_tx.return_value = ["c"]
+
+    # Act
     app.update_receipt_tags(1, ["a"])
+
+    # Assert
     app.cash_transactions_repository.update_tags.assert_called()
 
 
@@ -799,10 +1004,15 @@ def test_update_receipt_tags_merges_cash_tags():
 
 @pytest.mark.unit
 def test_update_cash_transaction_tags_with_link():
+    # Arrange
     app = make_app()
     app.cash_receipt_links_repository.get_receipt_link_info.return_value = {"scan_id": 3}
     app.receipts_scans_repository.get_tags_for_scan.return_value = ["receipt_tag"]
+
+    # Act
     app.update_cash_transaction_tags(5, ["x"])
+
+    # Assert
     app.cash_transactions_repository.update_tags.assert_called()
     app.receipts_scans_repository.update_tags.assert_called()
 
@@ -813,10 +1023,15 @@ def test_update_cash_transaction_tags_with_link():
 
 @pytest.mark.unit
 def test_update_bank_transaction_tags_with_link():
+    # Arrange
     app = make_app()
     app.bank_receipt_links_repository.get_receipt_link_info.return_value = {"scan_id": 2}
     app.receipts_scans_repository.get_tags_for_scan.return_value = ["receipt_tag"]
+
+    # Act
     app.update_bank_transaction_tags(5, ["x"])
+
+    # Assert
     app.bank_transactions_repository.update_tags.assert_called()
     app.receipts_scans_repository.update_tags.assert_called()
 
@@ -827,8 +1042,13 @@ def test_update_bank_transaction_tags_with_link():
 
 @pytest.mark.unit
 def test_get_transactions_analytics_delegates():
+    # Arrange
     app = make_app()
+
+    # Act
     app.get_transactions_analytics()
+
+    # Assert
     app.unified_transactions_repository.get_analytics.assert_called_once()
 
 
@@ -838,14 +1058,20 @@ def test_get_transactions_analytics_delegates():
 
 @pytest.mark.unit
 def test_get_all_tags_returns_empty_when_no_conn():
+    # Arrange
     app = make_app()
     app.receipts_scans_repository.conn = None
+
+    # Act
     result = app.get_all_tags()
+
+    # Assert
     assert result == []
 
 
 @pytest.mark.unit
 def test_get_all_tags_returns_tags():
+    # Arrange
     app = make_app()
     cursor_mock = MagicMock()
     cursor_mock.__enter__ = MagicMock(return_value=cursor_mock)
@@ -854,17 +1080,26 @@ def test_get_all_tags_returns_tags():
     conn_mock = MagicMock()
     conn_mock.cursor.return_value = cursor_mock
     app.receipts_scans_repository.conn = conn_mock
+
+    # Act
     result = app.get_all_tags()
+
+    # Assert
     assert result == ["food", "transport"]
 
 
 @pytest.mark.unit
 def test_get_all_tags_returns_empty_on_exception():
+    # Arrange
     app = make_app()
     conn_mock = MagicMock()
     conn_mock.cursor.side_effect = Exception("db error")
     app.receipts_scans_repository.conn = conn_mock
+
+    # Act
     result = app.get_all_tags()
+
+    # Assert
     assert result == []
 
 
@@ -874,15 +1109,25 @@ def test_get_all_tags_returns_empty_on_exception():
 
 @pytest.mark.unit
 def test_seed_and_get_classifications_delegates():
+    # Arrange
     app = make_app()
+
+    # Act
     app.seed_and_get_classifications()
+
+    # Assert
     app.budget_analysis_service.seed_and_get_classifications.assert_called_once()
 
 
 @pytest.mark.unit
 def test_update_category_classification_delegates():
+    # Arrange
     app = make_app()
+
+    # Act
     app.update_category_classification(3, "essential")
+
+    # Assert
     app.budget_analysis_service.update_category_classification.assert_called_once_with(3, "essential")
 
 
@@ -892,10 +1137,15 @@ def test_update_category_classification_delegates():
 
 @pytest.mark.unit
 def test_set_financial_focus_delegates():
+    # Arrange
     from src.data import SetFinancialFocusRequest
     app = make_app()
     req = SetFinancialFocusRequest(label="savings", description="Save more")
+
+    # Act
     app.set_financial_focus(req)
+
+    # Assert
     app.budget_analysis_service.set_financial_focus.assert_called_once_with("savings", "Save more")
 
 
@@ -905,9 +1155,14 @@ def test_set_financial_focus_delegates():
 
 @pytest.mark.unit
 def test_get_emergency_advice_delegates():
+    # Arrange
     app = make_app()
     app.budget_goals_repository.get_all_goals.return_value = []
+
+    # Act
     app.get_emergency_advice(500.0)
+
+    # Assert
     app.budget_analysis_service.get_emergency_advice.assert_called_once_with(500.0, [])
 
 
@@ -917,6 +1172,7 @@ def test_get_emergency_advice_delegates():
 
 @pytest.mark.unit
 def test_create_simulation_delegates():
+    # Arrange
     from src.data import CreateBudgetSimulationRequest
     app = make_app()
     req = CreateBudgetSimulationRequest(
@@ -926,7 +1182,11 @@ def test_create_simulation_delegates():
         expense_type="one_time",
         expense_start_date="2024-06-01",
     )
+
+    # Act
     app.create_simulation(req)
+
+    # Assert
     app.budget_simulations_repository.create_simulation.assert_called_once()
 
 
@@ -936,14 +1196,20 @@ def test_create_simulation_delegates():
 
 @pytest.mark.unit
 def test_get_simulation_returns_none_when_missing():
+    # Arrange
     app = make_app()
     app.budget_simulations_repository.get_simulation.return_value = None
+
+    # Act
     result = app.get_simulation(1)
+
+    # Assert
     assert result is None
 
 
 @pytest.mark.unit
 def test_get_simulation_returns_detail():
+    # Arrange
     app = make_app()
     row = {
         "id": 1, "name": "S", "expense_name": "E",
@@ -953,7 +1219,11 @@ def test_get_simulation_returns_detail():
         "created_at": "2024-01-01T00:00:00",
     }
     app.budget_simulations_repository.get_simulation.return_value = row
+
+    # Act
     result = app.get_simulation(1)
+
+    # Assert
     assert result is not None
     assert result.name == "S"
 
@@ -964,6 +1234,7 @@ def test_get_simulation_returns_detail():
 
 @pytest.mark.unit
 def test_get_all_simulations_returns_list():
+    # Arrange
     app = make_app()
     app.budget_simulations_repository.get_all_simulations.return_value = [
         {
@@ -973,7 +1244,11 @@ def test_get_all_simulations_returns_list():
             "created_at": "2024-01-01T00:00:00",
         }
     ]
+
+    # Act
     result = app.get_all_simulations()
+
+    # Assert
     assert len(result) == 1
     assert result[0].name == "S1"
 
@@ -984,8 +1259,13 @@ def test_get_all_simulations_returns_list():
 
 @pytest.mark.unit
 def test_create_category_delegates():
+    # Arrange
     app = make_app()
+
+    # Act
     app.create_category("Groceries", None)
+
+    # Assert
     app.categories_repository.create_category.assert_called_once_with("Groceries", None)
 
 
@@ -995,15 +1275,25 @@ def test_create_category_delegates():
 
 @pytest.mark.unit
 def test_get_all_evaluation_runs_delegates():
+    # Arrange
     app = make_app()
+
+    # Act
     app.get_all_evaluation_runs()
+
+    # Assert
     app.evaluations_repository.get_all_runs.assert_called_once()
 
 
 @pytest.mark.unit
 def test_get_evaluation_run_delegates():
+    # Arrange
     app = make_app()
+
+    # Act
     app.get_evaluation_run(5)
+
+    # Assert
     app.evaluations_repository.get_run_with_results.assert_called_once_with(5)
 
 
@@ -1013,6 +1303,11 @@ def test_get_evaluation_run_delegates():
 
 @pytest.mark.unit
 def test_get_bank_tx_ids_for_recategorization_delegates():
+    # Arrange
     app = make_app()
+
+    # Act
     app.get_bank_tx_ids_for_recategorization()
+
+    # Assert
     app.bank_transactions_repository.get_ids_for_recategorization.assert_called_once()
