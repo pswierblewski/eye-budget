@@ -89,6 +89,54 @@ HTTP request
 See `.env.example` at the repo root for the full list.
 Key vars: `POSTGRESQL_*`, `OPENAI_API_KEY`, `MINIO_*`, `REDIS_URL`, `SOKETI_*`.
 
+## Testing
+
+### Quick reference
+
+```bash
+# Unit tests only (no Docker, no network — fast)
+cd backend && ../venv/bin/python -m pytest tests/unit/ -m unit -q
+
+# Unit tests with coverage (gate: ≥80% of src/app.py)
+cd backend && ../venv/bin/python -m pytest tests/unit/ -m unit \
+    --cov=src --cov-config=.coveragerc --cov-report=term-missing
+
+# Integration tests (requires Docker for PostgreSQL + MinIO testcontainers)
+cd backend && ../venv/bin/python -m pytest tests/integration/ -m integration -q
+```
+
+### `make_app()` factory (unit tests)
+
+All unit tests use `make_app()` from `tests/unit/conftest.py`.
+It constructs an `App` instance with every dependency replaced by a `MagicMock()`:
+
+```python
+from tests.unit.conftest import make_app
+
+def test_something():
+    app = make_app()
+    app.some_repository.some_method.return_value = ...
+    result = app.some_app_method(...)
+    app.some_repository.some_method.assert_called_once_with(...)
+```
+
+**Why**: `App.__init__` accepts 33 optional keyword args (all repositories and
+services). `make_app()` injects a `MagicMock()` for each, so no real DB
+connection or external service is needed.
+
+### Coverage gate
+
+- Measured only on `src/app.py` (all repos/services/tasks excluded via `.coveragerc`).
+- Gate: `fail_under = 80` — CI will fail below 80% line coverage on `app.py`.
+- `def __init__` and `def dispose` are excluded from coverage measurement.
+
+### Integration test setup
+
+`tests/integration/conftest.py` spins up PostgreSQL 16 + MinIO via
+`testcontainers-python`, runs yoyo migrations, then builds a real `App()`.
+LLM/OCR services (and preprocessing) are replaced with `MagicMock()` inside
+individual tests — real DB and MinIO remain.
+
 ## Canonical References
 
 - `backend/src/main.py` — all route definitions, per-request App lifecycle, HTTPException patterns
