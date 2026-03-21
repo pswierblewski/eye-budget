@@ -1,18 +1,43 @@
 import asyncio
+import concurrent.futures
+import multiprocessing
 from typing import Any
 
 
 OcrLine = tuple[list[list[int]], str, float]
 
-_ocr_singleton = None
+# Executor running a single spawned subprocess that owns the PaddleOCR instance.
+# Using spawn (not fork) prevents SIGSEGV from Celery ForkPoolWorker corruption.
+_executor: concurrent.futures.ProcessPoolExecutor | None = None
 
 
-def _get_ocr():
-    global _ocr_singleton
-    if _ocr_singleton is None:
+def _ocr_worker(image_path: str):
+    """Runs inside a spawned subprocess — PaddleOCR singleton lives here."""
+    global _worker_ocr  # noqa: PLW0603
+    try:
+        ocr = _worker_ocr
+    except NameError:
         from paddleocr import PaddleOCR
-        _ocr_singleton = PaddleOCR(use_angle_cls=True, lang="en")
-    return _ocr_singleton
+        _worker_ocr = PaddleOCR(use_angle_cls=True, lang="en")
+        ocr = _worker_ocr
+    return ocr.ocr(image_path)
+
+
+def _get_executor() -> concurrent.futures.ProcessPoolExecutor:
+    global _executor
+    if _executor is None:
+        _executor = concurrent.futures.ProcessPoolExecutor(
+            max_workers=1,
+            mp_context=multiprocessing.get_context("spawn"),
+        )
+    return _executor
+
+
+def _reset_executor() -> None:
+    global _executor
+    if _executor is not None:
+        _executor.shutdown(wait=False, cancel_futures=True)
+    _executor = None
 
 
 class TextLocalizationService:
@@ -22,9 +47,19 @@ class TextLocalizationService:
         """
         Run OCR on the image and return a list of (polygon, text, score) tuples.
         polygon is a list of 4 [x, y] points (quadrilateral).
+        PaddleOCR runs in a dedicated spawned subprocess to avoid SIGSEGV
+        caused by Celery's fork-based worker pool.
         """
-        result = _get_ocr().ocr(image_path)
-        return self._parse_result(result)
+        for attempt in range(2):
+            try:
+                future = _get_executor().submit(_ocr_worker, image_path)
+                result = future.result(timeout=120)
+                return self._parse_result(result)
+            except concurrent.futures.BrokenProcessPool:
+                _reset_executor()
+                if attempt == 1:
+                    raise
+        return []  # unreachable, but satisfies type checker
 
     async def detect_async(self, image_path: str) -> list[OcrLine]:
         loop = asyncio.get_event_loop()
@@ -72,4 +107,4 @@ class TextLocalizationService:
         return lines
 
     def dispose(self) -> None:
-        pass  # singleton lives for the process lifetime; do not destroy it
+        pass  # executor lifetime managed at module level
