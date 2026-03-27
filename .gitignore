@@ -209,4 +209,6 @@ backend/.yoyo-migrate
 frontend/node_modules/
 frontend/.next/
 frontend/.env.local
+!frontend/lib/
+!frontend/lib/**
 yoyo.ini
