@@ -66,7 +66,7 @@ jobs:
       - name: Set up Python environment
         run: |
           [ -d venv ] || python3 -m venv venv
-          ./venv/bin/pip install --quiet -r backend/requirements-test.txt
+          ./venv/bin/pip install --quiet -r backend/requirements.txt -r backend/requirements-test.txt
 
       - name: Run backend tests
         run: ../venv/bin/python -m pytest
