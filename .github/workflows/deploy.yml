@@ -20,29 +20,29 @@ jobs:
 
       - name: Generate backend .env from secrets
         run: |
-          cat > backend/.env << EOF
-INPUT_DIR=/mnt/nextcloud/data/Domek/files/Budżet domowy/Paragony
-          OUTPUT_DIR='preprocessed/'
-          PREPROCESSED_IMAGE_EXTENSION='png'
-          OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
-          POSTGRESQL_HOST=${{ secrets.POSTGRESQL_HOST }}
-          POSTGRESQL_PORT=${{ secrets.POSTGRESQL_PORT }}
-          POSTGRESQL_USER=${{ secrets.POSTGRESQL_USER }}
-          POSTGRESQL_PASSWORD=${{ secrets.POSTGRESQL_PASSWORD }}
-          POSTGRESQL_DB=${{ secrets.POSTGRESQL_DB }}
-          MODEL=gpt-5
-          MINIO_ENDPOINT=${{ secrets.MINIO_ENDPOINT }}
-          MINIO_ACCESS_KEY=${{ secrets.MINIO_ACCESS_KEY }}
-          MINIO_SECRET_KEY=${{ secrets.MINIO_SECRET_KEY }}
-          MINIO_BUCKET=${{ secrets.MINIO_BUCKET }}
-          MINIO_SECURE=${{ secrets.MINIO_SECURE }}
-          REDIS_URL=${{ secrets.REDIS_URL }}
-          SOKETI_APP_ID=${{ secrets.SOKETI_APP_ID }}
-          SOKETI_APP_KEY=${{ secrets.SOKETI_APP_KEY }}
-          SOKETI_APP_SECRET=${{ secrets.SOKETI_APP_SECRET }}
-          SOKETI_HOST=${{ secrets.SOKETI_HOST }}
-          SOKETI_PORT=${{ secrets.SOKETI_PORT }}
-          EOF
+          {
+            echo "INPUT_DIR=/mnt/nextcloud/data/Domek/files/Budżet domowy/Paragony"
+            echo "OUTPUT_DIR=preprocessed/"
+            echo "PREPROCESSED_IMAGE_EXTENSION=png"
+            echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}"
+            echo "POSTGRESQL_HOST=${{ secrets.POSTGRESQL_HOST }}"
+            echo "POSTGRESQL_PORT=${{ secrets.POSTGRESQL_PORT }}"
+            echo "POSTGRESQL_USER=${{ secrets.POSTGRESQL_USER }}"
+            echo "POSTGRESQL_PASSWORD=${{ secrets.POSTGRESQL_PASSWORD }}"
+            echo "POSTGRESQL_DB=${{ secrets.POSTGRESQL_DB }}"
+            echo "MODEL=gpt-5"
+            echo "MINIO_ENDPOINT=${{ secrets.MINIO_ENDPOINT }}"
+            echo "MINIO_ACCESS_KEY=${{ secrets.MINIO_ACCESS_KEY }}"
+            echo "MINIO_SECRET_KEY=${{ secrets.MINIO_SECRET_KEY }}"
+            echo "MINIO_BUCKET=${{ secrets.MINIO_BUCKET }}"
+            echo "MINIO_SECURE=${{ secrets.MINIO_SECURE }}"
+            echo "REDIS_URL=${{ secrets.REDIS_URL }}"
+            echo "SOKETI_APP_ID=${{ secrets.SOKETI_APP_ID }}"
+            echo "SOKETI_APP_KEY=${{ secrets.SOKETI_APP_KEY }}"
+            echo "SOKETI_APP_SECRET=${{ secrets.SOKETI_APP_SECRET }}"
+            echo "SOKETI_HOST=${{ secrets.SOKETI_HOST }}"
+            echo "SOKETI_PORT=${{ secrets.SOKETI_PORT }}"
+          } > backend/.env
 
       - name: Set up Node 20
         uses: actions/setup-node@v4
