@@ -23,8 +23,8 @@ This is a CI/CD infrastructure feature. Source paths are:
 
 **Purpose**: Prerequisite repository changes that block all subsequent work. Must complete before any Dockerfile or workflow can be built correctly.
 
-- [ ] T001 Add `output: 'standalone'` to the `nextConfig` object in `frontend/next.config.mjs`
-- [ ] T002 Create `frontend/.dockerignore` excluding `node_modules`, `.next`, `.git`, `*.md`, and `specs/` to keep the Docker build context minimal
+- [x] T001 Add `output: 'standalone'` to the `nextConfig` object in `frontend/next.config.mjs`
+- [x] T002 Create `frontend/.dockerignore` excluding `node_modules`, `.next`, `.git`, `*.md`, and `specs/` to keep the Docker build context minimal
 
 ---
 
@@ -34,8 +34,8 @@ This is a CI/CD infrastructure feature. Source paths are:
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T003 [P] Create multi-stage `frontend/Dockerfile`: stage 1 (`deps`) runs `npm ci`; stage 2 (`builder`) copies source and runs `npm run build`; stage 3 (`runner`) uses `node:20-slim`, copies `.next/standalone`, `.next/static`, and `public/`, sets `ENV NODE_ENV=production PORT=3000 HOSTNAME=0.0.0.0`, adds `HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=3 CMD curl -f http://localhost:3000/api/health || exit 1`, exposes port 3000, and runs `CMD ["node", "server.js"]`
-- [ ] T004 [P] Create `frontend/app/api/health/route.ts` — a GET route handler that returns `NextResponse.json({ status: 'ok' })` with HTTP 200; no business logic, no external calls
+- [x] T003 [P] Create multi-stage `frontend/Dockerfile`: stage 1 (`deps`) runs `npm ci`; stage 2 (`builder`) copies source and runs `npm run build`; stage 3 (`runner`) uses `node:20-slim`, copies `.next/standalone`, `.next/static`, and `public/`, sets `ENV NODE_ENV=production PORT=3000 HOSTNAME=0.0.0.0`, adds `HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=3 CMD curl -f http://localhost:3000/api/health || exit 1`, exposes port 3000, and runs `CMD ["node", "server.js"]`
+- [x] T004 [P] Create `frontend/app/api/health/route.ts` — a GET route handler that returns `NextResponse.json({ status: 'ok' })` with HTTP 200; no business logic, no external calls
 
 **Checkpoint**: `docker build` of `frontend/` succeeds locally and `GET /api/health` returns 200 inside the container
 
@@ -49,7 +49,7 @@ This is a CI/CD infrastructure feature. Source paths are:
 
 ### Implementation for User Story 1
 
-- [ ] T005 [US1] Create `.github/workflows/deploy.yml` with the following structure:
+- [x] T005 [US1] Create `.github/workflows/deploy.yml` with the following structure:
   - `on: push: branches: [master]`
   - `concurrency: group: deploy-eye-budget-production, cancel-in-progress: false`
   - `timeout-minutes: 15`
@@ -70,11 +70,11 @@ This is a CI/CD infrastructure feature. Source paths are:
 
 ### Implementation for User Story 2
 
-- [ ] T007 [US2] Add a post-deploy health check step to `.github/workflows/deploy.yml` (after `docker run`) that polls `GET http://localhost:3000/api/health` up to 5 times with 5-second intervals using `curl --retry 5 --retry-delay 5 --retry-connrefused -f http://localhost:3000/api/health`; step name should be `Verify deployment health`
+- [x] T007 [US2] Add a post-deploy health check step to `.github/workflows/deploy.yml` (after `docker run`) that polls `GET http://localhost:3000/api/health` up to 5 times with 5-second intervals using `curl --retry 5 --retry-delay 5 --retry-connrefused -f http://localhost:3000/api/health`; step name should be `Verify deployment health`
 
-- [ ] T008 [P] [US2] Add a `workflow_dispatch` trigger to `.github/workflows/deploy.yml` alongside the existing `push` trigger, to allow manual re-triggers from the GitHub Actions UI when the server was temporarily unreachable
+- [x] T008 [P] [US2] Add a `workflow_dispatch` trigger to `.github/workflows/deploy.yml` alongside the existing `push` trigger, to allow manual re-triggers from the GitHub Actions UI when the server was temporarily unreachable
 
-- [ ] T009 [P] [US2] Add a step at the end of the `ci-and-deploy` job in `.github/workflows/deploy.yml` that uses `$GITHUB_STEP_SUMMARY` to post a deployment summary: on success, write `✅ Deployed at $(date -u) — http://192.168.1.184:3000`; this step runs with `if: success()`
+- [x] T009 [P] [US2] Add a step at the end of the `ci-and-deploy` job in `.github/workflows/deploy.yml` that uses `$GITHUB_STEP_SUMMARY` to post a deployment summary: on success, write `✅ Deployed at $(date -u) — http://192.168.1.184:3000`; this step runs with `if: success()`
 
 **Checkpoint**: After a successful push, the Actions run summary shows the live URL and timestamp. After a failed push (e.g., lint error), the failing step name and error are visible in the run log.
 
@@ -88,9 +88,9 @@ This is a CI/CD infrastructure feature. Source paths are:
 
 ### Implementation for User Story 3
 
-- [ ] T010 [US3] Add a step in `.github/workflows/deploy.yml` immediately before the `docker build` step that tags the currently running image as `:previous` if it exists: `docker tag eye-budget-frontend:latest eye-budget-frontend:previous 2>/dev/null || true`; step name: `Tag current image as previous`
+- [x] T010 [US3] Add a step in `.github/workflows/deploy.yml` immediately before the `docker build` step that tags the currently running image as `:previous` if it exists: `docker tag eye-budget-frontend:latest eye-budget-frontend:previous 2>/dev/null || true`; step name: `Tag current image as previous`
 
-- [ ] T011 [US3] Add a rollback step in `.github/workflows/deploy.yml` with `if: failure()` that runs after the health check step: stop and remove the newly started container, then start `eye-budget-frontend:previous` if it exists (`docker image inspect eye-budget-frontend:previous &>/dev/null && docker run -d --name eye-budget-frontend -p 3000:3000 --restart unless-stopped eye-budget-frontend:previous || echo "No previous image available — server may be down"`); step name: `Rollback to previous image`
+- [x] T011 [US3] Add a rollback step in `.github/workflows/deploy.yml` with `if: failure()` that runs after the health check step: stop and remove the newly started container, then start `eye-budget-frontend:previous` if it exists (`docker image inspect eye-budget-frontend:previous &>/dev/null && docker run -d --name eye-budget-frontend -p 3000:3000 --restart unless-stopped eye-budget-frontend:previous || echo "No previous image available — server may be down"`); step name: `Rollback to previous image`
 
 **Checkpoint**: Force a deployment failure and confirm the rollback step runs and the previous version remains reachable at `http://192.168.1.184:3000`
 
@@ -100,7 +100,7 @@ This is a CI/CD infrastructure feature. Source paths are:
 
 **Purpose**: Operational hygiene and final validation
 
-- [ ] T012 Add a maintenance note to `specs/004-cicd-local-deploy/quickstart.md` documenting the weekly `docker image prune -f` cron for the `github-runner` user: `0 3 * * 0 docker image prune -f --filter "until=168h"` (this keeps `:latest` and `:previous` but removes untagged intermediate layers)
+- [x] T012 Add a maintenance note to `specs/004-cicd-local-deploy/quickstart.md` documenting the weekly `docker image prune -f` cron for the `github-runner` user: `0 3 * * 0 docker image prune -f --filter "until=168h"` (this keeps `:latest` and `:previous` but removes untagged intermediate layers)
 
 - [ ] T013 End-to-end validation: follow `specs/004-cicd-local-deploy/quickstart.md` from Step 1 to Step 5 on the Debian server, push a visible UI text change to master, and confirm all five success criteria from `specs/004-cicd-local-deploy/spec.md` are met (SC-001 through SC-005)
 

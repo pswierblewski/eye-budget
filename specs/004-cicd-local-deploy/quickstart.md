@@ -78,8 +78,9 @@ The app will be accessible at: **http://192.168.1.184:3000**
 ## Maintenance
 
 - **Update runner**: GitHub enforces a maximum runner age. Check **Settings → Runners** for update warnings. Run `./svc.sh stop && ./config.sh remove && <re-run Step 2>`.
-- **Disk cleanup**: Old Docker images accumulate. Add a weekly cron for the `github-runner` user:
+- **Disk cleanup**: Old Docker images accumulate. Add a weekly cron for the `github-runner` user. This keeps `:latest` and `:previous` but removes untagged intermediate layers:
   ```
-  0 3 * * 0 docker image prune -f
+  0 3 * * 0 docker image prune -f --filter "until=168h"
   ```
+  To add it: `crontab -e` as `github-runner` user and paste the line above.
 - **View logs**: `sudo journalctl -u actions.runner.* -f`

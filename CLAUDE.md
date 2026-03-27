@@ -1,34 +1,62 @@
 # eye-budget Development Guidelines
 
-Auto-generated from all feature plans. Last updated: 2026-03-21
+Last updated: 2026-03-25
 
-## Active Technologies
-- Python 3.11.7 (venv at project root `venv/`) + FastAPI, psycopg2-binary, pydantic v2, yoyo-migrations 9.0.0, minio client (003-backend-app-tests)
-- PostgreSQL (psycopg2-binary), MinIO (S3-compatible) (003-backend-app-tests)
-- GitHub Actions YAML, Dockerfile (Node 20 / node:20-slim), TypeScript 5 / Node 20 (Next.js 14) + GitHub Actions self-hosted runner, Docker (already on server), Node 20 (004-cicd-local-deploy)
+## Stack
 
-- TypeScript 5 / Node 20 + Next.js 14 App Router, React 18, `@radix-ui/react-tooltip` v1.1.2 (already installed), `lucide-react` (002-goal-priority-tooltip)
+**Frontend** (`frontend/`): TypeScript 5 / Node 20, Next.js 14 App Router, React 18, Tailwind CSS, `@radix-ui/react-tooltip` v1.1.2, `lucide-react`
+
+**Backend** (`backend/`): Python 3.11.7, FastAPI, psycopg2-binary, pydantic v2, yoyo-migrations 9.0.0, MinIO client, Celery[redis], PaddleOCR (PaddlePaddle ≥3.0), OpenAI SDK, Pusher
+
+**Infrastructure**: PostgreSQL, MinIO (S3-compatible), Redis, Docker / Docker Compose
+
+**CI/CD** (in progress — `004-cicd-local-deploy`): GitHub Actions self-hosted runner, deploys Next.js Docker image to Debian server at `192.168.1.184:3000`
 
 ## Project Structure
 
 ```text
-src/
-tests/
+frontend/
+  app/            # Next.js App Router pages & API routes
+  components/
+  lib/
+backend/
+  src/            # FastAPI app (main.py, celery_app.py, repositories/, services/, tasks/)
+  tests/          # unit/ and integration/ suites, conftest.py
+  migrations/     # yoyo SQL migrations
+  requirements.txt
+  requirements-test.txt
+specs/            # per-feature design artifacts (spec.md, plan.md, tasks.md, ...)
+venv/             # Python virtualenv (project root)
+docker-compose.yml
 ```
 
 ## Commands
 
-npm test && npm run lint
+```bash
+# Frontend
+cd frontend && npm test && npm run lint
+
+# Backend tests
+cd backend && python -m pytest
+
+# Python venv
+source venv/bin/activate
+```
 
 ## Code Style
 
-TypeScript 5 / Node 20: Follow standard conventions
+- TypeScript: follow standard Next.js / React conventions
+- Python: follow FastAPI / pydantic v2 conventions; tests use AAA (Arrange / Act / Assert) comment structure
+
+## Feature Workflow
+
+Features follow the speckit workflow: `specs/<NNN-feature-name>/` contains `spec.md`, `plan.md`, `tasks.md`, and supplementary artifacts. One branch per feature; PR to `master`.
 
 ## Recent Changes
-- 004-cicd-local-deploy: Added GitHub Actions YAML, Dockerfile (Node 20 / node:20-slim), TypeScript 5 / Node 20 (Next.js 14) + GitHub Actions self-hosted runner, Docker (already on server), Node 20
-- 003-backend-app-tests: Added Python 3.11.7 (venv at project root `venv/`) + FastAPI, psycopg2-binary, pydantic v2, yoyo-migrations 9.0.0, minio client
-
-- 002-goal-priority-tooltip: Added TypeScript 5 / Node 20 + Next.js 14 App Router, React 18, `@radix-ui/react-tooltip` v1.1.2 (already installed), `lucide-react`
+- 004-cicd-local-deploy: CI/CD pipeline spec + tasks complete, implementation in progress
+- 003-backend-app-tests: Python test suite (unit + integration), DI refactor, AAA comments
+- 002-goal-priority-tooltip: goal priority tooltip with Radix UI
+- 001-budget-analysis: core budget analysis feature
 
 <!-- MANUAL ADDITIONS START -->
 <!-- MANUAL ADDITIONS END -->

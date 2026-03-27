@@ -22,8 +22,7 @@ VOLUME ["/app/input"]
 VOLUME ["/app/sqlite"]
 
 # Set environment variables for input and SQLite database path
-ENV INPUT_DIR=/app/input \
-    MY_MONEY_SQLITE_PATH=/app/sqlite/my_money.db
+ENV INPUT_DIR=/app/input
 
 # Run the FastAPI app with uvicorn
 CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
