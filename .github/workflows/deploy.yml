@@ -98,7 +98,7 @@ jobs:
             eye-budget-frontend:latest
 
       - name: Verify deployment health
-        run: curl --retry 5 --retry-delay 5 --retry-connrefused -f http://localhost:3000/api/health
+        run: timeout 60 bash -c 'until curl -sf http://localhost:3000/api/health; do sleep 2; done'
 
       - name: Rollback to previous image
         if: failure()
