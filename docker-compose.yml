@@ -27,7 +27,7 @@ services:
   backend:
     build:
       context: ./backend
-    env_file: .env
+    env_file: backend/.env
     environment:
       REDIS_URL: redis://redis:6379/0
       SOKETI_HOST: soketi
@@ -51,7 +51,7 @@ services:
     build:
       context: ./backend
     command: celery -A src.celery_app worker --loglevel=info --concurrency=2
-    env_file: .env
+    env_file: backend/.env
     environment:
       REDIS_URL: redis://redis:6379/0
       SOKETI_HOST: soketi
