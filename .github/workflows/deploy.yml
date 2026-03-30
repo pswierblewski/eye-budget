@@ -95,6 +95,8 @@ jobs:
             --name eye-budget-frontend \
             -p 3000:3000 \
             --restart unless-stopped \
+            --network eye-budget_default \
+            -e BACKEND_URL=http://eye-budget-backend-1:8000 \
             eye-budget-frontend:latest
 
       - name: Verify deployment health
