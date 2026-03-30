@@ -88,6 +88,11 @@ class TaskResponse(BaseModel):
     task_id: str
 
 
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+
 @app.post("/receipts/process", response_model=TaskResponse, status_code=202)
 def process_receipts():
     """Dispatch receipt processing to a background Celery worker. Returns immediately."""
