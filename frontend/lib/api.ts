@@ -80,6 +80,8 @@ import {
   EmergencyAdvisorResponseSchema,
   SimulationTaskResponse,
   SimulationTaskResponseSchema,
+  VersionInfo,
+  VersionInfoSchema,
 } from "./types";
 import { z } from "zod";
 
@@ -820,4 +822,8 @@ export async function getEmergencyAdvice(
       body: JSON.stringify({ amount_pln, description }),
     }
   );
+}
+
+export async function getVersionInfo(): Promise<VersionInfo> {
+  return apiFetch("/api/version", VersionInfoSchema);
 }

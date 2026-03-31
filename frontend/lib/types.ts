@@ -711,3 +711,9 @@ export const SimulationTaskResponseSchema = z.object({
   simulation_id: z.number(),
 });
 export type SimulationTaskResponse = z.infer<typeof SimulationTaskResponseSchema>;
+
+export const VersionInfoSchema = z.object({
+  version: z.string(),
+  component: z.string(),
+});
+export type VersionInfo = z.infer<typeof VersionInfoSchema>;
