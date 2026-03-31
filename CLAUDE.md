@@ -1,6 +1,6 @@
 # eye-budget Development Guidelines
 
-Last updated: 2026-03-25
+Last updated: 2026-03-31
 
 ## Stack
 
@@ -53,10 +53,13 @@ source venv/bin/activate
 Features follow the speckit workflow: `specs/<NNN-feature-name>/` contains `spec.md`, `plan.md`, `tasks.md`, and supplementary artifacts. One branch per feature; PR to `master`.
 
 ## Recent Changes
+- 005-services-test-coverage: Added Python 3.11.7 + pytest ≥8.0, pytest-mock ≥3.14, pytest-cov ≥5.0, pytest-asyncio ≥0.23 (new), unittest.mock (stdlib)
 - 004-cicd-local-deploy: CI/CD pipeline spec + tasks complete, implementation in progress
 - 003-backend-app-tests: Python test suite (unit + integration), DI refactor, AAA comments
-- 002-goal-priority-tooltip: goal priority tooltip with Radix UI
-- 001-budget-analysis: core budget analysis feature
 
 <!-- MANUAL ADDITIONS START -->
 <!-- MANUAL ADDITIONS END -->
+
+## Active Technologies
+- Python 3.11.7 + pytest ≥8.0, pytest-mock ≥3.14, pytest-cov ≥5.0, pytest-asyncio ≥0.23 (new), unittest.mock (stdlib) (005-services-test-coverage)
+- N/A (tests mock all storage) (005-services-test-coverage)

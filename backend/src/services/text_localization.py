@@ -1,6 +1,7 @@
 import asyncio
 import concurrent.futures
 import multiprocessing
+from concurrent.futures.process import BrokenProcessPool
 from typing import Any
 
 
@@ -55,7 +56,7 @@ class TextLocalizationService:
                 future = _get_executor().submit(_ocr_worker, image_path)
                 result = future.result(timeout=120)
                 return self._parse_result(result)
-            except concurrent.futures.BrokenProcessPool:
+            except BrokenProcessPool:
                 _reset_executor()
                 if attempt == 1:
                     raise
