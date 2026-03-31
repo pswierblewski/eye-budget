@@ -7,8 +7,8 @@ from ..data import VendorMapping
 
 
 class VendorsService(ABC):
-    def __init__(self):
-        self.client = OpenAI()
+    def __init__(self, client: OpenAI | None = None):
+        self.client = client if client is not None else OpenAI()
         self.model = os.getenv("MODEL", "gpt-5.2")
         self.prompt = (
             "Analyze the following Polish vendor/store name from a receipt. "

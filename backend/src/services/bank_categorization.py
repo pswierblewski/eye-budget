@@ -73,11 +73,11 @@ Data:         {booking_date}
 Zwróć kandydatów na kategorię z wynikiem pewności dla tej transakcji.
 """
 
-    def __init__(self, db_context):
+    def __init__(self, db_context, client: OpenAI | None = None, async_client: AsyncOpenAI | None = None):
         self.categories_repository = CategoriesRepository(db_context=db_context)
         self.markdown_table_service = MarkdownTableService()
-        self.client = OpenAI()
-        self.async_client = AsyncOpenAI()
+        self.client = client if client is not None else OpenAI()
+        self.async_client = async_client if async_client is not None else AsyncOpenAI()
         self.model = os.getenv("MODEL", "gpt-5.2")
         self.categories_table = ""
         self._conn = db_context.conn

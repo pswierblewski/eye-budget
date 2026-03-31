@@ -10,9 +10,9 @@ from PIL import Image
 
 
 class OCRService(ABC):
-    def __init__(self):
-        self.client = OpenAI()
-        self.async_client = AsyncOpenAI()
+    def __init__(self, client: OpenAI | None = None, async_client: AsyncOpenAI | None = None):
+        self.client = client if client is not None else OpenAI()
+        self.async_client = async_client if async_client is not None else AsyncOpenAI()
         self.prompt = (
             "Analyze this Polish fiscal receipt. Extract: "
             "1. Vendor name. "
