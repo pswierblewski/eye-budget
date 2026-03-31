@@ -884,3 +884,8 @@ class EmergencyAdvisorResponse(BaseModel):
     goal_impacts: list[EmergencyGoalImpact]
     recovery_months: Optional[int]
     narrative: str
+
+
+class VersionResponse(BaseModel):
+    version: str
+    component: str

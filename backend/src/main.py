@@ -12,6 +12,7 @@ from src.tasks.categorize_bank_transactions import categorize_bank_transactions_
 from src.tasks.run_budget_simulation import run_budget_simulation_task
 from src.tasks.refresh_ai_recommendations import refresh_ai_recommendations_task
 from src.tasks.advance_goal_progress import advance_goal_progress_task
+from src.version import VERSION
 from src.data import (
     EvaluationRunSummary,
     GroundTruthResponse,
@@ -68,6 +69,7 @@ from src.data import (
     AIRecommendationsResponse,
     EmergencyAdvisorRequest,
     EmergencyAdvisorResponse,
+    VersionResponse,
 )
 from fastapi import FastAPI, File, UploadFile, HTTPException, Query
 from fastapi.responses import StreamingResponse
@@ -86,6 +88,14 @@ _image_cache_lock = threading.Lock()
 
 class TaskResponse(BaseModel):
     task_id: str
+
+
+# --- System ---
+
+@app.get("/version", response_model=VersionResponse)
+def get_version() -> VersionResponse:
+    """Return the current backend version."""
+    return VersionResponse(version=VERSION, component="backend")
 
 
 @app.get("/health")
