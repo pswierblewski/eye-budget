@@ -10,10 +10,10 @@ from ..data import TransactionModel, CategoryCandidatesProducts
 
 
 class CategoriesService(ABC):
-    def __init__(self, db_context):
+    def __init__(self, db_context, client: OpenAI | None = None):
         self.categories_repository = CategoriesRepository(db_context=db_context)
         self.markdown_table_service = MarkdownTableService()
-        self.client = OpenAI()
+        self.client = client if client is not None else OpenAI()
         self.model = os.getenv("MODEL", "gpt-5.2")
         self.categories = ""
         self.prompt = """
