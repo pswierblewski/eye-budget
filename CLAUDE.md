@@ -53,13 +53,13 @@ source venv/bin/activate
 Features follow the speckit workflow: `specs/<NNN-feature-name>/` contains `spec.md`, `plan.md`, `tasks.md`, and supplementary artifacts. One branch per feature; PR to `master`.
 
 ## Recent Changes
+- 006-semantic-versioning: Added TypeScript 5 / Node 20 (frontend); Python 3.11.7 (backend) + Next.js 14, React 18, @tanstack/react-query v5 (frontend); FastAPI, Pydantic v2 (backend)
 - 005-services-test-coverage: Added Python 3.11.7 + pytest ≥8.0, pytest-mock ≥3.14, pytest-cov ≥5.0, pytest-asyncio ≥0.23 (new), unittest.mock (stdlib)
 - 004-cicd-local-deploy: CI/CD pipeline spec + tasks complete, implementation in progress
-- 003-backend-app-tests: Python test suite (unit + integration), DI refactor, AAA comments
 
 <!-- MANUAL ADDITIONS START -->
 <!-- MANUAL ADDITIONS END -->
 
 ## Active Technologies
-- Python 3.11.7 + pytest ≥8.0, pytest-mock ≥3.14, pytest-cov ≥5.0, pytest-asyncio ≥0.23 (new), unittest.mock (stdlib) (005-services-test-coverage)
-- N/A (tests mock all storage) (005-services-test-coverage)
+- TypeScript 5 / Node 20 (frontend); Python 3.11.7 (backend) + Next.js 14, React 18, @tanstack/react-query v5 (frontend); FastAPI, Pydantic v2 (backend) (006-semantic-versioning)
+- N/A — version is a static in-memory constant (006-semantic-versioning)

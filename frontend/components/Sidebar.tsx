@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
+import { getVersionInfo } from "@/lib/api";
 import {
   ReceiptText,
   BookMarked,
@@ -38,6 +40,13 @@ const adminItems = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const { data, isLoading } = useQuery({
+    queryKey: ["version"],
+    queryFn: getVersionInfo,
+    staleTime: Infinity,
+    gcTime: Infinity,
+    retry: 1,
+  });
 
   return (
     <aside className="fixed inset-y-0 left-0 w-64 flex flex-col border-r border-gray-200 bg-[#f6f9fc]">
@@ -116,6 +125,14 @@ export function Sidebar() {
           })}
         </ul>
       </nav>
+      <footer className="px-6 py-3 border-t border-gray-200">
+        <p className="text-[10px] text-gray-400">
+          Frontend: v{process.env.NEXT_PUBLIC_FRONTEND_VERSION ?? "?"}
+        </p>
+        <p className="text-[10px] text-gray-400">
+          Backend: v{isLoading ? "ładowanie..." : (data?.version ?? "nieznana")}
+        </p>
+      </footer>
     </aside>
   );
 }
