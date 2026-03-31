@@ -1,16 +1,7 @@
 [run]
-source = src
+source = src/services
 omit =
-    src/__init__.py
     */tests/*
-    */migrations/*
-    src/repositories/*
-    src/services/*
-    src/tasks/*
-    src/db_contexts/*
-    src/data.py
-    src/celery_app.py
-    src/main.py
 
 [report]
 fail_under = 80
