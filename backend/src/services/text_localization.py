@@ -12,6 +12,48 @@ OcrLine = tuple[list[list[int]], str, float]
 _executor: concurrent.futures.ProcessPoolExecutor | None = None
 
 
+def _to_serializable(result: Any) -> list:
+    """
+    Convert PaddleOCR result to plain Python lists so it can be pickled
+    when sent back from a ProcessPoolExecutor subprocess.
+
+    Normalises both the new dict-like format (PaddleOCR 2.10+, which contains
+    CopyableWeakMethod objects) and the legacy list-of-lists format into the
+    legacy shape: [[polygon, [text, score]], ...] per page.
+    """
+    if result is None:
+        return []
+    pages = []
+    for page in result:
+        if not page:
+            pages.append([])
+            continue
+        items: list = []
+        try:
+            if "rec_texts" in page:
+                polys = page.get("rec_polys") or page.get("dt_polys") or []
+                for polygon_raw, text, score in zip(polys, page["rec_texts"], page["rec_scores"]):
+                    polygon = [[int(pt[0]), int(pt[1])] for pt in polygon_raw]
+                    items.append([polygon, [str(text), float(score)]])
+                pages.append(items)
+                continue
+        except (TypeError, KeyError):
+            pass
+        for item in page:
+            if not item or len(item) < 2:
+                continue
+            polygon_raw = item[0]
+            text_info = item[1]
+            polygon = [[int(pt[0]), int(pt[1])] for pt in polygon_raw]
+            if isinstance(text_info, (list, tuple)) and len(text_info) >= 2:
+                text, score = str(text_info[0]), float(text_info[1])
+            else:
+                text, score = str(text_info), 1.0
+            items.append([polygon, [text, score]])
+        pages.append(items)
+    return pages
+
+
 def _ocr_worker(image_path: str):
     """Runs inside a spawned subprocess — PaddleOCR singleton lives here."""
     global _worker_ocr  # noqa: PLW0603
@@ -21,7 +63,7 @@ def _ocr_worker(image_path: str):
         from paddleocr import PaddleOCR
         _worker_ocr = PaddleOCR(use_angle_cls=True, lang="en")
         ocr = _worker_ocr
-    return ocr.ocr(image_path)
+    return _to_serializable(ocr.ocr(image_path))
 
 
 def _get_executor() -> concurrent.futures.ProcessPoolExecutor:
