@@ -53,13 +53,13 @@ source venv/bin/activate
 Features follow the speckit workflow: `specs/<NNN-feature-name>/` contains `spec.md`, `plan.md`, `tasks.md`, and supplementary artifacts. One branch per feature; PR to `master`.
 
 ## Recent Changes
+- 008-fix-category-id-ambiguity: Added Python 3.11.7 + FastAPI, psycopg2-binary, pydantic v2, pytest ≥ 8.0, pytest-mock ≥ 3.14
 - 007-fix-paddle-pickling: Added Python 3.11.7 + PaddleOCR ≥ 2.10, concurrent.futures.ProcessPoolExecutor, pytest ≥ 8.0, pytest-mock ≥ 3.14
 - 006-semantic-versioning: Added TypeScript 5 / Node 20 (frontend); Python 3.11.7 (backend) + Next.js 14, React 18, @tanstack/react-query v5 (frontend); FastAPI, Pydantic v2 (backend)
-- 005-services-test-coverage: Added Python 3.11.7 + pytest ≥8.0, pytest-mock ≥3.14, pytest-cov ≥5.0, pytest-asyncio ≥0.23 (new), unittest.mock (stdlib)
 
 <!-- MANUAL ADDITIONS START -->
 <!-- MANUAL ADDITIONS END -->
 
 ## Active Technologies
-- Python 3.11.7 + PaddleOCR ≥ 2.10, concurrent.futures.ProcessPoolExecutor, pytest ≥ 8.0, pytest-mock ≥ 3.14 (007-fix-paddle-pickling)
-- N/A (no schema changes) (007-fix-paddle-pickling)
+- Python 3.11.7 + FastAPI, psycopg2-binary, pydantic v2, pytest ≥ 8.0, pytest-mock ≥ 3.14 (008-fix-category-id-ambiguity)
+- PostgreSQL (no schema changes) (008-fix-category-id-ambiguity)

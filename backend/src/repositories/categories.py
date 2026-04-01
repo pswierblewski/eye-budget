@@ -22,7 +22,7 @@ class CategoriesRepository(ABC):
                 # Check for existing category with same name and parent
                 cursor.execute(
                     """
-                    SELECT id, name, cp.name AS parent_name
+                    SELECT c.id, c.name, cp.name AS parent_name
                     FROM categories c
                     LEFT JOIN categories cp ON cp.id = c.parent_id
                     WHERE c.name = %s
