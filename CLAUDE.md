@@ -1,6 +1,6 @@
 # eye-budget Development Guidelines
 
-Last updated: 2026-03-31
+Last updated: 2026-04-01
 
 ## Stack
 
@@ -53,13 +53,13 @@ source venv/bin/activate
 Features follow the speckit workflow: `specs/<NNN-feature-name>/` contains `spec.md`, `plan.md`, `tasks.md`, and supplementary artifacts. One branch per feature; PR to `master`.
 
 ## Recent Changes
+- 007-fix-paddle-pickling: Added Python 3.11.7 + PaddleOCR ≥ 2.10, concurrent.futures.ProcessPoolExecutor, pytest ≥ 8.0, pytest-mock ≥ 3.14
 - 006-semantic-versioning: Added TypeScript 5 / Node 20 (frontend); Python 3.11.7 (backend) + Next.js 14, React 18, @tanstack/react-query v5 (frontend); FastAPI, Pydantic v2 (backend)
 - 005-services-test-coverage: Added Python 3.11.7 + pytest ≥8.0, pytest-mock ≥3.14, pytest-cov ≥5.0, pytest-asyncio ≥0.23 (new), unittest.mock (stdlib)
-- 004-cicd-local-deploy: CI/CD pipeline spec + tasks complete, implementation in progress
 
 <!-- MANUAL ADDITIONS START -->
 <!-- MANUAL ADDITIONS END -->
 
 ## Active Technologies
-- TypeScript 5 / Node 20 (frontend); Python 3.11.7 (backend) + Next.js 14, React 18, @tanstack/react-query v5 (frontend); FastAPI, Pydantic v2 (backend) (006-semantic-versioning)
-- N/A — version is a static in-memory constant (006-semantic-versioning)
+- Python 3.11.7 + PaddleOCR ≥ 2.10, concurrent.futures.ProcessPoolExecutor, pytest ≥ 8.0, pytest-mock ≥ 3.14 (007-fix-paddle-pickling)
+- N/A (no schema changes) (007-fix-paddle-pickling)
