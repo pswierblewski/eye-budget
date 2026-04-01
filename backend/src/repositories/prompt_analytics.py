@@ -180,5 +180,21 @@ class PromptAnalyticsRepository(ABC):
             print("Failed to get prompt analytics list:", e)
             return []
 
+    def delete_by_scan_id(self, scan_id: int) -> bool:
+        if not self.conn:
+            return False
+        try:
+            with self.conn.cursor() as cursor:
+                cursor.execute(
+                    "DELETE FROM prompt_analytics WHERE scan_id = %s",
+                    (scan_id,),
+                )
+                self.conn.commit()
+                return True
+        except Exception as e:
+            print("Failed to delete prompt analytics:", e)
+            self.conn.rollback()
+            return False
+
     def dispose(self):
         pass

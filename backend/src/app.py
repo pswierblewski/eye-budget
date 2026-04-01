@@ -803,6 +803,8 @@ class App(ABC):
             return False
         # Remove confirmed transaction rows (cascades to items and bank links)
         self.transactions_repository.delete_by_scan_id(scan_id)
+        # Remove prompt analytics row (FK references receipts_scans.id)
+        self.prompt_analytics_repository.delete_by_scan_id(scan_id)
         # Remove preprocessed image from object storage
         if detail.minio_object_key:
             self.minio_service.delete_image(detail.minio_object_key)
