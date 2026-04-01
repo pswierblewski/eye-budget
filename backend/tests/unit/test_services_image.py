@@ -197,3 +197,73 @@ class TestTextLocalizationService:
 
         # Assert — bad item silently skipped
         assert result == []
+
+
+@pytest.mark.unit
+class TestToSerializable:
+    """Tests for _to_serializable() — must convert PaddleOCR result objects to
+    plain Python structures before they cross the ProcessPoolExecutor boundary."""
+
+    def test_none_result_returns_empty(self):
+        # Arrange / Act / Assert
+        from src.services.text_localization import _to_serializable
+        assert _to_serializable(None) == []
+
+    def test_empty_result_returns_empty(self):
+        # Arrange / Act / Assert
+        from src.services.text_localization import _to_serializable
+        assert _to_serializable([]) == []
+
+    def test_new_dict_format(self):
+        # Arrange — PaddleOCR 2.10+ dict-based page
+        from src.services.text_localization import _to_serializable
+        page = {
+            "rec_texts": ["Mleko 2%"],
+            "rec_scores": [0.99],
+            "rec_polys": [[[10, 10], [200, 10], [200, 30], [10, 30]]],
+        }
+
+        # Act
+        result = _to_serializable([page])
+
+        # Assert — normalised to legacy shape: [[polygon, [text, score]]]
+        assert len(result) == 1
+        page_out = result[0]
+        assert len(page_out) == 1
+        polygon, text_score = page_out[0]
+        assert polygon == [[10, 10], [200, 10], [200, 30], [10, 30]]
+        assert text_score == ["Mleko 2%", pytest.approx(0.99)]
+
+    def test_legacy_list_format(self):
+        # Arrange — legacy [polygon, [text, score]] page
+        from src.services.text_localization import _to_serializable
+        page = [
+            [[[10, 10], [200, 10], [200, 30], [10, 30]], ["Chleb", 0.95]],
+        ]
+
+        # Act
+        result = _to_serializable([page])
+
+        # Assert — legacy format preserved correctly
+        assert len(result) == 1
+        page_out = result[0]
+        assert len(page_out) == 1
+        polygon, text_score = page_out[0]
+        assert polygon == [[10, 10], [200, 10], [200, 30], [10, 30]]
+        assert text_score[0] == "Chleb"
+        assert text_score[1] == pytest.approx(0.95)
+
+    def test_falsy_page_skipped(self):
+        # Arrange — result with a None page followed by a valid page
+        from src.services.text_localization import _to_serializable
+        valid_page = [
+            [[[0, 0], [100, 0], [100, 20], [0, 20]], ["OK", 0.9]],
+        ]
+
+        # Act
+        result = _to_serializable([None, valid_page])
+
+        # Assert — None page skipped; valid page present as empty list + items
+        # first entry is [] (falsy page → empty list), second has one item
+        assert result[0] == []
+        assert len(result[1]) == 1
