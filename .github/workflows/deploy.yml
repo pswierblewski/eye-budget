@@ -30,7 +30,7 @@ jobs:
             echo "POSTGRESQL_USER=${{ secrets.POSTGRESQL_USER }}"
             echo "POSTGRESQL_PASSWORD=${{ secrets.POSTGRESQL_PASSWORD }}"
             echo "POSTGRESQL_DB=${{ secrets.POSTGRESQL_DB }}"
-            echo "MODEL=gpt-5"
+            echo "MODEL=${{ secrets.MODEL }}"
             echo "MINIO_ENDPOINT=${{ secrets.MINIO_ENDPOINT }}"
             echo "MINIO_ACCESS_KEY=${{ secrets.MINIO_ACCESS_KEY }}"
             echo "MINIO_SECRET_KEY=${{ secrets.MINIO_SECRET_KEY }}"
