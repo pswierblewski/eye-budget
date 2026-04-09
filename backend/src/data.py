@@ -327,6 +327,25 @@ class EvaluationRunDetail(EvaluationRunListItem):
 # Bank transaction models (CSV import)
 # ---------------------------------------------------------------------------
 
+class BankTransactionSplit(BaseModel):
+    """One category slice of a split bank transaction."""
+    id: int
+    category_id: int
+    category_name: str
+    amount: float
+
+
+class SplitItem(BaseModel):
+    """One item in an UpdateBankTransactionSplitsRequest."""
+    category_id: int
+    amount: float
+
+
+class UpdateBankTransactionSplitsRequest(BaseModel):
+    """Request body for PUT /bank-transactions/{id}/splits."""
+    splits: list[SplitItem]
+
+
 class BankTransactionListItem(BaseModel):
     """Lightweight bank transaction for list views."""
     id: int
@@ -342,6 +361,8 @@ class BankTransactionListItem(BaseModel):
     tags: list[str] = []
     receipt_category_name: str | None = None  # top category from linked receipt
     receipt_category_count: int | None = None  # total distinct categories from linked receipt
+    split_category_name: str | None = None
+    split_count: int | None = None
 
 
 class BankTransactionDetail(BaseModel):
@@ -365,6 +386,7 @@ class BankTransactionDetail(BaseModel):
     receipt_link: Optional['ReceiptLinkInfo'] = None
     receipt_categories: list['ReceiptCategory'] | None = None  # distinct categories from linked receipt
     tags: list[str] = []
+    category_splits: list[BankTransactionSplit] | None = None
 
 
 class BankImportResult(BaseModel):
