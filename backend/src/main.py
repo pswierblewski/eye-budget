@@ -1,6 +1,7 @@
 from dotenv import load_dotenv
 load_dotenv()
 
+from decimal import Decimal
 from typing import Optional
 
 from src.app import App
@@ -33,6 +34,7 @@ from src.data import (
     BankImportResult,
     RecategorizeBankTransactionsResult,
     UpdateBankTransactionCategoryRequest,
+    UpdateBankTransactionSplitsRequest,
     ReceiptCandidateItem,
     BankTxCandidateItem,
     LinkReceiptRequest,
@@ -681,6 +683,64 @@ def update_bank_transaction_category(
         return result
     finally:
         my_app.dispose()
+
+
+# --- Bank Transaction Splits ---
+
+@app.put("/bank-transactions/{tx_id}/splits", response_model=BankTransactionDetail)
+async def put_bank_transaction_splits(
+    tx_id: int, request: UpdateBankTransactionSplitsRequest
+):
+    app_instance = App()
+    try:
+        tx = app_instance.bank_transactions_repository.get_by_id(tx_id)
+        if tx is None:
+            raise HTTPException(status_code=404, detail="Transakcja nie istnieje")
+        if len(request.splits) < 2:
+            raise HTTPException(
+                status_code=409,
+                detail="Podział wymaga co najmniej 2 kategorii",
+            )
+        tx_amount = round(Decimal(str(tx.amount)), 2)
+        splits_sum = round(sum(Decimal(str(s.amount)) for s in request.splits), 2)
+        if splits_sum != tx_amount:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Suma podziału ({splits_sum}) nie jest równa kwocie transakcji ({tx_amount})",
+            )
+        valid_ids = {c.id for c in app_instance.categories_repository.get_all_expense_categories()}
+        for s in request.splits:
+            if s.category_id not in valid_ids:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Kategoria {s.category_id} nie istnieje",
+                )
+        result = app_instance.upsert_bank_transaction_splits(tx_id, request)
+        if result is None:
+            raise HTTPException(status_code=404, detail="Transakcja nie istnieje")
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        app_instance.dispose()
+
+
+@app.delete("/bank-transactions/{tx_id}/splits", response_model=BankTransactionDetail)
+async def delete_bank_transaction_splits(tx_id: int):
+    app_instance = App()
+    try:
+        result = app_instance.delete_bank_transaction_splits(tx_id)
+        if result is None:
+            raise HTTPException(status_code=404, detail="Transakcja nie istnieje")
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        app_instance.dispose()
 
 
 # ------------------------------------------------------------------
