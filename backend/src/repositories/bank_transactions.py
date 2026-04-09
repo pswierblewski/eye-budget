@@ -8,7 +8,7 @@ import json
 from decimal import Decimal
 from typing import Optional, List
 
-from ..data import BankTransactionListItem, BankTransactionDetail, ReceiptCategory
+from ..data import BankTransactionListItem, BankTransactionDetail, ReceiptCategory, BankTransactionSplit
 from ..services.bank_csv_parser import BankTransactionRow
 
 
@@ -80,11 +80,19 @@ class BankTransactionsRepository:
             self.conn.rollback()
 
     def update_category(self, transaction_id: int, category_id: Optional[int]) -> None:
-        """Set or clear the category on a bank transaction."""
+        """Set or clear the category on a bank transaction.
+
+        Maintains the splits invariant: any existing splits are deleted first
+        so that category_id and splits are never both set simultaneously.
+        """
         if not self.conn:
             return
         try:
             with self.conn.cursor() as cur:
+                cur.execute(
+                    "DELETE FROM bank_transaction_category_splits WHERE bank_transaction_id = %s",
+                    (transaction_id,),
+                )
                 cur.execute(
                     "UPDATE bank_transactions SET category_id = %s WHERE id = %s",
                     (category_id, transaction_id),
@@ -168,6 +176,19 @@ class BankTransactionsRepository:
                                JOIN receipt_transaction_items rti ON rti.transaction_id = rbl2.receipt_transaction_id
                                WHERE rbl2.bank_transaction_id = bt.id
                            ) AS receipt_category_count,
+                           (
+                               SELECT c2.name
+                               FROM bank_transaction_category_splits s
+                               JOIN categories c2 ON c2.id = s.category_id
+                               WHERE s.bank_transaction_id = bt.id
+                               ORDER BY s.id ASC
+                               LIMIT 1
+                           ) AS split_category_name,
+                           NULLIF((
+                               SELECT COUNT(*)
+                               FROM bank_transaction_category_splits s
+                               WHERE s.bank_transaction_id = bt.id
+                           ), 0) AS split_count,
                            COUNT(*) OVER () AS total_count
                     FROM bank_transactions bt
                     LEFT JOIN categories c ON c.id = bt.category_id
@@ -178,7 +199,7 @@ class BankTransactionsRepository:
                     params + [limit, offset],
                 )
                 rows = cur.fetchall()
-            total = int(rows[0][13]) if rows else 0
+            total = int(rows[0][15]) if rows else 0
             return [
                 BankTransactionListItem(
                     id=r[0],
@@ -194,6 +215,8 @@ class BankTransactionsRepository:
                     tags=list(r[10]) if r[10] else [],
                     receipt_category_name=r[11],
                     receipt_category_count=int(r[12]) if r[12] is not None else None,
+                    split_category_name=r[13],
+                    split_count=int(r[14]) if r[14] is not None else None,
                 )
                 for r in rows
             ], total
@@ -238,9 +261,34 @@ class BankTransactionsRepository:
                     (transaction_id,),
                 )
                 cat_rows = cur.fetchall()
+                # Fetch category splits (manual multi-category allocation)
+                cur.execute(
+                    """
+                    SELECT s.id, s.category_id, c.name AS category_name, s.amount
+                    FROM bank_transaction_category_splits s
+                    JOIN categories c ON c.id = s.category_id
+                    WHERE s.bank_transaction_id = %s
+                    ORDER BY s.id
+                    """,
+                    (transaction_id,),
+                )
+                split_rows = cur.fetchall()
             receipt_categories: List[ReceiptCategory] | None = (
                 [ReceiptCategory(id=cr[0], name=cr[1], product_count=int(cr[2])) for cr in cat_rows]
                 if cat_rows else None
+            )
+            category_splits = (
+                [
+                    BankTransactionSplit(
+                        id=sr[0],
+                        category_id=sr[1],
+                        category_name=sr[2],
+                        amount=float(sr[3]),
+                    )
+                    for sr in split_rows
+                ]
+                if split_rows
+                else None
             )
             return BankTransactionDetail(
                 id=r[0],
@@ -261,6 +309,7 @@ class BankTransactionsRepository:
                 vendor_id=r[15],
                 tags=list(r[16]) if r[16] else [],
                 receipt_categories=receipt_categories,
+                category_splits=category_splits,
             )
         except Exception as e:
             print(f"BankTransactionsRepository.get_by_id error: {e}")
