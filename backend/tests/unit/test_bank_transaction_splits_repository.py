@@ -1,5 +1,4 @@
 import pytest
-from decimal import Decimal
 from unittest.mock import MagicMock
 from src.data import BankTransactionSplit, SplitItem
 from src.repositories.bank_transaction_splits import BankTransactionSplitsRepository
