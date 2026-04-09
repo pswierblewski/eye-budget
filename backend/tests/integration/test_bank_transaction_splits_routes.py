@@ -188,3 +188,21 @@ def test_patch_category_after_splits_clears_splits(client, integration_app, migr
     data = response.json()
     assert data["category_id"] == cat1
     assert not data.get("category_splits")
+
+
+@pytest.mark.integration
+def test_put_splits_unknown_category_returns_404(client, integration_app, migrated_db):
+    # Arrange
+    tx_id = insert_transaction(migrated_db, amount=200.0, reference="REF006")
+
+    # Act
+    response = client.put(
+        f"/bank-transactions/{tx_id}/splits",
+        json={"splits": [
+            {"category_id": 99999, "amount": 100.0},
+            {"category_id": 99998, "amount": 100.0},
+        ]},
+    )
+
+    # Assert
+    assert response.status_code == 404

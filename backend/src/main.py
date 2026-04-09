@@ -688,7 +688,7 @@ def update_bank_transaction_category(
 # --- Bank Transaction Splits ---
 
 @app.put("/bank-transactions/{tx_id}/splits", response_model=BankTransactionDetail)
-async def put_bank_transaction_splits(
+def put_bank_transaction_splits(
     tx_id: int, request: UpdateBankTransactionSplitsRequest
 ):
     app_instance = App()
@@ -728,7 +728,7 @@ async def put_bank_transaction_splits(
 
 
 @app.delete("/bank-transactions/{tx_id}/splits", response_model=BankTransactionDetail)
-async def delete_bank_transaction_splits(tx_id: int):
+def delete_bank_transaction_splits(tx_id: int):
     app_instance = App()
     try:
         result = app_instance.delete_bank_transaction_splits(tx_id)
