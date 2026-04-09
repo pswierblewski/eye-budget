@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import MagicMock, call
+from unittest.mock import MagicMock
 from src.repositories.bank_transactions import BankTransactionsRepository
 
 
