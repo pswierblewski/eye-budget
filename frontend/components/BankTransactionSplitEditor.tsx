@@ -8,9 +8,13 @@ import { saveBankTransactionSplits, deleteBankTransactionSplits } from "@/lib/ap
 import { BankTransactionSplit } from "@/lib/types";
 
 interface SplitRow {
+  id: number;
   category_id: number | null;
   amount: string;
 }
+
+let _nextRowId = 0;
+function nextRowId() { return _nextRowId++; }
 
 interface BankTransactionSplitEditorProps {
   txId: number;
@@ -22,13 +26,14 @@ interface BankTransactionSplitEditorProps {
 function initRows(splits: BankTransactionSplit[] | null | undefined): SplitRow[] {
   if (splits && splits.length > 0) {
     return splits.map((s) => ({
+      id: nextRowId(),
       category_id: s.category_id,
       amount: String(s.amount),
     }));
   }
   return [
-    { category_id: null, amount: "" },
-    { category_id: null, amount: "" },
+    { id: nextRowId(), category_id: null, amount: "" },
+    { id: nextRowId(), category_id: null, amount: "" },
   ];
 }
 
@@ -59,7 +64,7 @@ export function BankTransactionSplitEditor({
   }
 
   function addRow() {
-    setRows((prev) => [...prev, { category_id: null, amount: "" }]);
+    setRows((prev) => [...prev, { id: nextRowId(), category_id: null, amount: "" }]);
   }
 
   function removeRow(index: number) {
@@ -74,12 +79,12 @@ export function BankTransactionSplitEditor({
       if (rows[i].category_id === null) {
         return `Wiersz ${i + 1}: wybierz kategorię.`;
       }
-      const val = parseFloat(rows[i].amount);
+      const val = Number.parseFloat(rows[i].amount);
       if (isNaN(val) || val <= 0) {
         return `Wiersz ${i + 1}: podaj prawidłową kwotę (liczba dodatnia).`;
       }
     }
-    const sum = rows.reduce((acc, r) => acc + parseFloat(r.amount), 0);
+    const sum = rows.reduce((acc, r) => acc + Number.parseFloat(r.amount), 0);
     const rounded = Math.round(sum * 100) / 100;
     const expected = Math.round(txAmount * 100) / 100;
     if (rounded !== expected) {
@@ -99,10 +104,10 @@ export function BankTransactionSplitEditor({
     try {
       await saveBankTransactionSplits(
         txId,
-        rows.map((r) => ({
-          category_id: r.category_id!,
-          amount: parseFloat(r.amount),
-        }))
+        rows.map((r) => {
+          if (r.category_id === null) throw new Error("Unexpected null category_id after validation");
+          return { category_id: r.category_id, amount: Number.parseFloat(r.amount) };
+        })
       );
       queryClient.invalidateQueries({ queryKey: ["bank-transactions"] });
       queryClient.invalidateQueries({ queryKey: ["bank-transaction", txId] });
@@ -134,7 +139,7 @@ export function BankTransactionSplitEditor({
       {/* Rows */}
       <div className="space-y-2">
         {rows.map((row, i) => (
-          <div key={i} className="flex items-start gap-2">
+          <div key={row.id} className="flex items-start gap-2">
             {/* Category dropdown */}
             <div className="flex-1 min-w-0">
               <CategoryDropdown
