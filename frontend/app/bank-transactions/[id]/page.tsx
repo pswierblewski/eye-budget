@@ -17,6 +17,7 @@ import {
 } from "@/lib/api";
 import { ReceiptCandidateItem } from "@/lib/types";
 import { CategoryDropdown } from "@/components/CategoryDropdown";
+import { BankTransactionSplitEditor } from "@/components/BankTransactionSplitEditor";
 import TagsEditor from "@/components/TagsEditor";
 import { CandidateBar } from "@/components/BankHelpers";
 import { isoToDisplay } from "@/lib/utils";
@@ -313,6 +314,22 @@ export default function BankTransactionDetailPage({
                 >
                   {saveCategoryMutation.isPending ? "Zapisywanie…" : "Zapisz kategorię"}
                 </Button>
+              </div>
+
+              <div className="pt-2 border-t border-gray-100">
+                <SectionLabel>Podział kategorii</SectionLabel>
+                <div className="mt-2">
+                  <BankTransactionSplitEditor
+                    key={tx.category_splits ? tx.category_splits.map(s => `${s.id}:${s.amount}`).join(",") : "none"}
+                    txId={tx.id}
+                    txAmount={Math.abs(tx.amount)}
+                    splits={tx.category_splits ?? null}
+                    onSuccess={() => {
+                      queryClient.invalidateQueries({ queryKey: ["bank-transaction", txId] });
+                      queryClient.invalidateQueries({ queryKey: ["bank-transactions"] });
+                    }}
+                  />
+                </div>
               </div>
             </>
           )}
