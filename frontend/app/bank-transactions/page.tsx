@@ -7,6 +7,7 @@ import {
   recategorizeBankTransactions,
   listBankTransactions,
   saveBankTransactionCategory,
+  getBankTransaction,
   getReceiptCandidates,
   linkBankToReceipt,
   unlinkBankTransaction,
@@ -16,6 +17,7 @@ import {
 import { isoToDisplay } from "@/lib/utils";
 import {
   BankTransactionListItem,
+  BankTransactionDetail,
   BankImportResult,
   ReceiptCandidateItem,
 } from "@/lib/types";
@@ -49,10 +51,9 @@ function ExpandedRowContent({ tx, allTags = [] }: ExpandedRowProps) {
   );
   const [showCandidates, setShowCandidates] = useState(false);
 
-  const { data: detail } = useQuery({
+  const { data: detail } = useQuery<BankTransactionDetail>({
     queryKey: ["bank-transaction", tx.id],
-    queryFn: () =>
-      fetch(`/api/bank-transactions/${tx.id}`).then((r) => r.json()),
+    queryFn: () => getBankTransaction(tx.id),
   });
 
   const { data: candidates = [], isFetching: candidatesLoading } = useQuery<ReceiptCandidateItem[]>({
@@ -231,20 +232,26 @@ function ExpandedRowContent({ tx, allTags = [] }: ExpandedRowProps) {
           />
         </div>
 
-        {/* Split editor section */}
-        <div className="mt-4 pt-4 border-t border-gray-200">
-          <SectionLabel className="mb-2">Podział kategorii</SectionLabel>
-          <BankTransactionSplitEditor
-            key="splits"
-            txId={tx.id}
-            txAmount={Math.abs(tx.amount)}
-            splits={undefined}
-            onSuccess={() => {
-              queryClient.invalidateQueries({ queryKey: ["bank-transactions"] });
-              queryClient.invalidateQueries({ queryKey: ["bank-transaction", tx.id] });
-            }}
-          />
-        </div>
+        {/* Split editor section — only when not receipt-linked */}
+        {!receiptLink && (
+          <div className="mt-4 pt-4 border-t border-gray-200">
+            <SectionLabel className="mb-2">Podział kategorii</SectionLabel>
+            <BankTransactionSplitEditor
+              key={
+                detail?.category_splits
+                  ? detail.category_splits.map((s) => `${s.id}:${s.amount}`).join(",")
+                  : "none"
+              }
+              txId={tx.id}
+              txAmount={Math.abs(tx.amount)}
+              splits={detail?.category_splits ?? null}
+              onSuccess={() => {
+                queryClient.invalidateQueries({ queryKey: ["bank-transactions"] });
+                queryClient.invalidateQueries({ queryKey: ["bank-transaction", tx.id] });
+              }}
+            />
+          </div>
+        )}
 
         {/* Linked receipt section */}
         <div className="mt-4 pt-4 border-t border-gray-200">
@@ -543,7 +550,7 @@ export default function BankTransactionsPage() {
             </div>
           );
         }
-        if (t.split_category_name) {
+        if (t.split_category_name && (t.split_count ?? 0) >= 2) {
           return (
             <div className="flex items-center gap-1 flex-wrap">
               <span className="text-xs text-gray-700">
