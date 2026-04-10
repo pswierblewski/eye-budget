@@ -33,10 +33,9 @@ class BankTransactionSplitsRepository:
                     )
             self.conn.commit()
             return self.get_splits(tx_id)
-        except Exception as e:
-            print(f"BankTransactionSplitsRepository.upsert_splits error: {e}")
+        except Exception:
             self.conn.rollback()
-            return []
+            raise
 
     def delete_splits(self, tx_id: int) -> bool:
         """Remove all splits for a transaction."""
@@ -50,10 +49,9 @@ class BankTransactionSplitsRepository:
                 )
             self.conn.commit()
             return True
-        except Exception as e:
-            print(f"BankTransactionSplitsRepository.delete_splits error: {e}")
+        except Exception:
             self.conn.rollback()
-            return False
+            raise
 
     def get_splits(self, tx_id: int) -> list[BankTransactionSplit]:
         """Fetch all splits for a transaction with category names resolved."""

@@ -696,12 +696,18 @@ def put_bank_transaction_splits(
         tx = app_instance.bank_transactions_repository.get_by_id(tx_id)
         if tx is None:
             raise HTTPException(status_code=404, detail="Transakcja nie istnieje")
+        link_data = app_instance.bank_receipt_links_repository.get_receipt_link_info(tx_id)
+        if link_data:
+            raise HTTPException(
+                status_code=409,
+                detail="Nie można ustawić podziału dla transakcji powiązanej z paragonem",
+            )
         if len(request.splits) < 2:
             raise HTTPException(
                 status_code=409,
                 detail="Podział wymaga co najmniej 2 kategorii",
             )
-        tx_amount = round(Decimal(str(tx.amount)), 2)
+        tx_amount = round(abs(Decimal(str(tx.amount))), 2)
         splits_sum = round(sum(Decimal(str(s.amount)) for s in request.splits), 2)
         if splits_sum != tx_amount:
             raise HTTPException(

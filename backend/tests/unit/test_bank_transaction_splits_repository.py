@@ -56,11 +56,9 @@ def test_upsert_splits_db_error_rolls_back():
     repo, cursor = make_repo()
     cursor.execute.side_effect = Exception("DB error")
 
-    # Act
-    result = repo.upsert_splits(tx_id=1, splits=[SplitItem(category_id=5, amount=100.0)])
-
-    # Assert
-    assert result == []
+    # Act / Assert
+    with pytest.raises(Exception, match="DB error"):
+        repo.upsert_splits(tx_id=1, splits=[SplitItem(category_id=5, amount=100.0)])
     repo.conn.rollback.assert_called_once()
 
 
