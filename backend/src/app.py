@@ -24,6 +24,7 @@ from .repositories.transactions import TransactionsRepository
 from .repositories.categories import CategoriesRepository
 from .repositories.bank_transactions import BankTransactionsRepository
 from .repositories.bank_receipt_links import BankReceiptLinksRepository
+from .repositories.bank_transaction_splits import BankTransactionSplitsRepository
 from .repositories.cash_transactions import CashTransactionsRepository
 from .repositories.cash_receipt_links import CashReceiptLinksRepository
 from .repositories.unified_transactions import UnifiedTransactionsRepository
@@ -68,6 +69,7 @@ from .data import (
     LinkCashReceiptRequest,
     CashReceiptLinkInfo,
     CashLinkInfo,
+    UpdateBankTransactionSplitsRequest,
     CashTxCandidateItem,
     UnifiedTransaction,
     AnalyticsSummary,
@@ -112,6 +114,7 @@ class App(ABC):
         categories_repository=None,
         bank_transactions_repository=None,
         bank_receipt_links_repository=None,
+        bank_transaction_splits_repository=None,
         cash_transactions_repository=None,
         cash_receipt_links_repository=None,
         unified_transactions_repository=None,
@@ -151,6 +154,10 @@ class App(ABC):
 
         self.bank_transactions_repository = bank_transactions_repository or BankTransactionsRepository(self.eye_budget_db_context)
         self.bank_receipt_links_repository = bank_receipt_links_repository or BankReceiptLinksRepository(self.eye_budget_db_context)
+        self.bank_transaction_splits_repository = (
+            bank_transaction_splits_repository
+            or BankTransactionSplitsRepository(self.eye_budget_db_context)
+        )
         self.cash_transactions_repository = cash_transactions_repository or CashTransactionsRepository(self.eye_budget_db_context)
         self.cash_receipt_links_repository = cash_receipt_links_repository or CashReceiptLinksRepository(self.eye_budget_db_context)
         self.unified_transactions_repository = unified_transactions_repository or UnifiedTransactionsRepository(self.eye_budget_db_context)
@@ -1009,6 +1016,22 @@ class App(ABC):
             self.bank_transactions_repository.update_category(tx_id, request.category_id)
         return self.get_bank_transaction_by_id(tx_id)
 
+    def upsert_bank_transaction_splits(
+        self, tx_id: int, request: UpdateBankTransactionSplitsRequest
+    ) -> BankTransactionDetail | None:
+        tx = self.bank_transactions_repository.get_by_id(tx_id)
+        if tx is None:
+            return None
+        self.bank_transaction_splits_repository.upsert_splits(tx_id, request.splits)
+        return self.get_bank_transaction_by_id(tx_id)
+
+    def delete_bank_transaction_splits(self, tx_id: int) -> BankTransactionDetail | None:
+        tx = self.bank_transactions_repository.get_by_id(tx_id)
+        if tx is None:
+            return None
+        self.bank_transaction_splits_repository.delete_splits(tx_id)
+        return self.get_bank_transaction_by_id(tx_id)
+
     # ------------------------------------------------------------------
     # Bank ↔ Receipt linking
     # ------------------------------------------------------------------
@@ -1561,6 +1584,7 @@ class App(ABC):
         self.categories_repository.dispose()
         self.bank_transactions_repository.dispose()
         self.bank_receipt_links_repository.dispose()
+        self.bank_transaction_splits_repository.dispose()
         self.cash_transactions_repository.dispose()
         self.cash_receipt_links_repository.dispose()
         self.ocr_service.dispose()

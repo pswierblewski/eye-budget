@@ -361,6 +361,27 @@ export async function saveBankTransactionCategory(
   );
 }
 
+export async function saveBankTransactionSplits(
+  txId: number,
+  splits: Array<{ category_id: number; amount: number }>
+): Promise<BankTransactionDetail> {
+  return apiFetch(
+    `/api/bank-transactions/${txId}/splits`,
+    BankTransactionDetailSchema,
+    { method: "PUT", body: JSON.stringify({ splits }) }
+  );
+}
+
+export async function deleteBankTransactionSplits(
+  txId: number
+): Promise<BankTransactionDetail> {
+  return apiFetch(
+    `/api/bank-transactions/${txId}/splits`,
+    BankTransactionDetailSchema,
+    { method: "DELETE" }
+  );
+}
+
 // ------------------------------------------------------------------
 // Bank ↔ Receipt linking
 // ------------------------------------------------------------------

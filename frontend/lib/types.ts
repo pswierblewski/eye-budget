@@ -65,6 +65,14 @@ export const CategoryCandidateSchema = z.object({
   category_score: z.number(),
 });
 
+export const BankTransactionSplitSchema = z.object({
+  id: z.number(),
+  category_id: z.number(),
+  category_name: z.string(),
+  amount: z.number(),
+});
+export type BankTransactionSplit = z.infer<typeof BankTransactionSplitSchema>;
+
 export const CategoryCandidatesSchema = z.object({
   product_name: z.string(),
   category_candidates: z.array(CategoryCandidateSchema),
@@ -312,6 +320,8 @@ export const BankTransactionListItemSchema = z.object({
   tags: z.array(z.string()).optional(),
   receipt_category_name: z.string().nullable().optional(),
   receipt_category_count: z.number().nullable().optional(),
+  split_category_name: z.string().nullable().optional(),
+  split_count: z.number().nullable().optional(),
 });
 export type BankTransactionListItem = z.infer<typeof BankTransactionListItemSchema>;
 
@@ -335,6 +345,7 @@ export const BankTransactionDetailSchema = z.object({
   receipt_link: ReceiptLinkInfoSchema.nullable().optional(),
   receipt_categories: z.array(ReceiptCategorySchema).nullable().optional(),
   tags: z.array(z.string()).optional(),
+  category_splits: z.array(BankTransactionSplitSchema).nullable().optional(),
 });
 export type BankTransactionDetail = z.infer<typeof BankTransactionDetailSchema>;
 
