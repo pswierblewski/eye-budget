@@ -375,15 +375,11 @@ export async function saveBankTransactionSplits(
 export async function deleteBankTransactionSplits(
   txId: number
 ): Promise<BankTransactionDetail> {
-  const res = await fetch(`/api/bank-transactions/${txId}/splits`, {
-    method: "DELETE",
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => res.statusText);
-    throw new Error(`API ${res.status}: ${text}`);
-  }
-  const json = await res.json();
-  return BankTransactionDetailSchema.parse(json);
+  return apiFetch(
+    `/api/bank-transactions/${txId}/splits`,
+    BankTransactionDetailSchema,
+    { method: "DELETE" }
+  );
 }
 
 // ------------------------------------------------------------------

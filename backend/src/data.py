@@ -338,7 +338,7 @@ class BankTransactionSplit(BaseModel):
 class SplitItem(BaseModel):
     """One item in an UpdateBankTransactionSplitsRequest."""
     category_id: int
-    amount: float
+    amount: float = Field(gt=0)
 
 
 class UpdateBankTransactionSplitsRequest(BaseModel):

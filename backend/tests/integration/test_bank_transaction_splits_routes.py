@@ -80,8 +80,8 @@ def test_put_splits_happy_path(client, integration_app, migrated_db):
     assert data["category_id"] is None
     assert len(data["category_splits"]) == 2
     amounts_by_cat = {s["category_id"]: s["amount"] for s in data["category_splits"]}
-    assert amounts_by_cat[cat1] == 120.0
-    assert amounts_by_cat[cat2] == 80.0
+    assert abs(amounts_by_cat[cat1] - 120.0) < 0.001
+    assert abs(amounts_by_cat[cat2] - 80.0) < 0.001
 
 
 @pytest.mark.integration
@@ -188,6 +188,64 @@ def test_patch_category_after_splits_clears_splits(client, integration_app, migr
     data = response.json()
     assert data["category_id"] == cat1
     assert not data.get("category_splits")
+
+
+@pytest.mark.integration
+def test_put_splits_receipt_linked_tx_returns_409(client, integration_app, migrated_db):
+    # Arrange — create a bank tx linked to a receipt
+    pg = migrated_db
+    conn = psycopg2.connect(
+        host=pg.get_container_host_ip(),
+        port=pg.get_exposed_port(5432),
+        dbname=pg.dbname,
+        user=pg.username,
+        password=pg.password,
+    )
+    conn.autocommit = True
+    with conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO receipts_scans (filename, status) VALUES ('test_link.jpg', 'done') RETURNING id"
+        )
+        scan_id = cur.fetchone()[0]
+        cur.execute(
+            """INSERT INTO receipt_transactions (scan_id, raw_vendor_name, date, total)
+               VALUES (%s, 'Sklep', '2026-04-10', 200.0) RETURNING id""",
+            (scan_id,),
+        )
+        receipt_tx_id = cur.fetchone()[0]
+        cur.execute(
+            """INSERT INTO bank_transactions (reference_number, booking_date, amount, currency)
+               VALUES ('REF_LINK01', '2026-04-10', -200.0, 'PLN') RETURNING id"""
+        )
+        bank_tx_id = cur.fetchone()[0]
+        cur.execute(
+            "INSERT INTO receipt_bank_links (bank_transaction_id, receipt_transaction_id) VALUES (%s, %s)",
+            (bank_tx_id, receipt_tx_id),
+        )
+    conn.close()
+    cat1 = insert_category(migrated_db, "Kat_Link1")
+    cat2 = insert_category(migrated_db, "Kat_Link2")
+
+    # Act
+    response = client.put(
+        f"/bank-transactions/{bank_tx_id}/splits",
+        json={"splits": [
+            {"category_id": cat1, "amount": 100.0},
+            {"category_id": cat2, "amount": 100.0},
+        ]},
+    )
+
+    # Assert
+    assert response.status_code == 409
+
+
+@pytest.mark.integration
+def test_delete_splits_unknown_tx_returns_404(client, integration_app, migrated_db):
+    # Act
+    response = client.delete("/bank-transactions/99999/splits")
+
+    # Assert
+    assert response.status_code == 404
 
 
 @pytest.mark.integration
