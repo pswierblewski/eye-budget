@@ -361,6 +361,31 @@ export async function saveBankTransactionCategory(
   );
 }
 
+export async function saveBankTransactionSplits(
+  txId: number,
+  splits: Array<{ category_id: number; amount: number }>
+): Promise<BankTransactionDetail> {
+  return apiFetch(
+    `/api/bank-transactions/${txId}/splits`,
+    BankTransactionDetailSchema,
+    { method: "PUT", body: JSON.stringify({ splits }) }
+  );
+}
+
+export async function deleteBankTransactionSplits(
+  txId: number
+): Promise<BankTransactionDetail> {
+  const res = await fetch(`/api/bank-transactions/${txId}/splits`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText);
+    throw new Error(`API ${res.status}: ${text}`);
+  }
+  const json = await res.json();
+  return BankTransactionDetailSchema.parse(json);
+}
+
 // ------------------------------------------------------------------
 // Bank ↔ Receipt linking
 // ------------------------------------------------------------------
