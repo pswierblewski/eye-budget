@@ -17,10 +17,10 @@ let _nextRowId = 0;
 function nextRowId() { return _nextRowId++; }
 
 interface BankTransactionSplitEditorProps {
-  txId: number;
-  txAmount: number;
-  splits: BankTransactionSplit[] | null | undefined;
-  onSuccess: () => void;
+  readonly txId: number;
+  readonly txAmount: number;
+  readonly splits: BankTransactionSplit[] | null | undefined;
+  readonly onSuccess: () => void;
 }
 
 function initRows(splits: BankTransactionSplit[] | null | undefined): SplitRow[] {
@@ -80,15 +80,19 @@ export function BankTransactionSplitEditor({
         return `Wiersz ${i + 1}: wybierz kategorię.`;
       }
       const val = Number.parseFloat(rows[i].amount);
-      if (isNaN(val) || val <= 0) {
+      if (Number.isNaN(val) || val <= 0) {
         return `Wiersz ${i + 1}: podaj prawidłową kwotę (liczba dodatnia).`;
       }
     }
-    const sum = rows.reduce((acc, r) => acc + Number.parseFloat(r.amount), 0);
-    const rounded = Math.round(sum * 100) / 100;
-    const expected = Math.round(txAmount * 100) / 100;
-    if (rounded !== expected) {
-      return `Suma kwot (${rounded.toFixed(2)} PLN) musi być równa kwocie transakcji (${expected.toFixed(2)} PLN).`;
+    const sumCents = rows.reduce(
+      (acc, r) => acc + Math.round(Number.parseFloat(r.amount) * 100),
+      0
+    );
+    const expectedCents = Math.round(txAmount * 100);
+    if (sumCents !== expectedCents) {
+      const sumDisplay = (sumCents / 100).toFixed(2);
+      const expectedDisplay = (expectedCents / 100).toFixed(2);
+      return `Suma kwot (${sumDisplay} PLN) musi być równa kwocie transakcji (${expectedDisplay} PLN).`;
     }
     return null;
   }
