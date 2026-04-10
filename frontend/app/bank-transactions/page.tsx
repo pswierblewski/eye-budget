@@ -20,6 +20,7 @@ import {
   ReceiptCandidateItem,
 } from "@/lib/types";
 import { CategoryDropdown } from "@/components/CategoryDropdown";
+import { BankTransactionSplitEditor } from "@/components/BankTransactionSplitEditor";
 import TagsEditor from "@/components/TagsEditor";
 import { getPusher } from "@/lib/pusher";
 import { Upload, ArrowRight, RefreshCw } from "lucide-react";
@@ -227,6 +228,21 @@ function ExpandedRowContent({ tx, allTags = [] }: ExpandedRowProps) {
             tags={detail?.tags ?? tx.tags ?? []}
             onChange={(tags) => tagsMutation.mutate(tags)}
             allTags={allTags}
+          />
+        </div>
+
+        {/* Split editor section */}
+        <div className="mt-4 pt-4 border-t border-gray-200">
+          <SectionLabel className="mb-2">Podział kategorii</SectionLabel>
+          <BankTransactionSplitEditor
+            key="splits"
+            txId={tx.id}
+            txAmount={Math.abs(tx.amount)}
+            splits={undefined}
+            onSuccess={() => {
+              queryClient.invalidateQueries({ queryKey: ["bank-transactions"] });
+              queryClient.invalidateQueries({ queryKey: ["bank-transaction", tx.id] });
+            }}
           />
         </div>
 
@@ -522,6 +538,20 @@ export default function BankTransactionsPage() {
               {(t.receipt_category_count ?? 1) > 1 && (
                 <span className="text-[10px] bg-gray-100 text-gray-500 rounded-full px-1.5 py-0.5 font-medium shrink-0">
                   +{t.receipt_category_count! - 1}
+                </span>
+              )}
+            </div>
+          );
+        }
+        if (t.split_category_name) {
+          return (
+            <div className="flex items-center gap-1 flex-wrap">
+              <span className="text-xs text-gray-700">
+                {t.split_category_name}
+              </span>
+              {(t.split_count ?? 1) > 1 && (
+                <span className="text-[10px] bg-gray-100 text-gray-500 rounded-full px-1.5 py-0.5 font-medium shrink-0">
+                  +{t.split_count! - 1}
                 </span>
               )}
             </div>
