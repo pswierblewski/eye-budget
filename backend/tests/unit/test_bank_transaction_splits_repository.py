@@ -116,3 +116,26 @@ def test_get_splits_empty_returns_empty_list():
 
     # Assert
     assert result == []
+
+
+@pytest.mark.unit
+def test_get_splits_db_error_raises():
+    # Arrange
+    repo, cursor = make_repo()
+    cursor.execute.side_effect = Exception("DB error")
+
+    # Act / Assert
+    with pytest.raises(Exception, match="DB error"):
+        repo.get_splits(tx_id=1)
+
+
+@pytest.mark.unit
+def test_delete_splits_db_error_rolls_back():
+    # Arrange
+    repo, cursor = make_repo()
+    cursor.execute.side_effect = Exception("DB error")
+
+    # Act / Assert
+    with pytest.raises(Exception, match="DB error"):
+        repo.delete_splits(tx_id=1)
+    repo.conn.rollback.assert_called_once()
