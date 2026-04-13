@@ -1019,16 +1019,10 @@ class App(ABC):
     def upsert_bank_transaction_splits(
         self, tx_id: int, request: UpdateBankTransactionSplitsRequest
     ) -> BankTransactionDetail | None:
-        tx = self.bank_transactions_repository.get_by_id(tx_id)
-        if tx is None:
-            return None
         self.bank_transaction_splits_repository.upsert_splits(tx_id, request.splits)
         return self.get_bank_transaction_by_id(tx_id)
 
     def delete_bank_transaction_splits(self, tx_id: int) -> BankTransactionDetail | None:
-        tx = self.bank_transactions_repository.get_by_id(tx_id)
-        if tx is None:
-            return None
         self.bank_transaction_splits_repository.delete_splits(tx_id)
         return self.get_bank_transaction_by_id(tx_id)
 
