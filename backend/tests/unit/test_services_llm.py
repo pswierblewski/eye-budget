@@ -95,6 +95,16 @@ class TestOCRService:
         with pytest.raises(Exception):
             svc.process_image(img_path)
 
+    def test_prompt_contains_lidl_discount_rules(self):
+        # Arrange
+        svc = OCRService(client=MagicMock(), async_client=MagicMock())
+
+        # Assert — both concrete examples and the general guard are present
+        assert "Lidl Plus kupon" in svc.prompt
+        assert "Lidl Plus voucher" in svc.prompt
+        assert "Taniej za 2" in svc.prompt
+        assert "Never assign a positive price" in svc.prompt
+
 
 @pytest.mark.unit
 class TestCategoriesService:
