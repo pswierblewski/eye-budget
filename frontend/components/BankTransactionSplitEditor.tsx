@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { X, Plus } from "lucide-react";
 import { CategoryDropdown } from "@/components/CategoryDropdown";
@@ -13,9 +13,6 @@ interface SplitRow {
   amount: string;
 }
 
-let _nextRowId = 0;
-function nextRowId() { return _nextRowId++; }
-
 interface BankTransactionSplitEditorProps {
   readonly txId: number;
   readonly txAmount: number;
@@ -23,17 +20,17 @@ interface BankTransactionSplitEditorProps {
   readonly onSuccess: () => void;
 }
 
-function initRows(splits: BankTransactionSplit[] | null | undefined): SplitRow[] {
+function initRows(splits: BankTransactionSplit[] | null | undefined, nextId: () => number): SplitRow[] {
   if (splits && splits.length > 0) {
     return splits.map((s) => ({
-      id: nextRowId(),
+      id: nextId(),
       category_id: s.category_id,
       amount: String(s.amount),
     }));
   }
   return [
-    { id: nextRowId(), category_id: null, amount: "" },
-    { id: nextRowId(), category_id: null, amount: "" },
+    { id: nextId(), category_id: null, amount: "" },
+    { id: nextId(), category_id: null, amount: "" },
   ];
 }
 
@@ -44,7 +41,9 @@ export function BankTransactionSplitEditor({
   onSuccess,
 }: BankTransactionSplitEditorProps) {
   const queryClient = useQueryClient();
-  const [rows, setRows] = useState<SplitRow[]>(() => initRows(splits));
+  const rowIdCounter = useRef(0);
+  const nextRowId = () => rowIdCounter.current++;
+  const [rows, setRows] = useState<SplitRow[]>(() => initRows(splits, nextRowId));
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
