@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import clsx from "clsx";
-import { Input, Button, Amount } from "@/components/ui";
+import { AmountInput, Button, Amount } from "@/components/ui";
 import { checkAffordability } from "@/lib/api";
 import { AffordabilityCheckResponse } from "@/lib/types";
 
@@ -29,27 +29,25 @@ const VERDICT_CONFIG = {
 };
 
 export function AffordabilityChecker() {
-  const [amountStr, setAmountStr] = useState("");
+  const [amount, setAmount] = useState<number | null>(null);
   const [result, setResult] = useState<AffordabilityCheckResponse | null>(null);
 
   const mutation = useMutation({
-    mutationFn: () => checkAffordability(parseFloat(amountStr)),
+    mutationFn: () => checkAffordability(amount!),
     onSuccess: (data) => setResult(data),
   });
 
-  const amount = parseFloat(amountStr);
-  const canSubmit = !isNaN(amount) && amount > 0;
+  const canSubmit = amount !== null && amount > 0;
 
   const cfg = result ? VERDICT_CONFIG[result.verdict] : null;
 
   return (
     <div>
       <div className="flex gap-2">
-        <Input
-          type="number"
+        <AmountInput
+          value={amount}
+          onChange={setAmount}
           placeholder="Kwota w PLN"
-          value={amountStr}
-          onChange={(e) => setAmountStr(e.target.value)}
           className="max-w-[160px]"
         />
         <Button

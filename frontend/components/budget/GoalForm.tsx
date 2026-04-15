@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Input, Button, DateInput, Tooltip } from "@/components/ui";
+import { Input, Button, DateInput, Tooltip, AmountInput } from "@/components/ui";
 import { Info } from "lucide-react";
 import { createGoal, updateGoal } from "@/lib/api";
 import { FinancialGoalListItem } from "@/lib/types";
@@ -17,11 +17,11 @@ export function GoalForm({ goal, onSuccess }: Props) {
   const isEdit = !!goal;
 
   const [name, setName] = useState(goal?.name ?? "");
-  const [targetAmount, setTargetAmount] = useState(
-    goal?.target_amount_pln?.toString() ?? ""
+  const [targetAmount, setTargetAmount] = useState<number | null>(
+    goal?.target_amount_pln ?? null
   );
-  const [monthlyAlloc, setMonthlyAlloc] = useState(
-    goal?.monthly_allocation_amount_pln?.toString() ?? ""
+  const [monthlyAlloc, setMonthlyAlloc] = useState<number | null>(
+    goal?.monthly_allocation_amount_pln ?? null
   );
   const [targetDate, setTargetDate] = useState(goal?.target_date ?? "");
   const [priorityRank, setPriorityRank] = useState(
@@ -32,10 +32,10 @@ export function GoalForm({ goal, onSuccess }: Props) {
     mutationFn: () => {
       const data = {
         name,
-        target_amount_pln: parseFloat(targetAmount),
+        target_amount_pln: targetAmount ?? 0,
         target_date: targetDate || undefined,
         priority_rank: parseInt(priorityRank) || 0,
-        monthly_allocation_amount_pln: parseFloat(monthlyAlloc) || 0,
+        monthly_allocation_amount_pln: monthlyAlloc ?? 0,
       };
       return isEdit ? updateGoal(goal!.id, data) : createGoal(data);
     },
@@ -48,8 +48,8 @@ export function GoalForm({ goal, onSuccess }: Props) {
 
   const canSubmit =
     name.trim() !== "" &&
-    !isNaN(parseFloat(targetAmount)) &&
-    parseFloat(targetAmount) > 0;
+    targetAmount !== null &&
+    targetAmount > 0;
 
   return (
     <div className="space-y-4 p-1">
@@ -63,10 +63,9 @@ export function GoalForm({ goal, onSuccess }: Props) {
       </div>
       <div>
         <label className="block text-xs font-medium text-gray-600 mb-1">Kwota docelowa (PLN)</label>
-        <Input
-          type="number"
+        <AmountInput
           value={targetAmount}
-          onChange={(e) => setTargetAmount(e.target.value)}
+          onChange={setTargetAmount}
           placeholder="10000"
         />
       </div>
@@ -74,10 +73,9 @@ export function GoalForm({ goal, onSuccess }: Props) {
         <label className="block text-xs font-medium text-gray-600 mb-1">
           Miesięczna alokacja (PLN)
         </label>
-        <Input
-          type="number"
+        <AmountInput
           value={monthlyAlloc}
-          onChange={(e) => setMonthlyAlloc(e.target.value)}
+          onChange={setMonthlyAlloc}
           placeholder="500"
         />
       </div>

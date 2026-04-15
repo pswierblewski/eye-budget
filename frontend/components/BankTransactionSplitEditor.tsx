@@ -4,13 +4,14 @@ import { useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { X, Plus } from "lucide-react";
 import { CategoryDropdown } from "@/components/CategoryDropdown";
+import { AmountInput } from "@/components/ui";
 import { saveBankTransactionSplits, deleteBankTransactionSplits } from "@/lib/api";
 import { BankTransactionSplit } from "@/lib/types";
 
 interface SplitRow {
   id: number;
   category_id: number | null;
-  amount: string;
+  amount: number | null;
 }
 
 interface BankTransactionSplitEditorProps {
@@ -25,12 +26,12 @@ function initRows(splits: BankTransactionSplit[] | null | undefined, nextId: () 
     return splits.map((s) => ({
       id: nextId(),
       category_id: s.category_id,
-      amount: String(s.amount),
+      amount: s.amount,
     }));
   }
   return [
-    { id: nextId(), category_id: null, amount: "" },
-    { id: nextId(), category_id: null, amount: "" },
+    { id: nextId(), category_id: null, amount: null },
+    { id: nextId(), category_id: null, amount: null },
   ];
 }
 
@@ -56,14 +57,14 @@ export function BankTransactionSplitEditor({
     );
   }
 
-  function updateAmount(index: number, amount: string) {
+  function updateAmount(index: number, amount: number | null) {
     setRows((prev) =>
       prev.map((row, i) => (i === index ? { ...row, amount } : row))
     );
   }
 
   function addRow() {
-    setRows((prev) => [...prev, { id: nextRowId(), category_id: null, amount: "" }]);
+    setRows((prev) => [...prev, { id: nextRowId(), category_id: null, amount: null }]);
   }
 
   function removeRow(index: number) {
@@ -78,13 +79,13 @@ export function BankTransactionSplitEditor({
       if (rows[i].category_id === null) {
         return `Wiersz ${i + 1}: wybierz kategorię.`;
       }
-      const val = Number.parseFloat(rows[i].amount);
-      if (Number.isNaN(val) || val <= 0) {
+      const val = rows[i].amount;
+      if (val === null || val <= 0) {
         return `Wiersz ${i + 1}: podaj prawidłową kwotę (liczba dodatnia).`;
       }
     }
     const sumCents = rows.reduce(
-      (acc, r) => acc + Math.round(Number.parseFloat(r.amount) * 100),
+      (acc, r) => acc + Math.round((r.amount ?? 0) * 100),
       0
     );
     const expectedCents = Math.round(txAmount * 100);
@@ -109,7 +110,8 @@ export function BankTransactionSplitEditor({
         txId,
         rows.map((r) => {
           if (r.category_id === null) throw new Error("Unexpected null category_id after validation");
-          return { category_id: r.category_id, amount: Number.parseFloat(r.amount) };
+          if (r.amount === null) throw new Error("Unexpected null amount after validation");
+          return { category_id: r.category_id, amount: r.amount };
         })
       );
       queryClient.invalidateQueries({ queryKey: ["bank-transactions"] });
@@ -153,16 +155,11 @@ export function BankTransactionSplitEditor({
 
             {/* Amount input */}
             <div className="w-32 shrink-0">
-              <input
-                type="number"
-                step="0.01"
-                min="0"
+              <AmountInput
                 value={row.amount}
-                onChange={(e) => updateAmount(i, e.target.value)}
-                placeholder="0.00"
-                className="w-full text-sm border border-indigo-200 rounded-md px-2 py-1
-                  bg-indigo-50 focus:outline-none focus:ring-2 focus:ring-[#635bff]
-                  text-gray-900 mt-1"
+                onChange={(v) => updateAmount(i, v)}
+                placeholder="0,00"
+                className="w-full text-sm border border-indigo-200 rounded-md px-2 py-1 bg-indigo-50 focus:outline-none focus:ring-2 focus:ring-[#635bff] text-gray-900 mt-1"
               />
             </div>
 
