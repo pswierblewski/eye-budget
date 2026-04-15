@@ -23,9 +23,32 @@ JavaScript `parseFloat()` akceptuje wyłącznie kropkę (`.`). Obecne formularze
 | Baza danych | `NUMERIC(12,2)` — bez zmian |
 | Komponent | **Zawsze `<AmountInput>` dla pól kwotowych; nigdy `<input type="number">`** |
 
-## Rozwiązanie: komponent `AmountInput`
+## Rozwiązanie: utility `parseAmountInput` + komponent `AmountInput`
+
+### Utility `parseAmountInput`
+
+Nowy plik: `frontend/lib/amounts.ts`
+
+```ts
+/** Parsuje string kwoty wpisany przez użytkownika (pl-PL lub en-US).
+ *  Akceptuje ',' i '.' jako separator dziesiętny.
+ *  Zwraca null gdy wartość pusta lub nieparsowalna. */
+export function parseAmountInput(value: string): number | null {
+  const normalized = value.trim().replace(",", ".");
+  if (normalized === "") return null;
+  const n = parseFloat(normalized);
+  return isNaN(n) ? null : n;
+}
+```
+
+Logika parsowania żyje w jednym miejscu — reużywalna poza komponentem,
+testowalna bez React gdy dojdzie test runner do projektu.
+
+### Komponent `AmountInput`
 
 Nowy plik: `frontend/components/ui/AmountInput.tsx`
+
+`AmountInput` używa `parseAmountInput` wewnętrznie.
 
 ### Interfejs
 
