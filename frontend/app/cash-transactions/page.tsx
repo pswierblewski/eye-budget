@@ -42,6 +42,7 @@ import {
   ThreeDotsMenu,
   ConfirmDeleteModal,
   DateInput,
+  AmountInput,
 } from "@/components/ui";
 
 // ---------------------------------------------------------------------------
@@ -56,7 +57,7 @@ function AddTransactionModal({
 }) {
   const today = new Date().toISOString().split("T")[0];
   const [date, setDate] = useState(today);
-  const [amountStr, setAmountStr] = useState("");
+  const [amount, setAmount] = useState<number | null>(null);
   const [isExpense, setIsExpense] = useState(true);
   const [description, setDescription] = useState("");
   const [categoryId, setCategoryId] = useState<number | undefined>();
@@ -79,18 +80,17 @@ function AddTransactionModal({
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const parsed = parseFloat(amountStr.replace(",", "."));
-    if (isNaN(parsed) || parsed <= 0) {
+    if (amount === null || amount <= 0) {
       setError("Podaj prawidłową kwotę (liczbę dodatnią).");
       return;
     }
-    const amount = isExpense ? -parsed : parsed;
+    const signedAmount = isExpense ? -amount : amount;
     const matchedVendor = vendors.find(
       (v) => v.name.toLowerCase() === vendorName.trim().toLowerCase()
     );
     createMutation.mutate({
       booking_date: date,
-      amount,
+      amount: signedAmount,
       description: description || null,
       category_id: categoryId ?? null,
       vendor_id: matchedVendor?.id ?? null,
@@ -139,13 +139,10 @@ function AddTransactionModal({
                   Przychód
                 </button>
               </div>
-              <input
-                type="text"
-                required
-                inputMode="decimal"
-                placeholder="0.00"
-                value={amountStr}
-                onChange={(e) => setAmountStr(e.target.value)}
+              <AmountInput
+                value={amount}
+                onChange={setAmount}
+                placeholder="0,00"
                 className="flex-1 border border-gray-300 rounded-md px-3 py-2 text-sm focus-ring"
               />
             </div>
@@ -218,7 +215,7 @@ function ExpandedRowContent({ tx, allTags = [] }: ExpandedRowProps) {
   // Edit state
   const [editMode, setEditMode] = useState(false);
   const [editDate, setEditDate] = useState(tx.booking_date);
-  const [editAmountStr, setEditAmountStr] = useState(String(Math.abs(tx.amount)));
+  const [editAmount, setEditAmount] = useState<number | null>(Math.abs(tx.amount));
   const [editIsExpense, setEditIsExpense] = useState(tx.amount <= 0);
   const [editDescription, setEditDescription] = useState(tx.description ?? "");
   const [editVendorName, setEditVendorName] = useState(tx.vendor_name ?? "");
@@ -258,8 +255,7 @@ function ExpandedRowContent({ tx, allTags = [] }: ExpandedRowProps) {
 
   const updateMutation = useMutation({
     mutationFn: () => {
-      const parsed = parseFloat(editAmountStr.replace(",", "."));
-      const amount = editIsExpense ? -Math.abs(parsed) : Math.abs(parsed);
+      const amount = editIsExpense ? -(editAmount ?? 0) : (editAmount ?? 0);
       const matchedVendor = vendors.find(
         (v) => v.name.toLowerCase() === editVendorName.trim().toLowerCase()
       );
@@ -335,10 +331,10 @@ function ExpandedRowContent({ tx, allTags = [] }: ExpandedRowProps) {
                       className={`px-2 py-1.5 ${!editIsExpense ? "bg-green-50 text-green-600" : "bg-white text-gray-400"}`}
                     >+</button>
                   </div>
-                  <input
-                    type="text"
-                    value={editAmountStr}
-                    onChange={(e) => setEditAmountStr(e.target.value)}
+                  <AmountInput
+                    value={editAmount}
+                    onChange={setEditAmount}
+                    placeholder="0,00"
                     className="flex-1 border border-gray-300 rounded-md px-2 py-1.5 text-sm"
                   />
                 </div>
@@ -510,7 +506,7 @@ function ExpandedRowContent({ tx, allTags = [] }: ExpandedRowProps) {
                 </Link>
                 <div className="text-gray-500 mt-0.5">
                   {receiptLink.vendor_name} · {isoToDisplay(receiptLink.date)} ·{" "}
-                  {receiptLink.total.toFixed(2)} PLN
+                  {receiptLink.total.toLocaleString("pl-PL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} PLN
                 </div>
               </div>
               <Button
@@ -551,7 +547,7 @@ function ExpandedRowContent({ tx, allTags = [] }: ExpandedRowProps) {
                           {c.vendor_name}
                         </span>
                         <span className="text-gray-400 ml-2">
-                          {isoToDisplay(c.date)} · {c.total.toFixed(2)} PLN
+                          {isoToDisplay(c.date)} · {c.total.toLocaleString("pl-PL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} PLN
                         </span>
                         <MatchBadge score={c.match_score} />
                       </div>
