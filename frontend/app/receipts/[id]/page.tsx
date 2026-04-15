@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { ReceiptImageViewer } from "@/components/ReceiptImageViewer";
 import { ProductCategoryRow } from "@/components/ProductCategoryRow";
 import { CategoryDropdown } from "@/components/CategoryDropdown";
-import { StatusBadge, NavLink, Button, ConfirmDeleteModal, PrevNextNav, SectionLabel, Card, ThreeDotsMenu, DateInput, AmountInput, formatAmount } from "@/components/ui";
+import { StatusBadge, NavLink, Button, ConfirmDeleteModal, PrevNextNav, SectionLabel, Card, ThreeDotsMenu, DateInput, AmountInput } from "@/components/ui";
 import { isoToDisplay } from "@/lib/utils";
 import { VendorDropdown } from "@/components/VendorDropdown";
 import { ProductDropdown } from "@/components/ProductDropdown";
@@ -512,11 +512,11 @@ export default function ReceiptReviewPage({
             <div className="flex items-center justify-start gap-4 rounded-lg bg-gray-50 px-3 py-2 text-xs">
               <div className="flex items-center gap-1.5">
                 <span className="text-gray-500">Paragon:</span>
-                <span className="font-semibold text-gray-900">{formatAmount(stickyTotal)}</span>
+                <span className="font-semibold text-gray-900">{stickyTotal.toLocaleString("pl-PL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} PLN</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="text-gray-500">Produkty:</span>
-                <span className="font-semibold text-gray-900">{formatAmount(stickyCalc)}</span>
+                <span className="font-semibold text-gray-900">{stickyCalc.toLocaleString("pl-PL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} PLN</span>
               </div>
               {stickyMatch ? (
                 <span className="inline-flex items-center text-[10px] font-semibold text-green-700 bg-green-100 px-1.5 py-0.5 rounded-full">
