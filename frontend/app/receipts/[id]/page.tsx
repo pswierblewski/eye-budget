@@ -1155,12 +1155,12 @@ export default function ReceiptReviewPage({
                             className="inline-flex items-center gap-1 text-[10px] font-semibold text-red-600 bg-red-100 px-1.5 py-0.5 rounded-full"
                             title="Sumy się nie zgadzają"
                           >
-                            ✗ różnica {parsedTotal - calculatedTotal > 0 ? "+" : ""}{(parsedTotal - calculatedTotal).toFixed(2)} PLN
+                            ✗ różnica {parsedTotal - calculatedTotal > 0 ? "+" : ""}{(parsedTotal - calculatedTotal).toLocaleString("pl-PL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} PLN
                           </span>
                         )}
                       </div>
                       <div className="w-full text-sm border border-gray-100 bg-gray-50 rounded-md px-2 py-1 text-gray-700 select-none">
-                        {calculatedTotal.toFixed(2)}
+                        {calculatedTotal.toLocaleString("pl-PL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </div>
                     </div>
                   </div>
