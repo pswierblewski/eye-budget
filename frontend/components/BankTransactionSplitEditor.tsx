@@ -110,7 +110,8 @@ export function BankTransactionSplitEditor({
         txId,
         rows.map((r) => {
           if (r.category_id === null) throw new Error("Unexpected null category_id after validation");
-          return { category_id: r.category_id, amount: r.amount! };
+          if (r.amount === null) throw new Error("Unexpected null amount after validation");
+          return { category_id: r.category_id, amount: r.amount };
         })
       );
       queryClient.invalidateQueries({ queryKey: ["bank-transactions"] });
