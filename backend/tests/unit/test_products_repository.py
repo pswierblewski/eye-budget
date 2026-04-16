@@ -8,14 +8,17 @@ class ConcreteProducts(ProductsRepository):
     pass
 
 
-def make_repo(fetchone_return=None, fetchone_side_effect=None, fetchall_return=None):
+_UNSET = object()
+
+
+def make_repo(fetchone_return=_UNSET, fetchone_side_effect=None, fetchall_return=None):
     conn = MagicMock()
     cursor = MagicMock()
     conn.cursor.return_value.__enter__ = MagicMock(return_value=cursor)
     conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
     if fetchone_side_effect is not None:
         cursor.fetchone.side_effect = fetchone_side_effect
-    elif fetchone_return is not None:
+    elif fetchone_return is not _UNSET:
         cursor.fetchone.return_value = fetchone_return
     if fetchall_return is not None:
         cursor.fetchall.return_value = fetchall_return
@@ -97,13 +100,7 @@ def test_insert_product_happy_path():
 @pytest.mark.unit
 def test_insert_product_no_result():
     # Arrange
-    conn = MagicMock()
-    cursor = MagicMock()
-    conn.cursor.return_value.__enter__ = MagicMock(return_value=cursor)
-    conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
-    cursor.fetchone.return_value = None
-    repo = ConcreteProducts.__new__(ConcreteProducts)
-    repo.conn = conn
+    repo, _ = make_repo(fetchone_return=None)
 
     # Act
     result = repo.insert_product("Masło")
