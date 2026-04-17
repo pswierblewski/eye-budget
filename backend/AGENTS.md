@@ -97,7 +97,7 @@ Key vars: `POSTGRESQL_*`, `OPENAI_API_KEY`, `MINIO_*`, `REDIS_URL`, `SOKETI_*`.
 # Unit tests only (no Docker, no network — fast)
 cd backend && ../venv/bin/python -m pytest tests/unit/ -m unit -q
 
-# Unit tests with coverage (gate: ≥80% of src/app.py)
+# Unit tests with coverage report (whole `src/` — see `pytest.ini` addopts)
 cd backend && ../venv/bin/python -m pytest tests/unit/ -m unit \
     --cov=src --cov-config=.coveragerc --cov-report=term-missing
 
@@ -124,11 +124,11 @@ def test_something():
 services). `make_app()` injects a `MagicMock()` for each, so no real DB
 connection or external service is needed.
 
-### Coverage gate
+### Coverage
 
-- Measured only on `src/app.py` (all repos/services/tasks excluded via `.coveragerc`).
-- Gate: `fail_under = 80` — CI will fail below 80% line coverage on `app.py`.
-- `def __init__` and `def dispose` are excluded from coverage measurement.
+- `backend/pytest.ini` sets `addopts = --cov=src --cov-report=term-missing`, so **all** of `src/` is included in the report when you run pytest from `backend/`.
+- `backend/.coveragerc` omits `*/tests/*` and excludes `def __init__` / `def dispose` from branch reporting via `exclude_lines`; there is **no** `fail_under` in the committed config (coverage is informational unless you add a threshold locally or in CI).
+- Domain-focused App tests live in `tests/unit/test_app_*.py` alongside `test_receipts.py`, `test_delegation.py`, etc.
 
 ### Integration test setup
 
