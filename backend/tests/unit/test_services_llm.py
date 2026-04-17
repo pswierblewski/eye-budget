@@ -541,6 +541,22 @@ class TestBankCategorizationServiceExtended:
         )
         return svc, mock_client, mock_async_client
 
+    def _make_service_with_conn(self):
+        """Variant with a real mocked conn so DB-path methods are reachable."""
+        mock_db = MagicMock()
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+        mock_conn.cursor.return_value.__enter__ = MagicMock(return_value=mock_cursor)
+        mock_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
+        mock_db.conn = mock_conn
+        svc = BankCategorizationService(
+            db_context=mock_db,
+            client=MagicMock(),
+            async_client=MagicMock(),
+        )
+        svc.categories_table = "cat_id | cat_name"
+        return svc, mock_cursor
+
     def test_normalize_counterparty_strips_suffixes(self):
         # Arrange / Act — use ASCII city name (regex matches ASCII city patterns)
         result = _normalize_counterparty("ALDI SP. Z O.O.  PLOCK")
@@ -597,3 +613,100 @@ class TestBankCategorizationServiceExtended:
         # Act / Assert
         with pytest.raises(ValueError):
             await svc.assign_candidates_async(tx, lock)
+
+    def test_get_receipt_context_returns_formatted_lines(self):
+        # Arrange
+        svc, mock_cursor = self._make_service_with_conn()
+        mock_cursor.fetchall.return_value = [("Spożywcze", 5), ("Napoje", 3)]
+
+        # Act
+        result = svc._get_receipt_context("ALDI")
+
+        # Assert
+        assert "Spożywcze (5x)" in result
+        assert "Napoje (3x)" in result
+
+    def test_get_receipt_context_empty_rows_returns_empty_string(self):
+        # Arrange
+        svc, mock_cursor = self._make_service_with_conn()
+        mock_cursor.fetchall.return_value = []
+
+        # Act
+        result = svc._get_receipt_context("UNKNOWN")
+
+        # Assert
+        assert result == ""
+
+    def test_get_receipt_context_db_error_returns_empty_string(self):
+        # Arrange
+        svc, mock_cursor = self._make_service_with_conn()
+        mock_cursor.execute.side_effect = Exception("connection error")
+
+        # Act
+        result = svc._get_receipt_context("ALDI")
+
+        # Assert
+        assert result == ""
+
+    def test_get_bank_context_returns_formatted_lines(self):
+        # Arrange
+        svc, mock_cursor = self._make_service_with_conn()
+        mock_cursor.fetchall.return_value = [
+            ("ALDI SP. Z O.O.", "Zakupy spożywcze", 120.0, "Spożywcze")
+        ]
+
+        # Act
+        result = svc._get_bank_context("ALDI")
+
+        # Assert
+        assert "ALDI SP. Z O.O." in result
+        assert "Spożywcze" in result
+
+    def test_get_bank_context_empty_rows_returns_empty_string(self):
+        # Arrange
+        svc, mock_cursor = self._make_service_with_conn()
+        mock_cursor.fetchall.return_value = []
+
+        # Act
+        result = svc._get_bank_context("UNKNOWN")
+
+        # Assert
+        assert result == ""
+
+    def test_get_bank_context_db_error_returns_empty_string(self):
+        # Arrange
+        svc, mock_cursor = self._make_service_with_conn()
+        mock_cursor.execute.side_effect = Exception("timeout")
+
+        # Act
+        result = svc._get_bank_context("ALDI")
+
+        # Assert
+        assert result == ""
+
+    def test_build_context_section_combines_receipt_and_bank_context(self):
+        # Arrange
+        svc, mock_cursor = self._make_service_with_conn()
+        # First fetchall: receipt context rows; second: bank context rows
+        mock_cursor.fetchall.side_effect = [
+            [("Spożywcze", 3)],
+            [("ALDI SP. Z O.O.", "Zakupy", 50.0, "Spożywcze")],
+        ]
+
+        # Act
+        result = svc._build_context_section("ALDI SP. Z O.O. PLOCK")
+
+        # Assert
+        assert "Kontekst historyczny" in result
+        assert "paragonów" in result
+        assert "bankowe" in result
+
+    def test_build_context_section_no_counterparty_returns_empty(self):
+        # Arrange
+        svc, _ = self._make_service_with_conn()
+
+        # Act
+        result = svc._build_context_section("")
+
+        # Assert
+        assert result == ""
