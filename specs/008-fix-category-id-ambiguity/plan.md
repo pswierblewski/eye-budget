@@ -41,7 +41,7 @@ specs/008-fix-category-id-ambiguity/
 ├── plan.md              ← this file
 ├── research.md          ← Phase 0 output
 ├── quickstart.md        ← Phase 1 output
-└── tasks.md             ← Phase 2 output (/speckit.tasks)
+└── tasks.md             ← Phase 2 output (tasks.md)
 ```
 
 ### Source Code (affected files only)

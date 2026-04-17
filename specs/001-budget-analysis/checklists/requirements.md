@@ -31,4 +31,4 @@
 
 ## Notes
 
-All checklist items pass. Clarification session completed 2026-03-13 (5/5 questions resolved). Spec is ready for `/speckit.plan`.
+All checklist items pass. Clarification session completed 2026-03-13 (5/5 questions resolved). Spec is ready for the planning phase.

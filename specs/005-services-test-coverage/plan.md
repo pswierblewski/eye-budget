@@ -52,7 +52,7 @@ specs/005-services-test-coverage/
 ├── research.md          ← Phase 0 output
 ├── data-model.md        ← Phase 1 (N/A — no new entities; see note below)
 ├── quickstart.md        ← Phase 1 output
-└── tasks.md             ← Phase 2 output (/speckit.tasks — not created here)
+└── tasks.md             ← Phase 2 output (tasks.md — not created here)
 ```
 
 > **data-model.md**: No new data entities. This feature adds tests and refactors constructors only. `data-model.md` is omitted.

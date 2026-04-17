@@ -46,7 +46,7 @@ specs/006-semantic-versioning/
 ├── quickstart.md        # Phase 1 output
 ├── contracts/
 │   └── version.md       # Phase 1 output
-└── tasks.md             # Phase 2 output (/speckit.tasks)
+└── tasks.md             # Phase 2 output (tasks.md)
 ```
 
 ### Source Code (files touched by this feature)

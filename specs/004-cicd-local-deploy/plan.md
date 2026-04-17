@@ -46,7 +46,7 @@ specs/004-cicd-local-deploy/
 ├── research.md          # Phase 0 output
 ├── data-model.md        # Phase 1 output
 ├── quickstart.md        # Phase 1 output — server setup instructions
-└── tasks.md             # Phase 2 output (/speckit.tasks command)
+└── tasks.md             # Phase 2 output (tasks.md)
 ```
 
 ### Source Code (repository root)
