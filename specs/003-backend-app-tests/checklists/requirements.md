@@ -32,5 +32,5 @@
 
 ## Notes
 
-- All items pass. Spec is ready for `/speckit.plan`.
+- All items pass. Spec is ready for the planning phase.
 - The Context section (testability analysis) is non-standard but intentional — it documents the pre-requisite analysis the user explicitly requested.

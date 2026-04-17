@@ -31,5 +31,5 @@
 
 ## Notes
 
-- Wszystkie pozycje zaliczone. Spec gotowy do `/speckit.plan`.
+- Wszystkie pozycje zaliczone. Spec gotowy do fazy planowania.
 - Spell-checker IDE zgłasza "unknown words" dla polskich słów — to fałszywe alarmy, nie wymagają działania.

@@ -31,4 +31,4 @@
 
 ## Notes
 
-All checklist items pass. Spec is ready for `/speckit.plan`.
+All checklist items pass. Spec is ready for the planning phase.

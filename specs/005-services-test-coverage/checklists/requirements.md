@@ -33,4 +33,4 @@
 
 - SC-003 (≥80% coverage) is a hard gate inherited from 003-backend-app-tests; consistent with existing project policy.
 - `text_localization.py` tests (P3) depend on being able to mock PaddleOCR without the GPU installation — this is a known assumption documented in the spec.
-- Spec is ready for `/speckit.plan`.
+- Spec is ready for the planning phase.

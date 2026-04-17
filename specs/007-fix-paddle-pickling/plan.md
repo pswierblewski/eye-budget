@@ -46,7 +46,7 @@ specs/007-fix-paddle-pickling/
 ├── quickstart.md        ✅ Phase 1 output
 ├── contracts/           ✅ Phase 1 output
 │   └── localize.md
-└── tasks.md             (Phase 2 — /speckit.tasks)
+└── tasks.md             (Phase 2 — tasks.md)
 ```
 
 ### Source Code (repository root)

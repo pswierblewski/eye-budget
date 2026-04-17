@@ -31,5 +31,5 @@
 
 ## Notes
 
-- All items pass. Spec is ready for `/speckit.clarify` or `/speckit.plan`.
+- All items pass. Spec is ready for clarification or the planning phase.
 - One assumption worth confirming before planning: the pipeline runner must be self-hosted on the local network (since the server is not internet-accessible). This shapes the CI tool choice significantly but is documented as an assumption rather than a clarification blocker.
