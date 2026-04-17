@@ -259,6 +259,24 @@ class TestEvaluationServiceCalculateMetrics:
         # Assert
         assert metrics.products_accuracy == 0.0
 
+    def test_products_accuracy_with_matching_product(self):
+        # Arrange
+        svc = self._make_service()
+        txn = _make_transaction(products=[ProductItem(name="mleko", quantity=1, price=3.5)])
+        gt = TransactionModel(
+            vendor="Biedronka",
+            title="PARAGON FISKALNY",
+            products=[ProductItem(name="Mleko", quantity=1, price=3.5)],
+            total=3.5,
+            date="2024-01-01",
+        )
+
+        # Act
+        metrics = svc.calculate_metrics(txn, 50, ground_truth=gt)
+
+        # Assert
+        assert metrics.products_accuracy == 1.0
+
 
 @pytest.mark.unit
 class TestEvaluationServiceAsync:
@@ -995,6 +1013,24 @@ class TestEvaluationServiceSync:
         assert result.success is False
         assert "OCR failed" in result.error_message
 
+    def test_evaluate_entry_cleans_up_temp_file_when_exists(self):
+        # Arrange
+        svc, _, _, mock_minio, mock_preprocessing, mock_ocr = self._make_service()
+        mock_minio.get_temp_file.return_value = "/tmp/fake.jpg"
+        mock_preprocessing.preprocess_image.return_value = "/tmp/fake.jpg"
+        mock_ocr.process_image.return_value = {
+            "vendor": "Lidl", "title": "PARAGON FISKALNY",
+            "products": [], "total": 10.0, "date": "2024-01-01",
+        }
+
+        # Act
+        with patch("os.path.exists", return_value=True), patch("os.remove") as mock_remove:
+            result = svc._evaluate_ground_truth_entry(self._make_entry())
+
+        # Assert
+        assert result.success is True
+        mock_remove.assert_called_once_with("/tmp/fake.jpg")
+
 
 @pytest.mark.unit
 class TestEvaluationServiceSummary:
@@ -1091,3 +1127,37 @@ class TestEvaluationServiceSummary:
         assert summary.avg_consistency_rate == 0.0
         assert summary.avg_total_accuracy is None
         assert summary.avg_products_accuracy is None
+
+    def test_calculate_summary_successful_without_gt_comparisons(self):
+        # Arrange — successful results but no ground truth comparison (vendor_correct=None)
+        svc = self._make_service()
+        metrics = EvaluationMetrics(
+            processing_time_ms=100,
+            fields_extracted=3,
+            field_completeness=0.75,
+            product_count=0,
+            has_vendor=True,
+            has_date=True,
+            has_total=True,
+            products_sum=0.0,
+            extracted_total=10.0,
+            total_difference=0.0,
+            is_consistent=True,
+        )
+        results = [EvaluationResult(
+            filename="receipt.jpg",
+            success=True,
+            metrics=metrics,
+            transaction=_make_transaction(),
+        )]
+
+        # Act
+        summary = svc._calculate_summary(run_id=1, model_used="gpt-5.2", results=results)
+
+        # Assert
+        assert summary.successful == 1
+        assert summary.avg_vendor_accuracy is None
+        assert summary.avg_date_accuracy is None
+        assert summary.avg_total_accuracy is None
+        assert summary.avg_products_accuracy is None
+        assert summary.avg_field_completeness == 0.75
