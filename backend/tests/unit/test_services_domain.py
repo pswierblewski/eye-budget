@@ -1008,6 +1008,8 @@ class TestEvaluationServiceSummary:
         assert summary.avg_products_accuracy == 1.0
         assert summary.successful == 1
         assert summary.failed == 0
+        assert summary.avg_field_completeness == 1.0
+        assert summary.avg_consistency_rate == 1.0
 
     def test_calculate_summary_vendor_incorrect(self):
         # Arrange
@@ -1019,6 +1021,9 @@ class TestEvaluationServiceSummary:
 
         # Assert
         assert summary.avg_vendor_accuracy == 0.0
+        assert summary.avg_date_accuracy == 1.0
+        assert summary.avg_total_accuracy == 1.0
+        assert summary.avg_products_accuracy == 1.0
 
     def test_calculate_summary_no_successful_results(self):
         # Arrange
@@ -1037,3 +1042,5 @@ class TestEvaluationServiceSummary:
         assert summary.avg_date_accuracy is None
         assert summary.avg_field_completeness == 0.0
         assert summary.avg_consistency_rate == 0.0
+        assert summary.avg_total_accuracy is None
+        assert summary.avg_products_accuracy is None
