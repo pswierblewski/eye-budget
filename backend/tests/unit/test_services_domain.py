@@ -799,6 +799,53 @@ class TestGroundTruthServiceExtended:
         # Assert
         mock_gt_repo.create.assert_called_once()
 
+    def test_create_happy_path(self):
+        # Arrange
+        svc, mock_gt_repo = self._make_service()
+        mock_gt_repo.get_by_filename.return_value = None
+        mock_gt_repo.create.return_value = 7
+        mock_gt_repo.get_by_id.return_value = self._make_entry(id=7, filename="new.jpg")
+        svc.minio_service.get_temp_file.return_value = "/tmp/new.jpg"
+        svc.preprocessing_service.preprocess_image.return_value = "/tmp/new.jpg"
+        svc.ocr_service.process_image.return_value = {
+            "vendor": "Biedronka", "title": "PARAGON FISKALNY",
+            "products": [], "total": 0.0, "date": "2024-01-01",
+        }
+
+        # Act
+        with patch("os.path.exists", return_value=False):
+            result = svc.create("new.jpg", b"fake image data")
+
+        # Assert
+        assert svc.minio_service.upload_image.call_count == 1
+        upload_args = svc.minio_service.upload_image.call_args[0]
+        assert upload_args[0] == b"fake image data"
+        assert "new.jpg" in upload_args[1]
+        mock_gt_repo.create.assert_called_once()
+        assert result.id == 7
+        assert result.filename == "new.jpg"
+
+    def test_create_raises_on_duplicate_filename(self):
+        # Arrange
+        svc, mock_gt_repo = self._make_service()
+        mock_gt_repo.get_by_filename.return_value = self._make_entry()
+
+        # Act / Assert
+        with pytest.raises(ValueError, match="already exists"):
+            svc.create("receipt.jpg", b"data")
+
+    def test_update_returns_none_when_update_fails(self):
+        # Arrange
+        svc, mock_gt_repo = self._make_service()
+        mock_gt_repo.get_by_id.return_value = self._make_entry()
+        mock_gt_repo.update.return_value = False
+
+        # Act
+        result = svc.update(1, _make_transaction())
+
+        # Assert
+        assert result is None
+
 
 @pytest.mark.unit
 class TestEvaluationServiceSync:
