@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
+
+# Task modules call load_dotenv() at import time; unit tests must not require a readable .env.
+_patch_load_dotenv = patch("dotenv.load_dotenv", lambda *args, **kwargs: False)
+_patch_load_dotenv.start()
 
 import pytest
 
