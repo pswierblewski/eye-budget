@@ -1,9 +1,11 @@
 import datetime
 import pytest
-from unittest.mock import MagicMock, AsyncMock
+from unittest.mock import MagicMock, AsyncMock, patch
 
 from src.data import (
     CreateFinancialGoalRequest,
+    EvaluationMetrics,
+    EvaluationResult,
     GroundTruthEntry,
     ProductItem,
     TransactionModel,
@@ -796,3 +798,151 @@ class TestGroundTruthServiceExtended:
 
         # Assert
         mock_gt_repo.create.assert_called_once()
+
+
+@pytest.mark.unit
+class TestEvaluationServiceSync:
+    def _make_service(self):
+        mock_eval_repo = MagicMock()
+        mock_gt_repo = MagicMock()
+        mock_minio = MagicMock()
+        mock_preprocessing = MagicMock()
+        mock_ocr = MagicMock()
+        svc = EvaluationService(
+            evaluations_repository=mock_eval_repo,
+            ground_truth_repository=mock_gt_repo,
+            minio_service=mock_minio,
+            preprocessing_service=mock_preprocessing,
+            ocr_service=mock_ocr,
+        )
+        return svc, mock_eval_repo, mock_gt_repo, mock_minio, mock_preprocessing, mock_ocr
+
+    def _make_entry(self, id: int = 1, filename: str = "receipt.jpg") -> GroundTruthEntry:
+        return GroundTruthEntry(
+            id=id,
+            filename=filename,
+            minio_object_key="gt/receipt.jpg",
+            ground_truth=_make_transaction(vendor="Lidl", total=10.0),
+            created_at=datetime.datetime.now(),
+            updated_at=datetime.datetime.now(),
+        )
+
+    def test_run_evaluation_empty_entries(self):
+        # Arrange
+        svc, mock_eval_repo, mock_gt_repo, _, _, mock_ocr = self._make_service()
+        mock_ocr.model = "gpt-5.2"
+        mock_ocr.prompt = "test"
+        mock_eval_repo.create_run.return_value = 1
+        mock_gt_repo.get_all.return_value = ([], 0)
+
+        # Act
+        result = svc.run_evaluation()
+
+        # Assert
+        assert result.total_files == 0
+        mock_eval_repo.add_result.assert_not_called()
+
+    def test_run_evaluation_happy_path(self):
+        # Arrange
+        svc, mock_eval_repo, mock_gt_repo, mock_minio, mock_preprocessing, mock_ocr = self._make_service()
+        mock_ocr.model = "gpt-5.2"
+        mock_ocr.prompt = "test"
+        mock_eval_repo.create_run.return_value = 42
+        mock_gt_repo.get_all.return_value = ([self._make_entry()], 1)
+        mock_minio.get_temp_file.return_value = "/tmp/fake.jpg"
+        mock_preprocessing.preprocess_image.return_value = "/tmp/fake.jpg"
+        mock_ocr.process_image.return_value = {
+            "vendor": "Lidl", "title": "PARAGON FISKALNY",
+            "products": [], "total": 10.0, "date": "2024-01-01",
+        }
+
+        # Act
+        with patch("os.path.exists", return_value=False):
+            result = svc.run_evaluation()
+
+        # Assert
+        assert result.total_files == 1
+        assert result.successful == 1
+        mock_eval_repo.add_result.assert_called_once()
+        mock_eval_repo.update_run_summary.assert_called_once()
+
+    def test_run_evaluation_with_progress_callback(self):
+        # Arrange
+        svc, mock_eval_repo, mock_gt_repo, mock_minio, mock_preprocessing, mock_ocr = self._make_service()
+        mock_ocr.model = "gpt-5.2"
+        mock_ocr.prompt = "test"
+        mock_eval_repo.create_run.return_value = 1
+        mock_gt_repo.get_all.return_value = ([self._make_entry()], 1)
+        mock_minio.get_temp_file.return_value = "/tmp/fake.jpg"
+        mock_preprocessing.preprocess_image.return_value = "/tmp/fake.jpg"
+        mock_ocr.process_image.return_value = {
+            "vendor": "Lidl", "title": "PARAGON FISKALNY",
+            "products": [], "total": 10.0, "date": "2024-01-01",
+        }
+        progress_calls = []
+
+        # Act
+        with patch("os.path.exists", return_value=False):
+            svc.run_evaluation(on_progress=lambda **kw: progress_calls.append(kw))
+
+        # Assert
+        assert len(progress_calls) == 1
+        assert progress_calls[0]["index"] == 1
+        assert progress_calls[0]["filename"] == "receipt.jpg"
+
+    def test_run_evaluation_with_entry_ids(self):
+        # Arrange
+        svc, mock_eval_repo, mock_gt_repo, mock_minio, mock_preprocessing, mock_ocr = self._make_service()
+        mock_ocr.model = "gpt-5.2"
+        mock_ocr.prompt = "test"
+        mock_eval_repo.create_run.return_value = 1
+        mock_gt_repo.get_by_ids.return_value = [self._make_entry(id=5)]
+        mock_minio.get_temp_file.return_value = "/tmp/fake.jpg"
+        mock_preprocessing.preprocess_image.return_value = "/tmp/fake.jpg"
+        mock_ocr.process_image.return_value = {
+            "vendor": "Lidl", "title": "PARAGON FISKALNY",
+            "products": [], "total": 10.0, "date": "2024-01-01",
+        }
+
+        # Act
+        with patch("os.path.exists", return_value=False):
+            result = svc.run_evaluation(entry_ids=[5])
+
+        # Assert
+        mock_gt_repo.get_by_ids.assert_called_once_with([5])
+        mock_gt_repo.get_all.assert_not_called()
+        assert result.total_files == 1
+
+    def test_evaluate_entry_happy_path(self):
+        # Arrange
+        svc, _, _, mock_minio, mock_preprocessing, mock_ocr = self._make_service()
+        mock_minio.get_temp_file.return_value = "/tmp/fake.jpg"
+        mock_preprocessing.preprocess_image.return_value = "/tmp/fake.jpg"
+        mock_ocr.process_image.return_value = {
+            "vendor": "Lidl", "title": "PARAGON FISKALNY",
+            "products": [], "total": 10.0, "date": "2024-01-01",
+        }
+
+        # Act
+        with patch("os.path.exists", return_value=False):
+            result = svc._evaluate_ground_truth_entry(self._make_entry())
+
+        # Assert
+        assert result.success is True
+        assert result.filename == "receipt.jpg"
+        assert result.metrics is not None
+
+    def test_evaluate_entry_ocr_raises_returns_failure(self):
+        # Arrange
+        svc, _, _, mock_minio, mock_preprocessing, mock_ocr = self._make_service()
+        mock_minio.get_temp_file.return_value = "/tmp/bad.jpg"
+        mock_preprocessing.preprocess_image.return_value = "/tmp/bad.jpg"
+        mock_ocr.process_image.side_effect = Exception("OCR failed")
+
+        # Act
+        with patch("os.path.exists", return_value=False):
+            result = svc._evaluate_ground_truth_entry(self._make_entry(filename="bad.jpg"))
+
+        # Assert
+        assert result.success is False
+        assert "OCR failed" in result.error_message
