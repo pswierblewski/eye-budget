@@ -15,3 +15,4 @@ export { NavLink } from "./NavLink";
 export { PrevNextNav } from "./PrevNextNav";
 export { DateInput } from "./DateInput";
 export { Tooltip } from "./Tooltip";
+export { AmountInput } from "./AmountInput";

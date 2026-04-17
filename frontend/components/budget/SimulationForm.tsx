@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { Input, Button, DateInput } from "@/components/ui";
+import { Input, Button, DateInput, AmountInput } from "@/components/ui";
 import { createBudgetSimulation } from "@/lib/api";
 import clsx from "clsx";
 
@@ -15,7 +15,7 @@ export function SimulationForm({ onSuccess }: Props) {
   const router = useRouter();
   const [name, setName] = useState("");
   const [expenseName, setExpenseName] = useState("");
-  const [amount, setAmount] = useState("");
+  const [amount, setAmount] = useState<number | null>(null);
   const [expenseType, setExpenseType] = useState<"one_time" | "recurring">("one_time");
   const [startDate, setStartDate] = useState("");
 
@@ -24,7 +24,7 @@ export function SimulationForm({ onSuccess }: Props) {
       createBudgetSimulation({
         name,
         expense_name: expenseName,
-        expense_amount_pln: parseFloat(amount),
+        expense_amount_pln: amount ?? 0,
         expense_type: expenseType,
         expense_start_date: startDate,
       }),
@@ -37,8 +37,8 @@ export function SimulationForm({ onSuccess }: Props) {
   const canSubmit =
     name.trim() !== "" &&
     expenseName.trim() !== "" &&
-    !isNaN(parseFloat(amount)) &&
-    parseFloat(amount) > 0 &&
+    amount !== null &&
+    amount > 0 &&
     startDate !== "";
 
   return (
@@ -61,10 +61,9 @@ export function SimulationForm({ onSuccess }: Props) {
       </div>
       <div>
         <label className="block text-xs font-medium text-gray-600 mb-1">Kwota (PLN)</label>
-        <Input
-          type="number"
+        <AmountInput
           value={amount}
-          onChange={(e) => setAmount(e.target.value)}
+          onChange={setAmount}
           placeholder="20000"
         />
       </div>

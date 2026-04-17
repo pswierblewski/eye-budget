@@ -3,32 +3,30 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import clsx from "clsx";
-import { Input, Button, Amount } from "@/components/ui";
+import { Input, AmountInput, Button, Amount } from "@/components/ui";
 import { getEmergencyAdvice } from "@/lib/api";
 import { EmergencyAdvisorResponse } from "@/lib/types";
 
 export function EmergencyAdvisorPanel() {
-  const [amountStr, setAmountStr] = useState("");
+  const [amount, setAmount] = useState<number | null>(null);
   const [description, setDescription] = useState("");
   const [result, setResult] = useState<EmergencyAdvisorResponse | null>(null);
 
   const mutation = useMutation({
     mutationFn: () =>
-      getEmergencyAdvice(parseFloat(amountStr), description || undefined),
+      getEmergencyAdvice(amount!, description || undefined),
     onSuccess: (data) => setResult(data),
   });
 
-  const amount = parseFloat(amountStr);
-  const canSubmit = !isNaN(amount) && amount > 0;
+  const canSubmit = amount !== null && amount > 0;
 
   return (
     <div>
       <div className="flex gap-2 mb-2">
-        <Input
-          type="number"
+        <AmountInput
+          value={amount}
+          onChange={setAmount}
           placeholder="Kwota wydatku (PLN)"
-          value={amountStr}
-          onChange={(e) => setAmountStr(e.target.value)}
           className="max-w-[160px]"
         />
         <Input

@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { ReceiptImageViewer } from "@/components/ReceiptImageViewer";
 import { ProductCategoryRow } from "@/components/ProductCategoryRow";
 import { CategoryDropdown } from "@/components/CategoryDropdown";
-import { StatusBadge, NavLink, Button, ConfirmDeleteModal, PrevNextNav, SectionLabel, Card, ThreeDotsMenu, DateInput } from "@/components/ui";
+import { StatusBadge, NavLink, Button, ConfirmDeleteModal, PrevNextNav, SectionLabel, Card, ThreeDotsMenu, DateInput, AmountInput } from "@/components/ui";
 import { isoToDisplay } from "@/lib/utils";
 import { VendorDropdown } from "@/components/VendorDropdown";
 import { ProductDropdown } from "@/components/ProductDropdown";
@@ -71,7 +71,7 @@ export default function ReceiptReviewPage({
   // scan.result whenever it changes so navigation away and back preserves the data.
   const [editedVendor, setEditedVendor] = useState("");
   const [editedDate, setEditedDate] = useState("");
-  const [editedTotal, setEditedTotal] = useState("");
+  const [editedTotal, setEditedTotal] = useState<number | null>(null);
   const [editedProducts, setEditedProducts] = useState<ProductItem[]>([]);
   // Editable normalized names — pre-filled from DB if an existing mapping exists.
   const [editedNormalizedVendor, setEditedNormalizedVendor] = useState("");
@@ -148,7 +148,7 @@ export default function ReceiptReviewPage({
       setProductSearch("");
       setEditedVendor(scan.result.vendor);
       setEditedDate(scan.result.date);
-      setEditedTotal(scan.result.total.toFixed(2));
+      setEditedTotal(scan.result.total);
       setEditedProducts(scan.result.products);
       setPriceInputs(
         scan.result.products.map((p) => ({
@@ -171,7 +171,7 @@ export default function ReceiptReviewPage({
         product_categories: productCategories,
         vendor: editedVendor || undefined,
         date: editedDate || undefined,
-        total: editedTotal ? parseFloat(editedTotal) : undefined,
+        total: editedTotal ?? undefined,
         products: editedProducts.length > 0 ? editedProducts : undefined,
         normalized_vendor: editedNormalizedVendor.trim() || undefined,
         normalized_products: (() => {
@@ -380,7 +380,7 @@ export default function ReceiptReviewPage({
 
   // Calculated total from product prices
   const calculatedTotal = editedProducts.reduce((sum, p) => sum + (p.price || 0), 0);
-  const parsedTotal = parseFloat(editedTotal) || 0;
+  const parsedTotal = editedTotal ?? 0;
   const totalsMatch = Math.abs(calculatedTotal - parsedTotal) < 0.005;
 
   const stickyTotal = scan.transaction ? scan.transaction.total : parsedTotal;
@@ -512,11 +512,11 @@ export default function ReceiptReviewPage({
             <div className="flex items-center justify-start gap-4 rounded-lg bg-gray-50 px-3 py-2 text-xs">
               <div className="flex items-center gap-1.5">
                 <span className="text-gray-500">Paragon:</span>
-                <span className="font-semibold text-gray-900">{stickyTotal.toFixed(2)} PLN</span>
+                <span className="font-semibold text-gray-900">{stickyTotal.toLocaleString("pl-PL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} PLN</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="text-gray-500">Produkty:</span>
-                <span className="font-semibold text-gray-900">{stickyCalc.toFixed(2)} PLN</span>
+                <span className="font-semibold text-gray-900">{stickyCalc.toLocaleString("pl-PL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} PLN</span>
               </div>
               {stickyMatch ? (
                 <span className="inline-flex items-center text-[10px] font-semibold text-green-700 bg-green-100 px-1.5 py-0.5 rounded-full">
@@ -524,7 +524,7 @@ export default function ReceiptReviewPage({
                 </span>
               ) : (
                 <span className="inline-flex items-center text-[10px] font-semibold text-red-600 bg-red-100 px-1.5 py-0.5 rounded-full">
-                  różnica {stickyDiff > 0 ? "+" : ""}{stickyDiff.toFixed(2)} PLN
+                  różnica {stickyDiff > 0 ? "+" : ""}{stickyDiff.toLocaleString("pl-PL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} PLN
                 </span>
               )}
             </div>
@@ -1134,11 +1134,9 @@ export default function ReceiptReviewPage({
                   <div className="flex flex-col gap-1.5 mt-1">
                     <div>
                       <p className="text-[10px] text-gray-400 mb-0.5">Z paragonu (edytowalna)</p>
-                      <input
-                        type="text"
-                        inputMode="decimal"
+                      <AmountInput
                         value={editedTotal}
-                        onChange={(e) => setEditedTotal(e.target.value)}
+                        onChange={setEditedTotal}
                         className="w-full text-sm border border-gray-200 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-accent"
                       />
                     </div>
@@ -1157,12 +1155,12 @@ export default function ReceiptReviewPage({
                             className="inline-flex items-center gap-1 text-[10px] font-semibold text-red-600 bg-red-100 px-1.5 py-0.5 rounded-full"
                             title="Sumy się nie zgadzają"
                           >
-                            ✗ różnica {parsedTotal - calculatedTotal > 0 ? "+" : ""}{(parsedTotal - calculatedTotal).toFixed(2)} PLN
+                            ✗ różnica {parsedTotal - calculatedTotal > 0 ? "+" : ""}{(parsedTotal - calculatedTotal).toLocaleString("pl-PL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} PLN
                           </span>
                         )}
                       </div>
                       <div className="w-full text-sm border border-gray-100 bg-gray-50 rounded-md px-2 py-1 text-gray-700 select-none">
-                        {calculatedTotal.toFixed(2)}
+                        {calculatedTotal.toLocaleString("pl-PL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </div>
                     </div>
                   </div>
