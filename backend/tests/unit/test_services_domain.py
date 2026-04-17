@@ -928,9 +928,10 @@ class TestEvaluationServiceSync:
             result = svc._evaluate_ground_truth_entry(self._make_entry())
 
         # Assert
+        assert isinstance(result, EvaluationResult)
         assert result.success is True
         assert result.filename == "receipt.jpg"
-        assert result.metrics is not None
+        assert isinstance(result.metrics, EvaluationMetrics)
 
     def test_evaluate_entry_ocr_raises_returns_failure(self):
         # Arrange
