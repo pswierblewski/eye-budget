@@ -947,3 +947,93 @@ class TestEvaluationServiceSync:
         # Assert
         assert result.success is False
         assert "OCR failed" in result.error_message
+
+
+@pytest.mark.unit
+class TestEvaluationServiceSummary:
+    def _make_service(self) -> EvaluationService:
+        return EvaluationService(
+            evaluations_repository=MagicMock(),
+            ground_truth_repository=MagicMock(),
+            minio_service=MagicMock(),
+            preprocessing_service=MagicMock(),
+            ocr_service=MagicMock(),
+        )
+
+    def _make_successful_result(
+        self,
+        vendor_correct: bool = True,
+        date_correct: bool = True,
+        total_accuracy: float = 1.0,
+        products_accuracy: float = 1.0,
+    ) -> EvaluationResult:
+        metrics = EvaluationMetrics(
+            processing_time_ms=100,
+            fields_extracted=5,
+            field_completeness=1.0,
+            product_count=0,
+            has_vendor=True,
+            has_date=True,
+            has_total=True,
+            products_sum=0.0,
+            extracted_total=0.0,
+            total_difference=0.0,
+            is_consistent=True,
+            vendor_correct=vendor_correct,
+            date_correct=date_correct,
+            total_correct=True,
+            total_accuracy=total_accuracy,
+            product_count_correct=True,
+            products_accuracy=products_accuracy,
+        )
+        return EvaluationResult(
+            filename="receipt.jpg",
+            success=True,
+            metrics=metrics,
+            transaction=_make_transaction(),
+        )
+
+    def test_calculate_summary_with_ground_truth_metrics(self):
+        # Arrange
+        svc = self._make_service()
+        results = [self._make_successful_result(vendor_correct=True, total_accuracy=0.95)]
+
+        # Act
+        summary = svc._calculate_summary(run_id=1, model_used="gpt-5.2", results=results)
+
+        # Assert
+        assert summary.avg_vendor_accuracy == 1.0
+        assert summary.avg_date_accuracy == 1.0
+        assert summary.avg_total_accuracy == 0.95
+        assert summary.avg_products_accuracy == 1.0
+        assert summary.successful == 1
+        assert summary.failed == 0
+
+    def test_calculate_summary_vendor_incorrect(self):
+        # Arrange
+        svc = self._make_service()
+        results = [self._make_successful_result(vendor_correct=False, total_accuracy=1.0)]
+
+        # Act
+        summary = svc._calculate_summary(run_id=1, model_used="gpt-5.2", results=results)
+
+        # Assert
+        assert summary.avg_vendor_accuracy == 0.0
+
+    def test_calculate_summary_no_successful_results(self):
+        # Arrange
+        svc = self._make_service()
+        results = [
+            EvaluationResult(filename="bad.jpg", success=False, error_message="OCR failed")
+        ]
+
+        # Act
+        summary = svc._calculate_summary(run_id=1, model_used="gpt-5.2", results=results)
+
+        # Assert
+        assert summary.successful == 0
+        assert summary.failed == 1
+        assert summary.avg_vendor_accuracy is None
+        assert summary.avg_date_accuracy is None
+        assert summary.avg_field_completeness == 0.0
+        assert summary.avg_consistency_rate == 0.0
