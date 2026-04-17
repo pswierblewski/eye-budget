@@ -59,8 +59,10 @@ Browser → "use client" page → useQuery/useMutation → lib/api.ts
 
 ## Canonical References
 
+- `context.md` — zwięzły kontekst projektu (PL); `AGENTS.md` — punkt wejścia i mapa dokumentów
+- `CLAUDE.md` — skrót stacku, komend i workflow feature w `specs/`
 - `frontend/components/ui/index.ts` — full list of available UI primitives
 - `backend/src/main.py` — canonical route structure
 - `backend/src/app.py` — App class wiring pattern
-- `docker-compose.yml` — all runtime services (Redis, Soketi, backend, celery-worker)
+- `docker-compose.yml` — Redis, Soketi, backend (host :8001 → container :8000), celery-worker
 - `.env.example` — all required environment variables
