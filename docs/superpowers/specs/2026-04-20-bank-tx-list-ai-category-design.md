@@ -8,7 +8,9 @@
 
 ## Problem
 
-Po zapisaniu propozycji kategorii przez LLM w tle użytkownik widzi je dopiero po odświeżeniu listy. Na liście `/bank-transactions` brak jest widocznej **najlepszej propozycji** oraz szybkiej akcji **„Zapisz kategorię”**, mimo że szczegóły transakcji już zwracają `category_candidates`.
+Gdy transakcja **nie ma jeszcze przypisanej kategorii**, w zwiniętym wierszu listy `/bank-transactions` w kolumnie „Kategoria” widać w praktyce tylko stan **„Nie przypisano”** — **propozycji LLM nie widać w ogóle**, dopiero po **rozwinięciu wiersza** (szczegóły ładują `category_candidates`). To utrudwia szybki przegląd i akceptację kategorii bez zaglądania w każdy wiersz.
+
+Dodatkowo: po zapisaniu propozycji przez LLM w tle użytkownik powinien **od razu** zobaczyć top propozycję w tej kolumnie (realtime), zamiast polegać na odświeżeniu całej listy.
 
 ---
 
