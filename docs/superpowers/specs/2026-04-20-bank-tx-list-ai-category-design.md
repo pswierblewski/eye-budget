@@ -19,7 +19,6 @@ Dodatkowo: po zapisaniu propozycji przez LLM w tle użytkownik powinien **od raz
 - **Strona:** lista transakcji bankowych (`/bank-transactions`), kolumna „Kategoria”.
 - **UI:** zatwierdzony układ makiet (`category-cell-layout-v3`): jedna linia — nazwa top kandydata, opcjonalnie wskaźnik pewności (np. `0,87`), przycisk **`Button` `variant="secondary"` `size="sm"`** — etykieta „Zapisz kategorię”; **bez** prefiksu „AI:”.
 - **Realtime:** po zapisaniu kandydatów dla pojedynczej transakcji w zadaniu Celery frontend **aktualizuje wiersz** bez pełnego przeładowania (Pusher, kanał już używany: `bank-transactions`).
-- **Poza zakresem:** zmiana logiki LLM, zmiana schematu zapisu `category_candidates` w DB, edycja propozycji na liście (tylko top + jeden klik zapisu).
 
 ---
 
