@@ -12,6 +12,7 @@ Po zakończeniu implementacji **nowego feature** (merge-ready): zaktualizuj wers
 
 ## Gdzie co leży (bez duplikowania treści)
 - **`context.md`** — krótki obraz repo, porty, struktura, granice (PL).
+- **`docs/superpowers/`** — zatwierdzone speci (`specs/`) i plany implementacji (`plans/`).
 - **`CLAUDE.md`** — stack, komendy, workflow `specs/`, skrót dla Claude Code.
 - **`.cursor/rules/00-core.mdc`** — stałe reguły monorepo w Cursorze (kontrakt API, język UI, sekrety).
 - **`frontend/AGENTS.md`** / **`backend/AGENTS.md`** — konwencje i „TL;DR” dla danej aplikacji.
