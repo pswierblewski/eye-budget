@@ -7,8 +7,8 @@ Przed rozpoczęciem pracy przeczytaj: `context.md`
 - [ ] Poziom 2 — context.md + pliki szczegółowe (linki w context.md)
 - [ ] Poziom 3 — wiki/index.md (czytaj index, potem relevantne strony)
 
-## Wersjonowanie (obowiązkowo przy feature)
-Po zakończeniu implementacji **nowego feature** (merge-ready): zaktualizuj wersję **frontend + backend** razem — patrz `context.md` → *Kluczowe decyzje* (pliki: `package.json`, `package-lock.json`, `version.py`, `test_version.py`). Szczegóły procesu: `specs/006-semantic-versioning/`.
+## Wersjonowanie (obowiązkowo przy ukończeniu zmian)
+Po zakończeniu implementacji, zanim uznać PR za merge-ready: **podbij semver tylko po tej stronie monorepo, którą zmieniłeś** (frontend i backend wersjonują się **niezależnie**). Szczegóły plików i reguły: `context.md` → *Kluczowe decyzje*, `.cursor/rules/00-core.mdc` → *Version bumps*, spec: `specs/006-semantic-versioning/`.
 
 ## Gdzie co leży (bez duplikowania treści)
 - **`context.md`** — krótki obraz repo, porty, struktura, granice (PL).

@@ -12,6 +12,7 @@
 8. **Services use constructor injection** — no globals, no `App()` inside a service.
 9. **Background tasks (Celery) follow the same `App()`/`dispose()` pattern** and push Pusher events.
 10. **No hardcoded credentials** — always read from `os.environ`.
+11. **Version bump** — jeśli PR zmienia tylko backend (kod w `backend/`, migracje, testy backendu): przed merge podnieś `VERSION` w `src/version.py` i zaktualizuj asercję w `tests/unit/test_version.py` (semver: minor vs patch wg zakresu). Nie zmieniaj `frontend/package.json` przy samym backendzie.
 
 Full rules: `.cursor/rules/backend/` (20–22 series).
 
