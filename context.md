@@ -15,9 +15,9 @@ Dla agenta: zwięzły opis repo; szczegóły frontend/backend w `frontend/AGENTS
 ## Struktura
 - `frontend/app/` — strony + proxy `app/api/*/route.ts`
 - `frontend/components/ui/` — primitives (`index.ts` przed nowym UI)
-- `backend/src/` — `main.py` (route’y), `data.py` (Pydantic), `services/`, `repositories/`, `tasks/`, `version.py`
+- `backend/src/` — `main.py` (route’y), `data.py` (Pydantic), `services/`, `repositories/`, `tasks/`, `version.py`, `bank_category_top.py` (top kategorii z JSON `category_candidates`)
 - `backend/migrations/` — Yoyo SQL
-- `specs/` (feature: spec, plan, tasks), `docs/` — notatki poza specs
+- `specs/` oraz `docs/superpowers/` (`specs/` + `plans/`) — opisy funkcji i zatwierdzone plany (superpowers)
 
 ## Jak pracować
 - Frontend: `cd frontend && npm install && npm run dev` → :3000; `npm run lint`; testy: `npm run test:run`
@@ -30,6 +30,7 @@ Dla agenta: zwięzły opis repo; szczegóły frontend/backend w `frontend/AGENTS
 - SQL przez psycopg2 z parametrami `%s` — bez ORM
 - HTTP: klient → `lib/api.ts` → proxy Next → FastAPI; `App()` na request w `main.py` + `dispose()` w `finally`
 - Zmiana endpointu: `main.py` + `data.py` + `app/api/.../route.ts` + `lib/api.ts` + `lib/types.ts`
+- Lista transakcji bankowych: pole `ai_top_candidate` w itemie listy; po zapisie kandydatów LLM Celery emituje Pusher **`categorization.transaction_updated`** na kanale **`bank-transactions`** (UI merge w React Query).
 - **Wersjonowanie przy każdym ukończonym feature:** podnieś **semver** we **wszystkich** miejscach naraz: `frontend/package.json`, **oba** pola wersji root pakietu w `frontend/package-lock.json`, `backend/src/version.py`, asercja w `backend/tests/unit/test_version.py`. Zwykle **minor** (np. 1.2.0 → 1.3.0) dla nowej funkcji użytkowej, **patch** dla samych poprawek bez nowej funkcji.
 
 ## Gotchas i ograniczenia
