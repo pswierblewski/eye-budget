@@ -23,11 +23,19 @@ def make_confirm_request(**kwargs):
     return ConfirmReceiptRequest(**defaults)
 
 
-def make_scan_detail(vendor="Biedronka", date="2024-01-15", total=55.0, minio_object_key=None):
+def make_scan_detail(
+    vendor="Biedronka",
+    date="2024-01-15",
+    total=55.0,
+    minio_object_key=None,
+    products=None,
+):
+    if products is None:
+        products = [ProductItem(name="Chleb", quantity=1.0, price=5.0, unit_price=5.0)]
     tx = TransactionModel(
         vendor=vendor,
         title="PARAGON FISKALNY",
-        products=[ProductItem(name="Chleb", quantity=1.0, price=5.0, unit_price=5.0)],
+        products=products,
         total=total,
         date=date,
     )
@@ -140,6 +148,122 @@ def test_confirm_receipt_analytics_exception_is_swallowed():
 
     # Assert — confirm_receipt should still complete without raising (analytics non-fatal)
     app.receipts_scans_repository.get_by_id.assert_called()
+
+
+@pytest.mark.unit
+def test_confirm_receipt_returns_none_when_transaction_create_fails():
+    # Arrange
+    app = make_app()
+    scan = make_scan_detail(
+        vendor="Raw Vendor",
+        date="2024-06-15",
+        total=20.0,
+        products=[ProductItem(name="Apple", quantity=1, price=2.0, unit_price=2.0)],
+    )
+    app.receipts_scans_repository.get_by_id.return_value = scan
+    app.transactions_repository.create_transaction.return_value = -1
+    _setup_no_transaction(app)
+    request = make_confirm_request(product_categories={"Apple": 1})
+
+    # Act
+    result = app.confirm_receipt(1, request)
+
+    # Assert
+    assert result is None
+
+
+@pytest.mark.unit
+def test_confirm_receipt_normalized_vendor_already_exists():
+    # Arrange
+    app = make_app()
+    scan = make_scan_detail(
+        vendor="Raw Vendor",
+        date="2024-06-15",
+        total=20.0,
+        products=[ProductItem(name="Apple", quantity=1, price=2.0, unit_price=2.0)],
+    )
+    app.receipts_scans_repository.get_by_id.return_value = scan
+    app.transactions_repository.create_transaction.return_value = 99
+    app.vendors_repository.get_vendor_by_name.return_value = 3
+    _setup_no_transaction(app)
+    request = make_confirm_request(
+        product_categories={"Apple": 1},
+        normalized_vendor="Normal Vendor",
+    )
+
+    # Act
+    app.confirm_receipt(1, request)
+
+    # Assert
+    app.vendors_repository.insert_vendor.assert_not_called()
+    app.vendors_repository.insert_alternative_name.assert_called_once()
+
+
+@pytest.mark.unit
+def test_confirm_receipt_normalized_product_path():
+    # Arrange
+    app = make_app()
+    scan = make_scan_detail(
+        vendor="Raw Vendor",
+        date="2024-06-15",
+        total=20.0,
+        products=[ProductItem(name="Apple", quantity=1, price=2.0, unit_price=2.0)],
+    )
+    app.receipts_scans_repository.get_by_id.return_value = scan
+    app.transactions_repository.create_transaction.return_value = 99
+    app.products_repository.get_product_by_name.return_value = None
+    app.products_repository.insert_product.return_value = 11
+    _setup_no_transaction(app)
+    request = make_confirm_request(
+        product_categories={"Apple": 1},
+        normalized_products={"Apple": "Apple Normalized"},
+    )
+
+    # Act
+    app.confirm_receipt(1, request)
+
+    # Assert
+    app.products_repository.insert_product.assert_called_once_with("Apple Normalized")
+    app.products_repository.insert_alternative_name.assert_called_once()
+
+
+@pytest.mark.unit
+def test_confirm_receipt_date_parse_failure_uses_fallback_without_crash():
+    # Arrange
+    app = make_app()
+    scan = make_scan_detail(date="NOT-A-DATE")
+    app.receipts_scans_repository.get_by_id.return_value = scan
+    app.transactions_repository.create_transaction.return_value = 99
+    _setup_no_transaction(app)
+    request = make_confirm_request()
+
+    # Act
+    app.confirm_receipt(1, request)
+
+    # Assert
+    app.transactions_repository.create_transaction.assert_called_once()
+
+
+@pytest.mark.unit
+def test_confirm_receipt_skips_product_without_category_mapping():
+    # Arrange
+    app = make_app()
+    scan = make_scan_detail(
+        vendor="Raw Vendor",
+        date="2024-06-15",
+        total=20.0,
+        products=[ProductItem(name="Apple", quantity=1, price=2.0, unit_price=2.0)],
+    )
+    app.receipts_scans_repository.get_by_id.return_value = scan
+    app.transactions_repository.create_transaction.return_value = 99
+    _setup_no_transaction(app)
+    request = make_confirm_request(product_categories={})
+
+    # Act
+    app.confirm_receipt(1, request)
+
+    # Assert — flow completes; Apple has no category in mapping
+    app.transactions_repository.create_transaction.assert_called_once()
 
 
 @pytest.mark.unit

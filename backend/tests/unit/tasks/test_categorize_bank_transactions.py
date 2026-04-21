@@ -1,7 +1,10 @@
 import pytest
 from unittest.mock import MagicMock, patch
 
-from src.tasks.categorize_bank_transactions import categorize_bank_transactions_task
+from src.tasks.categorize_bank_transactions import (
+    categorize_bank_transactions_task,
+    emit_categorization_transaction_updated,
+)
 from tests.unit.tasks.conftest import TASK_ID, assert_app_disposed, make_app, triggers_with_event
 
 
@@ -60,3 +63,37 @@ class TestCategorizeBankTransactionsTask:
         assert len(err) == 1
         assert "cannot start loop" in err[0][0][2]["error"]
         assert_app_disposed(app)
+
+
+@pytest.mark.unit
+class TestEmitCategorizationTransactionUpdated:
+    def test_emits_top_candidate_from_candidates_list(self):
+        mock_pusher = MagicMock()
+        candidates = [
+            {"category_id": 1, "category_name": "A", "category_score": 0.5},
+            {"category_id": 2, "category_name": "B", "category_score": 0.9},
+        ]
+        emit_categorization_transaction_updated(mock_pusher, 42, candidates)
+
+        mock_pusher.trigger.assert_called_once_with(
+            "bank-transactions",
+            "categorization.transaction_updated",
+            {
+                "bank_transaction_id": 42,
+                "ai_top_candidate": {
+                    "category_id": 2,
+                    "category_name": "B",
+                    "category_score": 0.9,
+                },
+            },
+        )
+
+    def test_emits_null_ai_top_when_no_valid_candidate(self):
+        mock_pusher = MagicMock()
+        emit_categorization_transaction_updated(mock_pusher, 7, [])
+
+        mock_pusher.trigger.assert_called_once_with(
+            "bank-transactions",
+            "categorization.transaction_updated",
+            {"bank_transaction_id": 7, "ai_top_candidate": None},
+        )

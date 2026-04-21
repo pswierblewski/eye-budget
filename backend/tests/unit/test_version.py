@@ -6,7 +6,7 @@ from src.version import VERSION
 @pytest.mark.unit
 def test_version_constant_value():
     # Arrange / Act / Assert
-    assert VERSION == "1.1.1"
+    assert VERSION == "1.2.0"
 
 
 @pytest.mark.unit

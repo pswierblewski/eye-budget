@@ -7,6 +7,9 @@ Przed rozpoczęciem pracy przeczytaj: `context.md`
 - [ ] Poziom 2 — context.md + pliki szczegółowe (linki w context.md)
 - [ ] Poziom 3 — wiki/index.md (czytaj index, potem relevantne strony)
 
+## Wersjonowanie (obowiązkowo przy feature)
+Po zakończeniu implementacji **nowego feature** (merge-ready): zaktualizuj wersję **frontend + backend** razem — patrz `context.md` → *Kluczowe decyzje* (pliki: `package.json`, `package-lock.json`, `version.py`, `test_version.py`). Szczegóły procesu: `specs/006-semantic-versioning/`.
+
 ## Gdzie co leży (bez duplikowania treści)
 - **`context.md`** — krótki obraz repo, porty, struktura, granice (PL).
 - **`CLAUDE.md`** — stack, komendy, workflow `specs/`, skrót dla Claude Code.
