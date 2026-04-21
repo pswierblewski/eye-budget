@@ -23,9 +23,10 @@ def categorize_bank_transactions_task(self, transaction_ids: list[int]):
     """Celery task: call LLM to assign category candidates to bank transactions.
 
     Emits Pusher events on channel 'bank-transactions':
-      - categorization.progress  {task_id, index, total}
-      - categorization.done      {task_id, total}
-      - categorization.error     {task_id, error}
+      - categorization.progress           {task_id, index, total}
+      - categorization.transaction_updated {bank_transaction_id, ai_top_candidate}
+      - categorization.done              {task_id, total}
+      - categorization.error             {task_id, error}
     """
     task_id = self.request.id
     pusher = PusherService()
