@@ -322,6 +322,7 @@ export const BankTransactionListItemSchema = z.object({
   receipt_category_count: z.number().nullable().optional(),
   split_category_name: z.string().nullable().optional(),
   split_count: z.number().nullable().optional(),
+  ai_top_candidate: CategoryCandidateSchema.optional(),
 });
 export type BankTransactionListItem = z.infer<typeof BankTransactionListItemSchema>;
 
