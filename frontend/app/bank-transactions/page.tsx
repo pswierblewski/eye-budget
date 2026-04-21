@@ -622,16 +622,18 @@ export default function BankTransactionsPage() {
             saveCategoryFromListMutation.variables?.id === t.id;
 
           return (
-            <div className="flex max-w-[220px] flex-wrap items-center gap-1.5">
-              <span className="text-xs font-medium text-gray-700">
-                {aiTopCandidate.category_name}
-              </span>
-              <span className="text-xs text-gray-400">
-                {aiTopCandidate.category_score.toLocaleString("pl-PL", {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}
-              </span>
+            <div className="flex max-w-[220px] flex-col gap-1.5">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-xs font-medium text-gray-700">
+                  {aiTopCandidate.category_name}
+                </span>
+                <span className="text-xs text-gray-400">
+                  {aiTopCandidate.category_score.toLocaleString("pl-PL", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
+                </span>
+              </div>
               <Button
                 variant="secondary"
                 size="sm"
