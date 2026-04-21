@@ -8,6 +8,7 @@ from typing import Any
 def top_category_candidate_from_stored_json(value: Any) -> dict[str, Any] | None:
     """
     Parse stored JSON and return the candidate with highest category_score.
+    Equal scores break ties by lower category_id (stable, deterministic).
     Returns a dict with keys category_id (int), category_name (str), category_score (float), or None.
     """
     if value is None:
@@ -33,7 +34,12 @@ def top_category_candidate_from_stored_json(value: Any) -> dict[str, Any] | None
             score = float(item.get("category_score", 0.0))
         except (KeyError, TypeError, ValueError):
             continue
-        if best is None or best_score is None or score > best_score:
+        if (
+            best is None
+            or best_score is None
+            or score > best_score
+            or (score == best_score and cid < int(best["category_id"]))
+        ):
             best = {"category_id": cid, "category_name": name, "category_score": score}
             best_score = score
     return best
