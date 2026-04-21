@@ -1,7 +1,7 @@
 # Lista transakcji bankowych — propozycja AI kategorii + realtime (Pusher)
 
 **Date:** 2026-04-20  
-**Status:** Draft (ready for review)  
+**Status:** Approved  
 **Suggested branch:** `feature/bank-tx-list-ai-category`
 
 ---
