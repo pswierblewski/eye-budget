@@ -1,7 +1,7 @@
 # Lista bankowa — przycisk „Zapisz kategorię” zawsze pod propozycją AI
 
 **Date:** 2026-04-21  
-**Status:** Draft (ready for review)  
+**Status:** Approved  
 **Suggested branch:** kontynuacja `feature/bank-tx-list-ai-category` lub krótki fix na gałęzi z tego PR
 
 ---
