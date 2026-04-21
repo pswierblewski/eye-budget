@@ -14,11 +14,13 @@ import {
   updateBankTransactionTags,
   getAllTags,
 } from "@/lib/api";
+import { shouldShowAiCategoryProposal } from "@/lib/bankTxCategoryListUi";
 import { isoToDisplay } from "@/lib/utils";
 import {
   BankTransactionListItem,
   BankTransactionDetail,
   BankImportResult,
+  PaginatedResponse,
   ReceiptCandidateItem,
 } from "@/lib/types";
 import { CategoryDropdown } from "@/components/CategoryDropdown";
@@ -347,13 +349,59 @@ export default function BankTransactionsPage() {
   const channelRef = useRef<ReturnType<ReturnType<typeof getPusher>["subscribe"]> | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  const ensureBankTransactionsChannel = () => {
+    if (channelRef.current) return channelRef.current;
+
+    const pusher = getPusher();
+    const channel = pusher.subscribe("bank-transactions");
+    channelRef.current = channel;
+    return channel;
+  };
+
   // Cleanup Pusher on unmount
   useEffect(() => {
     return () => {
-      channelRef.current?.unbind_all();
       channelRef.current?.unsubscribe();
+      channelRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    const channel = ensureBankTransactionsChannel();
+    const onTransactionUpdated = (payload: {
+      bank_transaction_id: number;
+      ai_top_candidate?: {
+        category_id: number;
+        category_name: string;
+        category_score: number;
+      } | null;
+    }) => {
+      queryClient.setQueryData<PaginatedResponse<BankTransactionListItem>>(
+        ["bank-transactions", page, sortBy, sortDir],
+        (old) => {
+          if (!old) return old;
+
+          return {
+            ...old,
+            items: old.items.map((item) =>
+              item.id === payload.bank_transaction_id
+                ? {
+                    ...item,
+                    ai_top_candidate: payload.ai_top_candidate ?? undefined,
+                  }
+                : item
+            ),
+          };
+        }
+      );
+    };
+
+    channel.bind("categorization.transaction_updated", onTransactionUpdated);
+
+    return () => {
+      channel.unbind("categorization.transaction_updated", onTransactionUpdated);
+    };
+  }, [page, queryClient, sortBy, sortDir]);
 
   const { data, isLoading } = useQuery({
     queryKey: ["bank-transactions", page, sortBy, sortDir],
@@ -374,6 +422,15 @@ export default function BankTransactionsPage() {
     staleTime: 60_000,
   });
 
+  const saveCategoryFromListMutation = useMutation({
+    mutationFn: ({ id, categoryId }: { id: number; categoryId: number }) =>
+      saveBankTransactionCategory(id, categoryId),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["bank-transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["bank-transaction", variables.id] });
+    },
+  });
+
   const importMutation = useMutation({
     mutationFn: importBankCsv,
     onSuccess: (result) => {
@@ -384,40 +441,37 @@ export default function BankTransactionsPage() {
       queryClient.invalidateQueries({ queryKey: ["bank-transactions"] });
 
       if (result.task_id) {
-        const pusher = getPusher();
-        const channel = pusher.subscribe("bank-transactions");
-        channelRef.current = channel;
+        const channel = ensureBankTransactionsChannel();
 
-        channel.bind(
-          "categorization.progress",
-          (data: { task_id: string; index: number; total: number }) => {
-            if (data.task_id !== result.task_id) return;
-            setProgress({ index: data.index, total: data.total });
-          }
-        );
+        const onProgress = (data: { task_id: string; index: number; total: number }) => {
+          if (data.task_id !== result.task_id) return;
+          setProgress({ index: data.index, total: data.total });
+        };
 
-        channel.bind(
-          "categorization.done",
-          (data: { task_id: string; total: number }) => {
-            if (data.task_id !== result.task_id) return;
-            setProgress(null);
-            setCategorizingDone(true);
-            channel.unbind_all();
-            channel.unsubscribe();
-            queryClient.invalidateQueries({ queryKey: ["bank-transactions"] });
-          }
-        );
+        const cleanupImportHandlers = () => {
+          channel.unbind("categorization.progress", onProgress);
+          channel.unbind("categorization.done", onDone);
+          channel.unbind("categorization.error", onError);
+        };
 
-        channel.bind(
-          "categorization.error",
-          (data: { task_id: string; error: string }) => {
-            if (data.task_id !== result.task_id) return;
-            setProgress(null);
-            setImportError(`Categorization error: ${data.error}`);
-            channel.unbind_all();
-            channel.unsubscribe();
-          }
-        );
+        const onDone = (data: { task_id: string; total: number }) => {
+          if (data.task_id !== result.task_id) return;
+          setProgress(null);
+          setCategorizingDone(true);
+          cleanupImportHandlers();
+          queryClient.invalidateQueries({ queryKey: ["bank-transactions"] });
+        };
+
+        const onError = (data: { task_id: string; error: string }) => {
+          if (data.task_id !== result.task_id) return;
+          setProgress(null);
+          setImportError(`Categorization error: ${data.error}`);
+          cleanupImportHandlers();
+        };
+
+        channel.bind("categorization.progress", onProgress);
+        channel.bind("categorization.done", onDone);
+        channel.bind("categorization.error", onError);
       }
     },
     onError: (err: Error) => {
@@ -437,41 +491,38 @@ export default function BankTransactionsPage() {
       setProgress(null);
       setCategorizingDone(false);
 
-      const pusher = getPusher();
-      const channel = pusher.subscribe("bank-transactions");
-      channelRef.current = channel;
+      const channel = ensureBankTransactionsChannel();
 
-      channel.bind(
-        "categorization.progress",
-        (data: { task_id: string; index: number; total: number }) => {
-          if (data.task_id !== result.task_id) return;
-          setProgress({ index: data.index, total: data.total });
-        }
-      );
+      const onProgress = (data: { task_id: string; index: number; total: number }) => {
+        if (data.task_id !== result.task_id) return;
+        setProgress({ index: data.index, total: data.total });
+      };
 
-      channel.bind(
-        "categorization.done",
-        (data: { task_id: string; total: number }) => {
-          if (data.task_id !== result.task_id) return;
-          setProgress(null);
-          setCategorizingDone(true);
-          setRecategorizeInfo(null);
-          channel.unbind_all();
-          channel.unsubscribe();
-          queryClient.invalidateQueries({ queryKey: ["bank-transactions"] });
-        }
-      );
+      const cleanupRecategorizeHandlers = () => {
+        channel.unbind("categorization.progress", onProgress);
+        channel.unbind("categorization.done", onDone);
+        channel.unbind("categorization.error", onError);
+      };
 
-      channel.bind(
-        "categorization.error",
-        (data: { task_id: string; error: string }) => {
-          if (data.task_id !== result.task_id) return;
-          setProgress(null);
-          setRecategorizeInfo(`Błąd kategoryzacji: ${data.error}`);
-          channel.unbind_all();
-          channel.unsubscribe();
-        }
-      );
+      const onDone = (data: { task_id: string; total: number }) => {
+        if (data.task_id !== result.task_id) return;
+        setProgress(null);
+        setCategorizingDone(true);
+        setRecategorizeInfo(null);
+        cleanupRecategorizeHandlers();
+        queryClient.invalidateQueries({ queryKey: ["bank-transactions"] });
+      };
+
+      const onError = (data: { task_id: string; error: string }) => {
+        if (data.task_id !== result.task_id) return;
+        setProgress(null);
+        setRecategorizeInfo(`Błąd kategoryzacji: ${data.error}`);
+        cleanupRecategorizeHandlers();
+      };
+
+      channel.bind("categorization.progress", onProgress);
+      channel.bind("categorization.done", onDone);
+      channel.bind("categorization.error", onError);
     },
     onError: (err: Error) => {
       setRecategorizeInfo(`Błąd: ${err.message}`);
@@ -561,6 +612,40 @@ export default function BankTransactionsPage() {
                   +{t.split_count! - 1}
                 </span>
               )}
+            </div>
+          );
+        }
+        if (shouldShowAiCategoryProposal(t) && t.ai_top_candidate) {
+          const aiTopCandidate = t.ai_top_candidate;
+          const isSavingCurrentRow =
+            saveCategoryFromListMutation.isPending &&
+            saveCategoryFromListMutation.variables?.id === t.id;
+
+          return (
+            <div className="flex max-w-[220px] flex-wrap items-center gap-1.5">
+              <span className="text-xs font-medium text-gray-700">
+                {aiTopCandidate.category_name}
+              </span>
+              <span className="text-xs text-gray-400">
+                {aiTopCandidate.category_score.toLocaleString("pl-PL", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
+              </span>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={saveCategoryFromListMutation.isPending}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  saveCategoryFromListMutation.mutate({
+                    id: t.id,
+                    categoryId: aiTopCandidate.category_id,
+                  });
+                }}
+              >
+                {isSavingCurrentRow ? "Zapisywanie…" : "Zapisz kategorię"}
+              </Button>
             </div>
           );
         }
