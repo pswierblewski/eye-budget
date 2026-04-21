@@ -33,29 +33,13 @@ Dodatkowo: po zapisaniu propozycji przez LLM w tle użytkownik powinien **od raz
 
 ---
 
-## Opcje techniczne (backend + Pusher)
+## Plan techniczny (backend + Pusher)
 
-### Opcja 1 — List API + zdarzenie per transakcja (rekomendowana)
+Ustalenie: **lista rozszerzona o top kandydata + osobne zdarzenie Pusher na transakcję** po zapisie kandydatów.
 
 - **GET lista:** rozszerzyć `BankTransactionListItem` o pola wystarczające do wyświetlenia top propozycji, np. opcjonalnie `ai_top_candidate: { category_id, category_name, category_score } | null` (lub płaskie pola), wyliczane z `category_candidates` w repozytorium (sort po `category_score` malejąco, pierwszy element).
-- **Celery:** po `update_candidates` dla danego `tx_id` wywołać `PusherService.trigger` na kanale `bank-transactions`, nowe zdarzenie, np. `categorization.transaction_updated`, payload: `{ bank_transaction_id, ai_top_candidate }` (lub minimalny zestaw pól zsynchronizowany z listą).
+- **Celery:** po `update_candidates` dla danego `tx_id` wywołać `PusherService.trigger` na kanale `bank-transactions`, zdarzenie np. `categorization.transaction_updated`, payload: `{ bank_transaction_id, ai_top_candidate }` (lub minimalny zestaw pól zsynchronizowany z listą).
 - **Frontend:** subskrypcja (globalna na stronie lub przy imporcie / ponownej kategoryzacji) — przy evencie **merge** do cache React Query dla `["bank-transactions", …]` (aktualizacja jednego elementu `items` po `id`) **albo** `invalidateQueries` jeśli merge jest zbyt kosztowny w pierwszej iteracji; `categorization.done` może zostać jako dodatkowe `invalidateQueries` dla spójności.
-
-**Plusy:** dokładne realtime po wierszu, jedno źródło prawdy jak lista. **Minusy:** kontrakt API + nowe zdarzenie do utrzymania.
-
-### Opcja 2 — Tylko `categorization.progress` z `transaction_id`
-
-- Rozszerzyć payload `categorization.progress` o `bank_transaction_id`; frontend przy każdym kroku robi `invalidateQueries` lub `refetch` listy.
-
-**Plusy:** mniej zdarzeń. **Minusy:** więcej ruchu sieciowego i obciążenia listy przy dużych batchach.
-
-### Opcja 3 — Wyłącznie invalidate na `progress`
-
-- Bez zmiany payloadu — częstsze odświeżanie całej listy.
-
-**Odrzucone:** gorsze UX i skalowanie przy wielu wierszach.
-
-**Rekomendacja:** **Opcja 1**.
 
 ---
 
@@ -85,4 +69,4 @@ Dodatkowo: po zapisaniu propozycji przez LLM w tle użytkownik powinien **od raz
 - [x] Reguła „wiele kandydatów LLM” — zawsze top + przycisk, jeśli wiersz kwalifikuje się jako „nie przypisane”.
 - [x] Paragon / split — przycisk ukryty; nie używamy słowa „konflikt” w UI.
 - [x] Prefiks „AI:” — brak.
-- [x] Realtime — Pusher, kanał `bank-transactions`, nowe zdarzenie per transakcja (Opcja 1).
+- [x] Realtime — Pusher, kanał `bank-transactions`, zdarzenie per transakcja po `update_candidates`.
