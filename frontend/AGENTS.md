@@ -12,6 +12,7 @@
 8. **No form libraries** — controlled inputs with `useState`.
 9. **`@/*` path alias** for all imports — configured in `tsconfig.json`.
 10. **Invalidate queries after mutations** — always call `queryClient.invalidateQueries()` on success.
+11. **Version bump** — jeśli PR zmienia tylko frontend: przed merge podnieś `"version"` w `package.json` oraz te same wartości w `package-lock.json` (pole root i `packages[""].version`). Nie zmieniaj `backend/src/version.py` przy samym frontendzie. Semver: minor vs patch wg zakresu.
 
 Full rules: `.cursor/rules/frontend/` (10–13 series).
 

@@ -57,6 +57,20 @@ Browser → "use client" page → useQuery/useMutation → lib/api.ts
        → App() → service → repository → PostgreSQL
 ```
 
+## Version bumps (semver)
+
+Po **ukończeniu implementacji** (merge-ready): zaktualizuj wersję **tylko** dla komponentów, których kod wchodzi w zmianę.
+
+| Zakres zmian | Pliki do aktualizacji |
+|--------------|------------------------|
+| **Tylko backend** | `backend/src/version.py` — stała `VERSION`; `backend/tests/unit/test_version.py` — asercja `assert VERSION == "…"` |
+| **Tylko frontend** | `frontend/package.json` — pole `"version"`; `frontend/package-lock.json` — to samo w `"version"` na poziomie root **oraz** w `packages[""].version` (spójność lockfile) |
+| **Backend i frontend** | Wykonaj **oba** wiersze powyżej; numery FE i BE mogą się różnić |
+
+**Poziom semver** (stosuj **osobno** dla FE i BE): zwykle **minor** przy nowej funkcji użytkowej, **patch** przy samych poprawkach / bez nowej funkcji.
+
+Nie podnoś wersji komponentu, którego diff nie zawiera sensownej zmiany (np. sam dokumentacja w root — użyj własnej oceny; czysto mechaniczny refactor tylko po jednej stronie → tylko ta strona).
+
 ## Canonical References
 
 - `context.md` — zwięzły kontekst projektu (PL); `AGENTS.md` — punkt wejścia i mapa dokumentów

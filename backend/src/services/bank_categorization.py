@@ -20,6 +20,7 @@ from abc import ABC
 
 from openai import AsyncOpenAI, OpenAI
 
+from ..bank_inflow_salary_rules import try_deterministic_inflow_salary_rule
 from ..repositories.categories import CategoriesRepository
 from ..services.markdown_table import MarkdownTableService
 from ..data import BankTransactionDetail, CategoryCandidatesTransaction
@@ -48,11 +49,25 @@ def _normalize_counterparty(counterparty: str) -> str:
 
 
 class BankCategorizationService(ABC):
-    SYSTEM_PROMPT = (
+    SYSTEM_PROMPT_EXPENSE = (
         "Jesteś ekspertem od polskich transakcji bankowych i budżetowania domowego. "
         "Przypisz jedną lub kilka najbardziej trafnych kategorii budżetowych do podanej "
         "transakcji bankowej. Podaj kandydatów posortowanych od najbardziej do najmniej "
         "pasującego, z wynikiem pewności (0.0–1.0)."
+    )
+
+    SYSTEM_PROMPT_INFLOW = (
+        "Jesteś ekspertem od polskich transakcji bankowych i budżetowania domowego. "
+        "Przypisz jedną lub kilka najbardziej trafnych kategorii budżetowych do podanej "
+        "transakcji bankowej. Podaj kandydatów posortowanych od najbardziej do najmniej "
+        "pasującego, z wynikiem pewności (0.0–1.0). "
+        "To jest wpływ na konto (dodatnia kwota): możesz wybrać kategorię przychodu "
+        "(np. pensja, zwroty, zasiłki) albo inną sensowną etykietę z listy opisującą "
+        "charakter zdarzenia (np. zwrot zakupu). Nie sztucznie rozdzielaj światów "
+        "„tylko przychody” vs „tylko wydatki” — chodzi o właściwą nazwę zdarzenia. "
+        "Nie przypisuj oczywistemu wynagrodzeniu z pracy (wypłata, wynagrodzenie, wynagr, "
+        "lista płac) kategorii wydatkowych typu Jedzenie czy ogólnych Usługi, jeśli na liście "
+        "jest sensowna pensja lub kategoria pod gałęzią Wynagrodzenie."
     )
 
     USER_PROMPT_TEMPLATE = """
@@ -63,6 +78,7 @@ Poniżej znajduje się lista dostępnych kategorii:
 
 Dane transakcji bankowej:
 ================
+{direction_line}
 Kontrahent:   {counterparty}
 Opis:         {description}
 Typ operacji: {operation_type}
@@ -79,29 +95,93 @@ Zwróć kandydatów na kategorię z wynikiem pewności dla tej transakcji.
         self.client = client if client is not None else OpenAI()
         self.async_client = async_client if async_client is not None else AsyncOpenAI()
         self.model = os.getenv("MODEL", "gpt-5.2")
-        self.categories_table = ""
+        self.categories_table_expense = ""
+        self.categories_table_inflow = ""
+        self._salary_rule_categories: dict[str, tuple[int, str]] = {}
         self._conn = db_context.conn
 
-    def build(self) -> None:
-        """Pre-load the categories markdown table (call once at App init)."""
-        categories = self.categories_repository.get_categories()
+    @property
+    def categories_table(self) -> str:
+        """Backward compatibility: expense markdown table."""
+        return self.categories_table_expense
+
+    @categories_table.setter
+    def categories_table(self, value: str) -> None:
+        self.categories_table_expense = value
+
+    def _markdown_from_category_rows(self, rows: list | bool) -> str:
+        if rows is False or not rows:
+            raise ValueError("Failed to load category rows for bank categorization")
         ids = ["category_id"]
         names = ["category_name"]
         parents = ["category_parent_name"]
-        for cat in categories:
+        for cat in rows:
             ids.append(cat[0])
             names.append(cat[1])
             parents.append(cat[2])
-        self.categories_table = self.markdown_table_service.table(
-            [ids, names, parents]
+        return self.markdown_table_service.table([ids, names, parents])
+
+    def build(self) -> None:
+        """Pre-load markdown tables and salary id map (call once at App init)."""
+        expense_rows = self.categories_repository.get_categories_for_bank_expense_prompt()
+        inflow_rows = self.categories_repository.get_categories_for_bank_inflow_prompt()
+        self.categories_table_expense = self._markdown_from_category_rows(expense_rows)
+        self.categories_table_inflow = self._markdown_from_category_rows(inflow_rows)
+
+        sal = self.categories_repository.get_salary_category_ids_for_bank_rules()
+        if "pensja_ada" not in sal or "pensja_pawel" not in sal:
+            raise ValueError(
+                "Bank categorization requires categories 'Pensja Ada' and 'Pensja Paweł' in the database. "
+                f"Found: {list(sal.keys())}"
+            )
+        self._salary_rule_categories = sal
+
+    def _deterministic_inflow_candidates(self, tx: BankTransactionDetail) -> list[dict] | None:
+        if tx.amount <= 0:
+            return None
+        key = try_deterministic_inflow_salary_rule(tx.counterparty)
+        if key is None or not self._salary_rule_categories:
+            return None
+        pair = self._salary_rule_categories.get(key)
+        if pair is None:
+            return None
+        cid, cname = pair
+        return [{"category_id": cid, "category_name": cname, "category_score": 1.0}]
+
+    def _prompt_parts_for_tx(self, tx: BankTransactionDetail) -> tuple[str, str, str]:
+        """Returns (system_prompt, categories_table, direction_line)."""
+        if tx.amount > 0:
+            return (
+                self.SYSTEM_PROMPT_INFLOW,
+                self.categories_table_inflow,
+                "Kierunek: wpływ na konto (kwota dodatnia).",
+            )
+        return (
+            self.SYSTEM_PROMPT_EXPENSE,
+            self.categories_table_expense,
+            "Kierunek: wydatek z konta (kwota ujemna lub zero).",
         )
 
-    def assign_candidates(self, tx: BankTransactionDetail) -> list[dict]:
-        """
-        Call the LLM to assign category candidates to a bank transaction.
+    def _format_user_prompt(
+        self,
+        tx: BankTransactionDetail,
+        context_section: str,
+        categories_table: str,
+        direction_line: str,
+    ) -> str:
+        return self.USER_PROMPT_TEMPLATE.format(
+            categories_table=categories_table,
+            direction_line=direction_line,
+            counterparty=tx.counterparty or "(brak)",
+            description=tx.description or "(brak)",
+            operation_type=tx.operation_type or "(brak)",
+            amount=tx.amount,
+            currency=tx.currency,
+            booking_date=tx.booking_date,
+            context_section=context_section,
+        )
 
-        Returns a list of dicts: [{category_id, category_name, category_score}, ...]
-        """
+    def _tool_specs(self) -> tuple[str, list[dict]]:
         tool_name = "assign_bank_transaction_category"
         tools = [
             {
@@ -111,19 +191,33 @@ Zwróć kandydatów na kategorię z wynikiem pewności dla tej transakcji.
                 "parameters": CategoryCandidatesTransaction.model_json_schema(),
             }
         ]
+        return tool_name, tools
 
-        context_section = self._build_context_section(tx.counterparty or "")
-
-        prompt = self.USER_PROMPT_TEMPLATE.format(
-            categories_table=self.categories_table,
-            counterparty=tx.counterparty or "(brak)",
-            description=tx.description or "(brak)",
-            operation_type=tx.operation_type or "(brak)",
-            amount=tx.amount,
-            currency=tx.currency,
-            booking_date=tx.booking_date,
-            context_section=context_section,
+    def _parse_llm_tool_output(self, response) -> list[dict]:
+        tool_call = next(
+            (item for item in response.output if item.type == "function_call"),
+            None,
         )
+        if tool_call is None:
+            raise ValueError("No function call in LLM response for bank transaction categorization")
+        args = json.loads(tool_call.arguments)
+        return args.get("category_candidates", [])
+
+    def assign_candidates(self, tx: BankTransactionDetail) -> list[dict]:
+        """
+        Assign category candidates (deterministic salary rules or LLM).
+
+        Returns a list of dicts: [{category_id, category_name, category_score}, ...]
+        """
+        det = self._deterministic_inflow_candidates(tx)
+        if det is not None:
+            return det
+
+        tool_name, tools = self._tool_specs()
+        system_prompt, categories_table, direction_line = self._prompt_parts_for_tx(tx)
+        context_section = self._build_context_section(tx.counterparty or "")
+        body = self._format_user_prompt(tx, context_section, categories_table, direction_line)
+        input_text = f"{system_prompt}\n\n{body}"
 
         response = self.client.responses.create(
             model=self.model,
@@ -133,53 +227,32 @@ Zwróć kandydatów na kategorię z wynikiem pewności dla tej transakcji.
             input=[
                 {
                     "role": "user",
-                    "content": [{"type": "input_text", "text": prompt}],
+                    "content": [{"type": "input_text", "text": input_text}],
                 }
             ],
         )
-
-        tool_call = next(
-            (item for item in response.output if item.type == "function_call"),
-            None,
-        )
-        if tool_call is None:
-            raise ValueError("No function call in LLM response for bank transaction categorization")
-
-        args = json.loads(tool_call.arguments)
-        return args.get("category_candidates", [])
+        return self._parse_llm_tool_output(response)
 
     async def assign_candidates_async(
         self,
         tx: BankTransactionDetail,
         db_lock: asyncio.Lock,
     ) -> list[dict]:
-        """Async version of assign_candidates — builds context with db_lock, awaits LLM call."""
-        tool_name = "assign_bank_transaction_category"
-        tools = [
-            {
-                "type": "function",
-                "name": tool_name,
-                "description": "Assign category candidates to a bank transaction",
-                "parameters": CategoryCandidatesTransaction.model_json_schema(),
-            }
-        ]
+        """Async version — builds context with db_lock, awaits LLM call."""
+        det = self._deterministic_inflow_candidates(tx)
+        if det is not None:
+            return det
 
-        # DB-bound context queries serialised through the lock
+        tool_name, tools = self._tool_specs()
+        system_prompt, categories_table, direction_line = self._prompt_parts_for_tx(tx)
+
         async with db_lock:
             context_section = await asyncio.to_thread(
                 self._build_context_section, tx.counterparty or ""
             )
 
-        prompt = self.USER_PROMPT_TEMPLATE.format(
-            categories_table=self.categories_table,
-            counterparty=tx.counterparty or "(brak)",
-            description=tx.description or "(brak)",
-            operation_type=tx.operation_type or "(brak)",
-            amount=tx.amount,
-            currency=tx.currency,
-            booking_date=tx.booking_date,
-            context_section=context_section,
-        )
+        body = self._format_user_prompt(tx, context_section, categories_table, direction_line)
+        input_text = f"{system_prompt}\n\n{body}"
 
         response = await self.async_client.responses.create(
             model=self.model,
@@ -189,20 +262,11 @@ Zwróć kandydatów na kategorię z wynikiem pewności dla tej transakcji.
             input=[
                 {
                     "role": "user",
-                    "content": [{"type": "input_text", "text": prompt}],
+                    "content": [{"type": "input_text", "text": input_text}],
                 }
             ],
         )
-
-        tool_call = next(
-            (item for item in response.output if item.type == "function_call"),
-            None,
-        )
-        if tool_call is None:
-            raise ValueError("No function call in LLM response for bank transaction categorization")
-
-        args = json.loads(tool_call.arguments)
-        return args.get("category_candidates", [])
+        return self._parse_llm_tool_output(response)
 
     # ------------------------------------------------------------------
     # Context building
