@@ -635,7 +635,7 @@ export default function BankTransactionsPage() {
               <Button
                 variant="secondary"
                 size="sm"
-                disabled={saveCategoryFromListMutation.isPending}
+                disabled={isSavingCurrentRow}
                 onClick={(e) => {
                   e.stopPropagation();
                   saveCategoryFromListMutation.mutate({

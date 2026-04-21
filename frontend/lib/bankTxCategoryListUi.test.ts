@@ -36,6 +36,16 @@ describe("shouldShowAiCategoryProposal", () => {
     expect(shouldShowAiCategoryProposal(tx)).toBe(false);
   });
 
+  it("false when split_count >= 2 even if split label missing", () => {
+    const tx = {
+      ...base(),
+      split_category_name: null,
+      split_count: 2,
+      ai_top_candidate: { category_id: 1, category_name: "X", category_score: 0.9 },
+    };
+    expect(shouldShowAiCategoryProposal(tx)).toBe(false);
+  });
+
   it("false when user category name set", () => {
     const tx = {
       ...base(),
