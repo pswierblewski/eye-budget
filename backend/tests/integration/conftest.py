@@ -70,6 +70,8 @@ def truncate_tables(migrated_db):
             WHERE schemaname = 'public'
         """)
         tables = [row[0] for row in cur.fetchall()]
+        # Keep category seed from migrations — BankCategorizationService.build() needs rows.
+        tables = [t for t in tables if t != "categories"]
         if tables:
             cur.execute(
                 "TRUNCATE TABLE {} CASCADE".format(

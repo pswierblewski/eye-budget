@@ -67,6 +67,85 @@ class CategoriesRepository(ABC):
             self.conn.rollback()
             return False
 
+    def get_categories_for_bank_expense_prompt(self) -> list | bool:
+        """Same rows as get_categories() — expense-only list for bank outflow LLM prompt."""
+        if not self.conn:
+            print("No database connection available.")
+            return False
+        try:
+            with self.conn.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT c.id, c.name AS category_name, cp.name AS category_parent_name
+                    FROM categories c
+                    LEFT JOIN categories cp ON cp.id = c.parent_id
+                    WHERE c.c_type = 'expense'
+                    """
+                )
+                rows = cursor.fetchall()
+                self.conn.commit()
+                return list(rows)
+        except Exception as e:
+            print("Failed to fetch bank expense categories:", e)
+            self.conn.rollback()
+            return False
+
+    def get_categories_for_bank_inflow_prompt(self) -> list | bool:
+        """Expense and income leaf categories for bank inflow LLM prompt (markdown table)."""
+        if not self.conn:
+            print("No database connection available.")
+            return False
+        try:
+            with self.conn.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT c.id, c.name AS category_name, cp.name AS category_parent_name
+                    FROM categories c
+                    LEFT JOIN categories cp ON cp.id = c.parent_id
+                    WHERE c.c_type IN ('expense', 'income')
+                    ORDER BY c.c_type, cp.name NULLS FIRST, c.name
+                    """
+                )
+                rows = cursor.fetchall()
+                self.conn.commit()
+                return list(rows)
+        except Exception as e:
+            print("Failed to fetch bank inflow categories:", e)
+            self.conn.rollback()
+            return False
+
+    def get_salary_category_ids_for_bank_rules(self) -> dict[str, tuple[int, str]]:
+        """
+        Map deterministic salary rule keys to (category_id, category_name).
+        Expects rows 'Pensja Ada' and 'Pensja Paweł'.
+        """
+        if not self.conn:
+            return {}
+        try:
+            with self.conn.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT c.id, c.name
+                    FROM categories c
+                    WHERE c.name IN ('Pensja Ada', 'Pensja Paweł')
+                    """
+                )
+                rows = cursor.fetchall()
+                self.conn.commit()
+        except Exception as e:
+            print("Failed to fetch salary category ids:", e)
+            self.conn.rollback()
+            return {}
+
+        out: dict[str, tuple[int, str]] = {}
+        for r in rows:
+            cid, name = int(r[0]), str(r[1])
+            if name == "Pensja Ada":
+                out["pensja_ada"] = (cid, name)
+            elif name == "Pensja Paweł":
+                out["pensja_pawel"] = (cid, name)
+        return out
+
     def get_all_expense_categories(self) -> list[CategoryItem]:
         """Return all expense categories with parent context."""
         if not self.conn:
