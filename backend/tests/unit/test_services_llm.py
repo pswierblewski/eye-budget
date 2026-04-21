@@ -169,7 +169,12 @@ class TestBankCategorizationService:
             client=mock_client,
             async_client=mock_async_client,
         )
-        svc.categories_table = "category_id | category_name"
+        svc.categories_table_expense = "category_id | category_name"
+        svc.categories_table_inflow = "category_id | category_name"
+        svc._salary_rule_categories = {
+            "pensja_ada": (130, "Pensja Ada"),
+            "pensja_pawel": (131, "Pensja Paweł"),
+        }
         return svc, mock_client, mock_async_client
 
     def _make_tx(self) -> BankTransactionDetail:
@@ -177,7 +182,7 @@ class TestBankCategorizationService:
             id=1,
             reference_number="REF001",
             booking_date="2024-01-15",
-            amount=50.0,
+            amount=-50.0,
             currency="PLN",
         )
 
@@ -539,6 +544,12 @@ class TestBankCategorizationServiceExtended:
         svc = BankCategorizationService(
             db_context=mock_db, client=mock_client, async_client=mock_async_client
         )
+        svc.categories_table_expense = "cat_id | cat_name"
+        svc.categories_table_inflow = "cat_id | cat_name"
+        svc._salary_rule_categories = {
+            "pensja_ada": (130, "Pensja Ada"),
+            "pensja_pawel": (131, "Pensja Paweł"),
+        }
         return svc, mock_client, mock_async_client
 
     def _make_service_with_conn(self):
@@ -554,7 +565,12 @@ class TestBankCategorizationServiceExtended:
             client=MagicMock(),
             async_client=MagicMock(),
         )
-        svc.categories_table = "cat_id | cat_name"
+        svc.categories_table_expense = "cat_id | cat_name"
+        svc.categories_table_inflow = "cat_id | cat_name"
+        svc._salary_rule_categories = {
+            "pensja_ada": (130, "Pensja Ada"),
+            "pensja_pawel": (131, "Pensja Paweł"),
+        }
         return svc, mock_cursor
 
     def test_normalize_counterparty_strips_suffixes(self):
@@ -569,16 +585,24 @@ class TestBankCategorizationServiceExtended:
         # Arrange
         svc, _, _ = self._make_service()
         svc.categories_repository = MagicMock()
-        svc.categories_repository.get_categories.return_value = [
-            (1, "Jedzenie", "Wydatki"),
+        row = (1, "Jedzenie", "Wydatki")
+        svc.categories_repository.get_categories_for_bank_expense_prompt.return_value = [row]
+        svc.categories_repository.get_categories_for_bank_inflow_prompt.return_value = [
+            row,
+            (130, "Pensja Ada", "Wynagrodzenie"),
         ]
+        svc.categories_repository.get_salary_category_ids_for_bank_rules.return_value = {
+            "pensja_ada": (130, "Pensja Ada"),
+            "pensja_pawel": (131, "Pensja Paweł"),
+        }
 
         # Act
         svc.build()
 
         # Assert
-        assert svc.categories_table != ""
-        assert "Jedzenie" in svc.categories_table
+        assert svc.categories_table_expense != ""
+        assert "Jedzenie" in svc.categories_table_expense
+        assert "Jedzenie" in svc.categories_table_inflow or "Pensja Ada" in svc.categories_table_inflow
 
     def test_assign_candidates_raises_when_no_tool_call(self):
         # Arrange
@@ -586,10 +610,11 @@ class TestBankCategorizationServiceExtended:
         response = MagicMock()
         response.output = []  # no function_call items
         mock_client.responses.create.return_value = response
-        svc.categories_table = "cat_id | cat_name"
+        svc.categories_table_expense = "cat_id | cat_name"
+        svc.categories_table_inflow = "cat_id | cat_name"
         tx = BankTransactionDetail(
             id=1, reference_number="REF1", booking_date="2024-01-01",
-            amount=50.0, currency="PLN",
+            amount=-50.0, currency="PLN",
         )
 
         # Act / Assert
@@ -602,17 +627,34 @@ class TestBankCategorizationServiceExtended:
         response = MagicMock()
         response.output = []
         mock_async_client.responses.create = AsyncMock(return_value=response)
-        svc.categories_table = "cat_id | cat_name"
+        svc.categories_table_expense = "cat_id | cat_name"
+        svc.categories_table_inflow = "cat_id | cat_name"
         import asyncio
         lock = asyncio.Lock()
         tx = BankTransactionDetail(
             id=1, reference_number="REF1", booking_date="2024-01-01",
-            amount=50.0, currency="PLN",
+            amount=-50.0, currency="PLN",
         )
 
         # Act / Assert
         with pytest.raises(ValueError):
             await svc.assign_candidates_async(tx, lock)
+
+    def test_assign_candidates_inflow_pern_skips_llm(self):
+        svc, mock_client, _ = self._make_service()
+        tx = BankTransactionDetail(
+            id=1,
+            reference_number="R1",
+            booking_date="2024-01-01",
+            counterparty="PERN SP. Z O.O.",
+            amount=100.0,
+            currency="PLN",
+        )
+        result = svc.assign_candidates(tx)
+        assert result == [
+            {"category_id": 130, "category_name": "Pensja Ada", "category_score": 1.0}
+        ]
+        mock_client.responses.create.assert_not_called()
 
     def test_get_receipt_context_returns_formatted_lines(self):
         # Arrange
