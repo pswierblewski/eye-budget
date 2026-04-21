@@ -66,14 +66,14 @@ Wszystkie warunki **dodatkowo** wymagają `amount > 0` (router już to gwarantuj
 
 | Kategoria docelowa | Warunek na `counterparty` (propozycja techniczna) |
 |--------------------|---------------------------------------------------|
-| **Pensja Ada** | Po normalizacji: zawiera **`PERN`** jako podciąg (np. `ILIKE '%PERN%'`), case-insensitive. *Uwaga:* jeśli w wyciągu pojawią się fałszywe trafienia, zaostrzyć do wzorca z nazwy firmy użytkownika. |
-| **Pensja Paweł** | Normalizacja + dopasowanie do pełnej nazwy: **`Software Engineering Paweł Świerblewski`** z tolerancją na warianty zapisu w CSV (patrz normalizacja). |
+| **Pensja Ada** | Po normalizacji: zawiera **`pern`** jako podciąg; **porównanie zawsze bez rozróżniania wielkości liter** (np. `ILIKE '%pern%'`, `casefold()`, lub `lower()` po obu stronach). *Uwaga:* jeśli w wyciągu pojawią się fałszywe trafienia, zaostrzyć do wzorca z nazwy firmy użytkownika. |
+| **Pensja Paweł** | Normalizacja + dopasowanie do pełnej nazwy **`Software Engineering Paweł Świerblewski`** (łącznie z wariantem ASCII bez ogonków); **wielkość liter ignorowana** — `SOFTWARE ENGINEERING`, `paweł`, `swierblewski` itd. muszą pasować tak samo jak wersje „książkowe”. |
 
 **Normalizacja kontrahenta (minimalna, przed porównaniem):**
 
 - `strip`, zamiana wielokrotnych spacji na pojedynczą.
+- **Wielkość liter:** wszystkie testy dopasowania dla obu reguł (Pern i Software Engineering…) są **case-insensitive** — obowiązkowo `casefold()` / `lower()` na obu stronach albo `ILIKE` w SQL, bez wyjątków.
 - **Polskie znaki:** zamiana na ASCII dla porównania alternatywnego (np. `Ś` → `S`, `ł` → `l`), **oraz** surowy string — reguła uznawana za spełnioną, jeśli pasuje którykolwiek wariant (łatwiejsze dopasowanie do Pekao bez ogonków w eksporcie).
-- Opcjonalnie: `upper()` dla warunku PERN.
 
 **Priorytet:** jeśli kiedyś dwie reguły mogłyby pasować jednocześnie, **kolejność w kodzie** ustala zwycięzcę; przy obecnych nazwach konflikt jest mało prawdopodobny.
 
@@ -140,6 +140,7 @@ Implementacja: dwa stałe `SYSTEM_PROMPT_EXPENSE`, `SYSTEM_PROMPT_INFLOW` oraz d
 - **Unit:** router `amount > 0` vs `<= 0` wybiera właściwy prompt / tabelę (mock OpenAI).
 - **Unit:** dla zmockowanego `tx` z `counterparty` spełniającym Pern / Software Engineering — **brak** wywołania klienta LLM, zwrócone ID **Pensja Ada** / **Pensja Paweł**.
 - **Unit:** normalizacja znaków diakrytycznych (przykłady: `Swierblewski` vs `Świerblewski`).
+- **Unit:** ignorowanie wielkości liter — np. `PERN S.A.` vs `pern`, `SOFTWARE ENGINEERING PAWEŁ ŚWIERBLEWSKI` vs zapis mieszany.
 - **Migracja:** test integracyjny lub skrypt weryfikujący `parent_id` po migracji (opcjonalnie w repo).
 
 ---
