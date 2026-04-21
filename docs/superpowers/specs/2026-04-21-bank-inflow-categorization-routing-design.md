@@ -1,7 +1,7 @@
 # Kategoryzacja bankowa — routing wpływ/wydatek, reguły pensji, grupa Wynagrodzenie
 
 **Date:** 2026-04-21  
-**Status:** Draft (do akceptacji po review pliku)  
+**Status:** Approved  
 **Suggested branch:** `feature/bank-inflow-categorization-routing`
 
 ---
