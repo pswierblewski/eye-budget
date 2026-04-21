@@ -363,6 +363,7 @@ class BankTransactionListItem(BaseModel):
     receipt_category_count: int | None = None  # total distinct categories from linked receipt
     split_category_name: str | None = None
     split_count: int | None = None
+    ai_top_candidate: CategoryCandidate | None = None
 
 
 class BankTransactionDetail(BaseModel):

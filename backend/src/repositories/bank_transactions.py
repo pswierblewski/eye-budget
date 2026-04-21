@@ -8,7 +8,14 @@ import json
 from decimal import Decimal
 from typing import Optional, List
 
-from ..data import BankTransactionListItem, BankTransactionDetail, ReceiptCategory, BankTransactionSplit
+from ..bank_category_top import top_category_candidate_from_stored_json
+from ..data import (
+    BankTransactionListItem,
+    BankTransactionDetail,
+    ReceiptCategory,
+    BankTransactionSplit,
+    CategoryCandidate,
+)
 from ..services.bank_csv_parser import BankTransactionRow
 
 
@@ -189,6 +196,7 @@ class BankTransactionsRepository:
                                FROM bank_transaction_category_splits s
                                WHERE s.bank_transaction_id = bt.id
                            ), 0) AS split_count,
+                           bt.category_candidates,
                            COUNT(*) OVER () AS total_count
                     FROM bank_transactions bt
                     LEFT JOIN categories c ON c.id = bt.category_id
@@ -199,7 +207,7 @@ class BankTransactionsRepository:
                     params + [limit, offset],
                 )
                 rows = cur.fetchall()
-            total = int(rows[0][15]) if rows else 0
+            total = int(rows[0][16]) if rows else 0
             return [
                 BankTransactionListItem(
                     id=r[0],
@@ -217,6 +225,11 @@ class BankTransactionsRepository:
                     receipt_category_count=int(r[12]) if r[12] is not None else None,
                     split_category_name=r[13],
                     split_count=int(r[14]) if r[14] is not None else None,
+                    ai_top_candidate=(
+                        CategoryCandidate(**raw_top)
+                        if (raw_top := top_category_candidate_from_stored_json(r[15]))
+                        else None
+                    ),
                 )
                 for r in rows
             ], total
