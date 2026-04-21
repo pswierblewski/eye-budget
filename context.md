@@ -10,7 +10,7 @@ Dla agenta: zwięzły opis repo; szczegóły frontend/backend w `frontend/AGENTS
 - Frontend: Next.js 14, App Router, TypeScript strict, Tailwind, Radix, TanStack Query, Zod, recharts, Pusher/Soketi; testy: **Vitest**, React Testing Library, jsdom (`npm run test` / `test:run`)
 - Backend: FastAPI, Pydantic v2, psycopg2 (SQL bez ORM), Yoyo, Celery + Redis, MinIO, PaddleOCR / OpenAI
 - Infra: PostgreSQL, MinIO, Redis, Soketi; `docker-compose.yml` — Redis, Soketi, backend, worker (bez serwisu Next w tym pliku)
-- Wersje produktu: **frontend** `frontend/package.json` (+ spójny root w `frontend/package-lock.json`); **backend** `backend/src/version.py`; opis kontraktu: `specs/006-semantic-versioning/`
+- Wersje produktu (**niezależne**): **frontend** — `frontend/package.json` oraz pole `version` root pakietu w `frontend/package-lock.json` (klucz główny i `packages[""]`); **backend** — `backend/src/version.py` + asercja w `backend/tests/unit/test_version.py`. Kontrakt i UI: `specs/006-semantic-versioning/`
 
 ## Struktura
 - `frontend/app/` — strony + proxy `app/api/*/route.ts`
@@ -31,7 +31,7 @@ Dla agenta: zwięzły opis repo; szczegóły frontend/backend w `frontend/AGENTS
 - HTTP: klient → `lib/api.ts` → proxy Next → FastAPI; `App()` na request w `main.py` + `dispose()` w `finally`
 - Zmiana endpointu: `main.py` + `data.py` + `app/api/.../route.ts` + `lib/api.ts` + `lib/types.ts`
 - Lista transakcji bankowych: pole `ai_top_candidate` w itemie listy; po zapisie kandydatów LLM Celery emituje Pusher **`categorization.transaction_updated`** na kanale **`bank-transactions`** (UI merge w React Query).
-- **Wersjonowanie przy każdym ukończonym feature:** podnieś **semver** we **wszystkich** miejscach naraz: `frontend/package.json`, **oba** pola wersji root pakietu w `frontend/package-lock.json`, `backend/src/version.py`, asercja w `backend/tests/unit/test_version.py`. Zwykle **minor** (np. 1.2.0 → 1.3.0) dla nowej funkcji użytkowej, **patch** dla samych poprawek bez nowej funkcji.
+- **Wersjonowanie przy ukończeniu pracy (merge-ready):** podbij **tylko** te składowe, których kod faktycznie dotknąłeś. **Tylko backend** → `backend/src/version.py` + `backend/tests/unit/test_version.py`. **Tylko frontend** → `frontend/package.json` + zgodne pola `version` w `frontend/package-lock.json` (root i `packages[""]`). **Zmiany w obu** → osobny bump każdej strony (numery mogą się różnić). Semver: zwykle **minor** przy nowej funkcji użytkowej, **patch** przy samych poprawkach — **osobno** dla FE i BE. Zob. też `.cursor/rules/00-core.mdc` → *Version bumps*.
 
 ## Gotchas i ograniczenia
 - Nie czytaj ani nie zmieniaj `.env`, `backend/.env` ani `backend/yoyo.ini` (sekrety)
