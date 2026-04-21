@@ -607,7 +607,11 @@ async def import_bank_transactions(file: UploadFile = File(...)) -> BankImportRe
 
 @app.post("/bank-transactions/recategorize", response_model=RecategorizeBankTransactionsResult, status_code=202)
 def recategorize_bank_transactions() -> RecategorizeBankTransactionsResult:
-    """Queue LLM categorization for all bank transactions that have no candidates and no receipt link.
+    """Queue LLM categorization for bank transactions that need candidates or a refresh.
+
+    Selects rows with no user category, no receipt link, fewer than two split lines, and
+    either missing category_candidates or already having a non-empty candidates array
+    (same eligibility as the list 'Zapisz kategorię' row action).
 
     Returns immediately with the Celery task_id and the number of transactions queued.
     If there is nothing to process, task_id is null and count is 0.
