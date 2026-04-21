@@ -54,7 +54,8 @@ Ustalenie: **lista rozszerzona o top kandydata + osobne zdarzenie Pusher na tran
 ## Testy (wymagane)
 
 - **Backend (unit):** wyliczanie top kandydata z listy JSON; że `categorization.transaction_updated` (lub ustalona nazwa) jest emitowane z oczekiwanym payloadem po `update_candidates` (mock `PusherService`, wzorzec jak w `test_categorize_bank_transactions.py`).
-- **Frontend (unit):** funkcja pomocnicza lub test komponentu — reguły widoczności przycisku / top dla zadanych propsów (przypisana kategoria, paragon, split, brak kandydatów, wielu kandydatów z top).
+- **Frontend:** w projekcie **nie było dotąd** runnera testów — w ramach tej funkcji wprowadzamy **Vitest** (środowisko **`jsdom`**) oraz **React Testing Library** (w razie potrzeby **`@testing-library/user-event`**, **`@testing-library/jest-dom`**). Skrypt w `package.json`, np. `test` / `test:run`, uruchamia testy w `frontend/`.
+- **Frontend (unit / component):** funkcja pomocnicza (preferowane dla reguł widoczności) i/lub test komponentu — przypisana kategoria, paragon, split, brak kandydatów, wielu kandydatów z jednym top; asercje w stylu RTL (tekst, rolę, interakcje), bez zależności od prawdziwej przeglądarki.
 
 ---
 
@@ -70,3 +71,4 @@ Ustalenie: **lista rozszerzona o top kandydata + osobne zdarzenie Pusher na tran
 - [x] Paragon / split — przycisk ukryty; nie używamy słowa „konflikt” w UI.
 - [x] Prefiks „AI:” — brak.
 - [x] Realtime — Pusher, kanał `bank-transactions`, zdarzenie per transakcja po `update_candidates`.
+- [x] Frontend — Vitest + React Testing Library + jsdom jako ustalony stos testów jednostkowych/komponentów.
