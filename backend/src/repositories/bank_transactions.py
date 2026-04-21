@@ -343,10 +343,14 @@ class BankTransactionsRepository:
             return []
 
     def get_ids_for_recategorization(self) -> list[int]:
-        """Return IDs of transactions with no category candidates and no linked receipt.
+        """Return IDs eligible for background LLM categorization / refresh.
 
-        Used to retry categorization for transactions that failed the initial LLM pass
-        (e.g. due to a transient error) and are not covered by a receipt link.
+        Includes:
+          - rows with no category_candidates yet (retry after failed import), or
+          - rows with stored candidates but no user category, matching the same rules as
+            the list UI 'Zapisz kategorię' visibility (no receipt link, not multi-split).
+
+        See frontend `shouldShowAiCategoryProposal`.
         """
         if not self.conn:
             return []
@@ -356,10 +360,24 @@ class BankTransactionsRepository:
                     """
                     SELECT bt.id
                     FROM bank_transactions bt
-                    WHERE bt.category_candidates IS NULL
+                    LEFT JOIN categories c ON c.id = bt.category_id
+                    WHERE bt.category_id IS NULL
+                      AND (c.name IS NULL OR c.name = '')
                       AND NOT EXISTS (
                           SELECT 1 FROM receipt_bank_links rbl
                           WHERE rbl.bank_transaction_id = bt.id
+                      )
+                      AND (
+                          SELECT COUNT(*)
+                          FROM bank_transaction_category_splits s
+                          WHERE s.bank_transaction_id = bt.id
+                      ) < 2
+                      AND (
+                          bt.category_candidates IS NULL
+                          OR (
+                              jsonb_typeof(bt.category_candidates) = 'array'
+                              AND jsonb_array_length(bt.category_candidates) > 0
+                          )
                       )
                     ORDER BY bt.id
                     """

@@ -15,7 +15,7 @@ Dla agenta: zwięzły opis repo; szczegóły frontend/backend w `frontend/AGENTS
 ## Struktura
 - `frontend/app/` — strony + proxy `app/api/*/route.ts`
 - `frontend/components/ui/` — primitives (`index.ts` przed nowym UI)
-- `backend/src/` — `main.py` (route’y), `data.py` (Pydantic), `services/`, `repositories/`, `tasks/`, `version.py`, `bank_category_top.py` (top kategorii z JSON `category_candidates`)
+- `backend/src/` — `main.py` (route’y), `data.py` (Pydantic), `services/`, `repositories/`, `tasks/`, `version.py`, `bank_category_top.py`, `bank_inflow_salary_rules.py` (reguły pensji przed LLM)
 - `backend/migrations/` — Yoyo SQL
 - `specs/` oraz `docs/superpowers/` (`specs/` + `plans/`) — opisy funkcji i zatwierdzone plany (superpowers)
 
@@ -30,10 +30,11 @@ Dla agenta: zwięzły opis repo; szczegóły frontend/backend w `frontend/AGENTS
 - SQL przez psycopg2 z parametrami `%s` — bez ORM
 - HTTP: klient → `lib/api.ts` → proxy Next → FastAPI; `App()` na request w `main.py` + `dispose()` w `finally`
 - Zmiana endpointu: `main.py` + `data.py` + `app/api/.../route.ts` + `lib/api.ts` + `lib/types.ts`
-- Lista transakcji bankowych: pole `ai_top_candidate` w itemie listy; po zapisie kandydatów LLM Celery emituje Pusher **`categorization.transaction_updated`** na kanale **`bank-transactions`** (UI merge w React Query).
+- Lista transakcji bankowych: `ai_top_candidate`; po zapisie kandydatów Celery → Pusher **`categorization.transaction_updated`** / **`bank-transactions`** (React Query). LLM: **wpływ** (`amount > 0`) vs **wydatek** — osobny prompt i lista kategorii; pensje z kontrahenta **przed** LLM (`bank_inflow_salary_rules`). **Ponów kategoryzację** — także wiersze z już zapisanymi kandydatami, bez zapisanej kategorii użytkownika i bez paragonu (jak widoczność „Zapisz kategorię”).
 - **Wersjonowanie przy ukończeniu pracy (merge-ready):** podbij **tylko** te składowe, których kod faktycznie dotknąłeś. **Tylko backend** → `backend/src/version.py` + `backend/tests/unit/test_version.py`. **Tylko frontend** → `frontend/package.json` + zgodne pola `version` w `frontend/package-lock.json` (root i `packages[""]`). **Zmiany w obu** → osobny bump każdej strony (numery mogą się różnić). Semver: zwykle **minor** przy nowej funkcji użytkowej, **patch** przy samych poprawkach — **osobno** dla FE i BE. Zob. też `.cursor/rules/00-core.mdc` → *Version bumps*.
 
 ## Gotchas i ograniczenia
 - Nie czytaj ani nie zmieniaj `.env`, `backend/.env` ani `backend/yoyo.ini` (sekrety)
+- **Git / GitHub:** `origin` to **`git@personal:…`** — w `~/.ssh/config` host **`personal`** → `github.com` + właściwy `IdentityFile`. Test: `ssh -T git@personal`. Samo `git@github.com` bez tego aliasu często nie ma klucza (np. w sandboxie agenta).
 - Różne porty backendu (8000 / 8080 / 8001 przy Dockerze) — sprawdź przed debugowaniem CORS/proxy
 - Nowe UI primitives tylko po konsultacji z `components/ui/index.ts`; nowe katalogi top-level — po uzgodnieniu

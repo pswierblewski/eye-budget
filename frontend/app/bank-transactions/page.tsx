@@ -759,7 +759,7 @@ export default function BankTransactionsPage() {
               recategorizeMutation.mutate();
             }}
             disabled={recategorizeMutation.isPending || !!progress}
-            title="Ponów kategoryzację dla transakcji bez propozycji kategorii i bez powiązanych paragonów"
+            title="Ponów kategoryzację: transakcje bez zapisanej kategorii i bez paragonu — bez propozycji LLM albo z propozycją (jak przycisk Zapisz kategorię w wierszu)"
           >
             <RefreshCw className={`h-4 w-4 mr-2 ${recategorizeMutation.isPending ? "animate-spin" : ""}`} />
             Ponów kategoryzację
