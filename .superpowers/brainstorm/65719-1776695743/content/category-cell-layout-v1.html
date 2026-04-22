@@ -1,0 +1,54 @@
+<h2>Kolumna „Kategoria” — układ propozycji AI</h2>
+<p class="subtitle">
+  Kontekst: brak ręcznie przypisanej kategorii, brak wielu kategorii z paragonu/splitu.
+  Pokazujemy top propozycję LLM i mały przycisk „Zapisz kategorię”.
+  Który układ jest dla Ciebie czytelniejszy w wąskiej kolumnie?
+</p>
+
+<div class="split">
+  <div class="mockup">
+    <div class="mockup-header">Wariant A — jedna linia (nazwa + przycisk)</div>
+    <div class="mockup-body" style="font-size: 11px; font-family: system-ui, sans-serif;">
+      <div class="label" style="margin-bottom: 6px;">Kategoria</div>
+      <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap; max-width: 200px;">
+        <span style="color: #6b7280;">AI:</span>
+        <span style="color: #374151; font-weight: 500;">Jedzenie</span>
+        <span style="color: #9ca3af;">(0,87)</span>
+        <button class="mock-button" style="font-size: 10px; padding: 2px 8px;">Zapisz kategorię</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="mockup">
+    <div class="mockup-header">Wariant B — dwie linie (propozycja nad przyciskiem)</div>
+    <div class="mockup-body" style="font-size: 11px; font-family: system-ui, sans-serif;">
+      <div class="label" style="margin-bottom: 6px;">Kategoria</div>
+      <div style="max-width: 200px;">
+        <div style="color: #374151; line-height: 1.3;">
+          <span style="color: #6b7280;">Propozycja AI:</span>
+          Jedzenie <span style="color: #9ca3af;">· 87%</span>
+        </div>
+        <div style="margin-top: 4px;">
+          <button class="mock-button" style="font-size: 10px; padding: 2px 8px;">Zapisz kategorię</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Wariant A</h3>
+      <p>Jedna linia: szybciej skanuje wzrok, mniej wysokości wiersza.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Wariant B</h3>
+      <p>Druga linia: wyraźniejszy podział tekstu i akcji; wiersz trochę wyższy.</p>
+    </div>
+  </div>
+</div>
