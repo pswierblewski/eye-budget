@@ -31,6 +31,7 @@ Paragon **nie** musi być osobnym „członkiem” tabeli grupy, jeśli jest ju�
 
 ## Poza scope (v1)
 
+- **UI na mobile** — dedykowany layout / QA na wąskich ekranach; v1: **tylko desktop** (patrz sekcja UI / Wymiary).
 - **Rozbicie kwot** w obrębie jednego wpływu (alokacja: ile z 300 zł idzie na stację, ile na pizzerię) — opcjonalna **przyszła** warstwa; v1: tylko **powiązania**, bez pól alokacji.
 - **Automatyczne sugestie** kandydatów do grupy (heurystyki po dacie / kwocie) — później.
 - **Osobny „członek” typu** `receipts_scans` / `receipt_transaction` w tabeli członków — v1: wyłącznie **bank** i **gotówka**; paragony z `JOIN` do istniejących tabel linków.
@@ -161,7 +162,7 @@ Listy `GET` transakcji (unified, bank, cash) otrzymują **dodatkowe pole** schem
 
 ### Wymiary
 
-- **Desktop i mobile** — sekcja szczegółu musi być czytelna w wąskiej kolumnie (scroll poziomy w tabeli członków tylko w ostateczności; preferowana karta pionowa).
+- **v1: tylko desktop** — świadome projektowanie i weryfikacja na **szerokich** widokach. **Ekran mobilny / wąskie kolumny — poza scope** tej wersji (osobna iteracja, gdy będzie potrzeba).
 
 ### Listy (zunifikowana / bank / gotówka)
 
