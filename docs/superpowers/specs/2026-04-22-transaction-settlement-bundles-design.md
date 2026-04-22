@@ -1,5 +1,7 @@
 # Zestawy rozliczeniowe (łączenie wydatków i zwrotów) — design
 
+**Nazwa w interfejsie (ustalona): „Powiązane operacje”.**
+
 **Date:** 2026-04-22  
 **Status:** Draft (do akceptacji przed implementacją)  
 **Suggested branch:** `feature/transaction-settlement-bundles`
@@ -20,7 +22,7 @@ Dane referencyjne (prod): `bank_transactions` 2484 (Burrata, −450), 2481 (wpł
 
 | Mechanizm | Znaczenie | Zmiana w tym feature |
 |-----------|-----------|----------------------|
-| `receipt_bank_links` / `receipt_cash_links` | „Ten rachunek = ta **konkretna** transakcja bankowa / gotówkowa” | **Bez zmiany semantyki.** Paragony w widoku „rozliczenia” pokazujemy **pośrednio** — z członków grupy, którzy mają taki link. |
+| `receipt_bank_links` / `receipt_cash_links` | „Ten rachunek = ta **konkretna** transakcja bankowa / gotówkowa” | **Bez zmiany semantyki.** Paragony w widoku **powiązanych operacji** pokazujemy **pośrednio** — z członków grupy, którzy mają taki link. |
 | Zestaw rozliczeniowy (nowe) | „Te **kilkanaście wierszy** należą do **jednej** sytuacji (np. wspólna kolacja + zwroty)” | Nowa warstwa **nad** poszczególnymi tabelami. |
 
 Paragon **nie** musi być osobnym „członkiem” tabeli grupy, jeśli jest już powiązany z wierszem banku/gotówki w grupie — wystarczy **wyprowadzenie w API/UI**. Opcję dodania niesparowanego skanu do grupy można odłożyć na później (poza v1, patrz Scope).
@@ -43,19 +45,16 @@ Paragon **nie** musi być osobnym „członkiem” tabeli grupy, jeśli jest ju�
 - **`settlement_group`** — rekord nadrzędny (zbiór).
 - Zasób REST: `settlement-groups` (kebab w URL jak w reszcie API).
 
-### UI (polski) — rekomendowane
+### UI (polski) — ustalone
 
-| Propozycja | Uwagi |
-|------------|--------|
-| **Rozliczenie wspólne** | Czytelne, nie myli się z przelewem. |
-| **Powiązane operacje** | Neutralne, dobre gdy w zestawie są i wydatki, i wpływy. |
-| *Powiązane transakcje* | Używane dotąd; OK, lecz słowo „transakcja” koliduje z potocznym sensą „jeden przelew” — dlatego w nagłówkach wolałbym **„rozliczenie wspólne”** lub **„u członków tego samego rozliczenia”**. |
-
-Nazwa funkcji w menu / ustawieniach: **„Rozliczenia wspólne”** (lista zestawów) albo **„Łączenie transakcji”** (akcja).
+- **Główna nazwa w produkcie: „Powiązane operacje”.** (nagłówki sekcji, lista/ekran gdy wprowadzimy katalog zestawów, spójny branding copy).
+- **Krótsze etykiety** (ikona w tabeli, tooltip): np. „W powiązanych operacjach”, **„Jest w zestawie powiązanych operacji”** albo wariant z „tym samym zespołem wierszy” — ostateczna redakcja przy implementacji, ale termin **„operacje”** zostaje (nie „transakcje” w nagłówku, by nie mylić z pojedynczym przelewem).
+- **Akcja tworzenia:** np. **„Dodaj do powiązanych operacji”** / **„Utwórz powiązane operacje”** (dokładna forma w planie implementacji).
+- *Powiązane transakcje* (potocznie) — OK w rozmowie; w UI trzymamy **„operacje”**.
 
 ### Czego unikać w copy
 
-- Angielskie „**split**” jako nagłówek — w eye-budget „split” jest już użyty przy **kategoryzacji** banku (`category splits`); tu lepiej: **„u członków tego samego rozliczenia”**, **„pokrywa kilka wydatków”**.
+- Angielskie „**split**” jako nagłówek — w eye-budget „split” jest już użyty przy **kategoryzacji** banku (`category splits`); tu opisy typu: **„pokrywa kilka wydatków”**, **„pozostałe wiersze w tym samym zestawie”**.
 
 ---
 
@@ -166,15 +165,15 @@ Listy `GET` transakcji (unified, bank, cash) otrzymują **dodatkowe pole** schem
 
 ### Listy (zunifikowana / bank / gotówka)
 
-- Kolumna lub komórka z **ikoną** (np. `Link2` / `Users` / `Split` z lucide — do uzgodnienia z design system) + `aria-label` po polsku, np. „W rozliczeniu wspólnym”.
-- Tooltip: „Jest w zestawie rozliczeniowym” (krótko). Opcjonalnie klik przechodzi do `GET` grupy (panel boczny / podstrona).
+- Kolumna lub komórka z **ikoną** (np. `Link2` / `Users` — `Split` w nazwie/ikonie **unikamy** z powodu `category splits`) + `aria-label` po polsku, np. **„W powiązanych operacjach”**.
+- Tooltip: **„Jest w zestawie powiązanych operacji”** (krótko). Opcjonalnie klik przechodzi do `GET` grupy (panel boczny / podstrona).
 
 ### Widok transakcji (detail)
 
-- Sekcja **„Rozliczenie wspólne”** (lub spójny z tabelą tytuł):
-  - jeśli `settlement_group_id` puste — przycisk **„Dodaj do rozliczenia”** otwierający:
+- Sekcja **„Powiązane operacje”**:
+  - jeśli `settlement_group_id` puste — przycisk **„Dodaj do powiązanych operacji”** (lub wariant powyżej) otwierający:
     - tryb A: wyszukiwarka innych transakcji (data/kwota) + multiselect **albo**
-    - tryb B (v1, prostsze): użytkownik **wpisuje ID** / wybiera z ostatnich (minimalny MVP) — **rekomendacja v1:** modal **„Utwórz nowe rozliczenie”** z wyborem co najmniej **jednej** innej transakcji (obecna jest już znana) — dokładna iteracja UI w planie implementacji; spec domyśla, że **musi** dać się połączyć obecną stronę z co najmniej jednym innym wierszem.
+    - tryb B (v1, prostsze): użytkownik **wpisuje ID** / wybiera z ostatnich (minimalny MVP) — **rekomendacja v1:** modal w stylu **„Utwórz powiązane operacje”** z wyborem co najmniej **jednej** innej transakcji (obecna jest już znana) — dokładna iteracja UI w planie implementacji; spec domyśla, że **musi** dać się połączyć obecną stronę z co najmniej jednym innym wierszem.
 - jeśli jest w grupie: lista innych członków (linki do ich detaili) + skrót paragonów (miniaturka / data / kwota) zgodnie z `linked_receipts`.
 - **Edycja meta:** tytuł, notatka (inline lub podstrona grupy).
 - **Rozłącz** — usunięcie z grupy (z potwierdzeniem, jeśli to ostatni partner i grupa zniknie).
@@ -214,7 +213,7 @@ flowchart LR
     U[Unified / Bank / Cash]
   end
   subgraph detail [Szczegół transakcji]
-    D[Sekcja rozliczenie wspólne]
+    D[Sekcja Powiązane operacje]
   end
   subgraph api [API]
     G[GET settlement-groups]
@@ -231,14 +230,15 @@ flowchart LR
 
 ## Checklist przed implementacją
 
-- [ ] Akceptacja nazwy w UI: „Rozliczenie wspólne” vs „Powiązane operacje”.
+- [x] Nazwa w UI: **„Powiązane operacje”** (akceptacja 2026-04-22).
 - [ ] Czy tryb **v1** tworzy grupę tylko z ekranu transakcji, czy potrzebna jest osobna strona listy grup — decyzja produktowa.
 - [ ] Potwierdzenie: trigger vs repository-only dla `member_count < 2`.
 
 ---
 
-## Self-review (2026-04-22)
+## Self-review (2026-04-22, aktualizacja nazwy 2026-04-22)
 
+- **Nazwa UI** — ustalone: **Powiązane operacje**; copy w sekcjach listy/detail/tooltip z tym słownictwem.
 - **Placeholdery:** brak TBD w modelu; szczegół modala (tryb A/B) pozostawiony jako decyzja implementacyjna z minimum „powiąż obecną z ≥1 inną”.
 - **Spójność:** `receipt_*_links` nienaruszone; nowe tabele ortogonalne.
 - **Scope:** ograniczony; alokacje i skany jako members poza v1.
