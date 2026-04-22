@@ -107,7 +107,7 @@ Paragon **nie** musi być osobnym „członkiem” tabeli grupy, jeśli jest ju�
 4. Z widoku **każdej** transakcji należącej do zestawu: sekcja z **listą pozostałych członków** + **zagregowane paragony** wynikające z istniejących `receipt_*_links` członków.
 5. Na **liście** transakcji (zunifikowanej / bank / gotówka — tam gdzie dziś pokazywany jest m.in. `has_receipt`) widoczna **ikonka** (lub odpowiednik `Badge`), że wiersz jest w zestawie.
 6. Użytkownik może **usunąć** członka z zestawu, **edytować** metadane zestawu, **rozwiazać** cały zestaw (usuwa powiązania, nie kasuje transakcji).
-7. **Rozwiązanie zestawu** (likwidacja `settlement_group` i zwolnienie członków): w **v1** głównie **ręcznie** (akcja „Usuń grupę” / potwierdzenie) oraz zasady po **usunięciu członka** (patrz sekcja *Procesy powiązywania* — edge case: grupa 0 członków vs. „skorupa planistyczna”). Wcześniej rozważane auto-kasowanie przy &lt;2 członkach musi współgrać z **pustą grupą utworzoną przed wydatkami** (scenariusz wyjazdu).
+7. **Rozwiązanie zestawu** (likwidacja `settlement_group`): **wariant (A)** — grupę usuwa wyłącznie **użytkownik** (akcja „Usuń grupę” / jawny `DELETE /settlement-groups/{id}`). **Brak** automatycznego kasowania grupy po samej liczbie członków (żadnego triggera „&lt;2 ⇒ usuń”). Usunięcie ostatniego członka (`DELETE .../members`) **zostawia** pustą grupę w bazie, dopóki użytkownik jej nie skasuje — ułatwia to **lista grup** z widoczną liczbą członków i **odróżnieniem** `member_count = 0` (patrz *Widok listy*).
 8. W widoku **pojedynczej grupy** (oraz w `GET` detalu) użytkownik widzi **bilans** zestawu: suma wydatków, suma wpływów, różnica (netto) — **tylko informacyjnie**, bez semantyki błędu (bez czerwieni / „do zapłacenia”); to orientacja, nie dług księgowy.
 
 ---
@@ -154,12 +154,14 @@ CREATE INDEX idx_sgm_group ON settlement_group_members (group_id);
 
 ### Zachowanie przy usuwaniu transakcji (członka / całej grupy)
 
-- `ON DELETE CASCADE` z członka: skasowanie wiersza `bank_transactions` / `cash_transactions` usuwa odpowiedni wiersz w `settlement_group_members` (CASCADE w definicji FK do transakcji), potem w warstwie aplikacji (lub triggerze) **dopasować** regułę do **dopuszczalnych pustych grup** (scenariusz wyjazdu) — prosty trigger „`member_count` &lt; 2 ⇒ usuń grupę” **nie** wystarcza bez rozszerzenia (patrz *Procesy powiązywania*).
-- **Nie w specyfikujemy tutaj ostatecznego triggera** — decyzja w planie implementacji, po wyborze jednej z opcji: **(A)** brak auto-kasowania po liczniku; tylko jawne `DELETE` grupy i CASCADE z importu, **(B)** flaga / źródło utworzenia grupy, **(C)** inna spójna reguła opisana w teście integracyjnym.
+- **Ustalenie — wariant (A, 2026-04-22):** `settlement_groups` **nigdy** nie jest usuwany automatycznie z powodu liczby członków. **Żadnego** triggera SQL / joba w stylu `member_count &lt; 2 ⇒ DELETE settlement_groups`.
+- `ON DELETE CASCADE` na `settlement_group_members` względem `bank_transactions` / `cash_transactions`: skasowanie wiersza transakcji usuwa **tylko** wiersz członkostwa; **nadrzędna grupa** zostaje (także gdy w efekcie `member_count` spada do 0) — puste grupy ewentualnie czyścisz ręcznie z listy.
+- Usunięcie całej grupy: tylko jawne `DELETE /settlement-groups/{id}` (UI lub API). Transakcje bank/cash **nie** są usuwane.
 
 ### Inwarianty (aplikacja + DB)
 
 - Tworzenie / dodawanie: **odrzucenie (409)**, jeśli wybrany `bank_transaction_id` lub `cash_transaction_id` już występuje w `settlement_group_members` (lub w innej grupie).
+- `DELETE` członka: **nigdy** w konsekwencji nie usuwa automatem rekordu `settlement_groups` (wariant A).
 - `POST` nowej grupy: **`members` może być pustą listą** (grupa tylko z `title?` / `note?`) **albo** zawierać jeden albo wiele wierszy — **walidacja „co najmniej 2** wpisy” dotyczy **zapisu w modalu** „utwórz z bieżącej transakcji + inne” (UX), a nie twardo API, jeśli przewidujemy puste grupy.
 - **Zapis z modala** (łączenie bieżącej transakcji z co najmniej jedną inną): **przed utworzeniem** zbioru musi być **≥2 łączne** wybrane wiersze (bieżący + zaznaczone w wyszukiwaniu) — w przeciwnym razie brak `POST` (komunikat po polsku).
 
@@ -172,12 +174,12 @@ Wszystkie odpowiedzi JSON; błędy zgodne z `backend/AGENTS.md` / istniejącym `
 | Metoda | Ścieżka | Opis |
 |--------|---------|------|
 | `POST` | `/settlement-groups` | Ciało: `title?`, `note?`, `members: [{ "source_type": "bank" \| "cash", "id": int }, ...]` — `members` **może być `[]`** (pusta grupa). Gdy `members` niepuste: unikalne pary, brak konfliktu. Zwraca `SettlementGroupDetail`. |
-| `GET` | `/settlement-groups` | **Lista grup** (paginacja + sort jak w innych listach) z parametrem **`search`** (opcjonalnie) po `title`, `note`, ewentualnie zdenormalizowanym podsumowaniu; **używany w pickerze** „dołącz do istniejącej grupy” (scen. 3 i 4). Zwraca wiersze `SettlementGroupListItem` (min.: `id`, `title`, `created_at`, `member_count`, opcjonalnie skrót bilansu). |
+| `GET` | `/settlement-groups` | **Lista grup** (paginacja + sort jak w innych listach) z parametrem **`search`** (opcjonalnie) po `title`, `note`, ewentualnie zdenormalizowanym podsumowaniu; **używany w pickerze** „dołącz do istniejącej grupy” (scen. 3 i 4). Zwraca wiersze `SettlementGroupListItem` (min.: `id`, `title`, `created_at`, **`member_count`** — pod **badge** na liście / w pickerze; styl badge dla `0` vs `>=1` w *Widoku listy*), opcjonalnie skrót bilansu. |
 | `GET` | `/settlement-groups/{id}` | Pełny zestaw: członkowie + `linked_receipts` + **bilans** (patrz *SettlementGroupDetail*). |
 | `GET` | `/settlement-groups/by-transaction?source_type=bank&transaction_id=…` (lub `cash`) | 404 jeśli brak; inaczej jak `GET /settlement-groups/{id}`. |
 | `PATCH` | `/settlement-groups/{id}` | Tylko `title`, `note`. |
 | `POST` | `/settlement-groups/{id}/members` | Pojedynczy członek; 409 gdy transakcja już w innej grupie. Po dodaniu przeliczyć spójność. |
-| `DELETE` | `/settlement-groups/{id}/members` | Ciało lub query: `source_type` + `transaction_id` — wyciąga członka; reakcja, gdy zostaje 0 / 1 członek — **zgodna z ustaloną w planie** regułą (patrz inwarianty pustych grup; nie wymuszać tutaj twardo sprzecznej z pustym „kontenerem” wyjazdu). |
+| `DELETE` | `/settlement-groups/{id}/members` | Ciało lub query: `source_type` + `transaction_id` — usuwa tylko wiersz członkostwa. Grupa nadrzędna **zostaje** (nawet przy `member_count` 0 po tej operacji) — wariant **(A)**. |
 | `DELETE` | `/settlement-groups/{id}` | Usuwa grupę (CASCADE na członków); transakcje zostają. |
 
 **`SettlementGroupDetail` (Pydantic, szkic):**
@@ -247,7 +249,7 @@ Poniżej ustalenia z brainstorningu — **v1 desktop**, spójne z sekcją „Pow
 
 | Temat | Opcje (skrót) |
 |-------|----------------|
-| Pusta grupa vs. auto-kasowanie po usunięciu członka | **(A)** brak auto-kasowania po liczniku, **(B)** kolumna statusu, **(C)** inna reguła — **wybór w planie** z testami, bez sprzeczności z pustym kontenerem wyjazdu. |
+| Pusta grupa vs. auto-kasowanie po usunięciu członka | **(A) USTALONE (2026-04-22):** brak auto-kasowania; grupę usuwa tylko użytkownik. *(B) / (C) — odrzucone w tym produkcie.* |
 | Zapis przy **tworzeniu nowej grupy** z modala | **Ustalone:** jeden `POST /settlement-groups` z pełną listą `members` (typowe &lt; 5 pozycji). *Dodawanie pojedynczej operacji do już istniejącej grupy* — nadal **`POST /settlement-groups/{id}/members`** (jeden członek na request). |
 
 #### Co to znaczy: „ostateczna reguła usunięcia / triggera przy 0/1 członku” (checklista)
@@ -266,7 +268,7 @@ To **gryzie się** z ważnym przypadkiem użycia: **pusta grupa** utworzona **z 
 | **(B)** | Dodatkowa informacja w DB (np. **„kontener planistyczny”** vs **„zwykła grupa”**), żeby *trigger* wiedział, że `0` członków w jednym wypadku **zostaw**, w drugim **skasuj**. |
 | **(C)** | Jedna spójna, opisana w teście reguła, niekoniecznie A ani B (np. *rozwiąż* grupę tylko gdy ostatni członek wypada z *niepustej* historycznie grupy) — *do doprecyzowania w planie* z tabelką przypadków. |
 
-**Dopóki** nie wybierzemy wariantu i nie zapiszemy go w teście integracyjnym, punkt w checkliście zostaje **otwarty** — to nie błąd, tylko **świadomie** odłożona decyzja, żeby nie zaimplementować triggera, który zje Twoje puste „Bieszczady 2026”.
+**Decyzja produktowa (2026-04-22):** wariant **(A)** — grupy kasujesz **ręcznie**; stąd na **liście grup** wymagany **badge** z `member_count` (patrz *Widok listy*), w tym **inny wariant stylu** dla **0** członków, żeby od razu widać „pusty szkielet / do usunięcia albo dalszego wypełniania”.
 
 ---
 
@@ -291,14 +293,15 @@ To **gryzie się** z ważnym przypadkiem użycia: **pusta grupa** utworzona **z 
 ### Widok **listy** `/settlement-groups` (v1)
 
 - **MVP:** dedykowana strona (desktop) z listą grup, wyszukiwaniem, **„Nowa pusta grupa”**, wejściem w **detal** grupy (`/settlement-groups/{id}`) z pełnym **bilansem** i członkami.
-- Ten sam listowy endpoint obsługuje **picker** w trybie „dołącz do istniejącej” (scen. 3) — spójny komponent tabeli / listy, opcjonalnie wariant „compact” w modalu.
+- **Badge liczby członków (wymagane):** w każdym wierszu listy (lub czytelnym odpowiedniku) widoczny **badge** z liczbą `member_count` (np. „3” lub copy „3 operacje” — ostateczna forma w copy, sens: ile wierszy z bank/cash jest w grupie). Dla **`member_count = 0`** — **inny wariant kolorystyczny** niż dla `>= 1` (np. stonowany / secondary w design systemie), **bez** czerwieni błędu — tylko odróżnienie „pusta grupa / szkielet przed wydatkami” od „grupa z już podpiętymi operacjami”. A11y: liczba lub tekst czytany przez czytnik.
+- Ten sam listowy endpoint obsługuje **picker** w trybie „dołącz do istniejącej” (scen. 3) — spójny komponent tabeli / listy, opcjonalnie wariant „compact” w modalu; **picker** też **pokazuje** `member_count` (i ten sam wzorzec badge dla 0, jeśli mieści się w UI modala).
 
 ---
 
 ## Testy
 
 - Testy **repozytorium** (transakcja DB lub integracja z testową PG): unikalność, **pusta grupa** + dodanie członków, **409** przy duplikacie członka, **bilans** (suma znaków) dla mieszanki wydatki + wpływy.
-- Reguła **automatycznego kasowania** po liczbie członków — testy zgodne z **wybraną w planie** opcją (A/B/C), bez sprzeczności z pustym kontenerem.
+- **Brak** testów auto-kasowania po liczbie członków — wariant **(A)**. Test: `DELETE` ostatniego członka zostawia pustą grupę; explicite `DELETE` grupy usuwa wiersz.
 - Testy **API** (wzorzec `app` tests): `POST` pustej, `GET` listy + `search`, `POST` members, `GET` by id z polami bilansu, ścieżka usuwania.
 - **Zero** regresji: `receipt_*_links` w SELECT list.
 
@@ -344,7 +347,7 @@ flowchart LR
 
 - [x] Nazwa w UI: **„Powiązane operacje”** (akceptacja 2026-04-22).
 - [x] **Lista `/settlement-groups` + wyszukiwanie** w **v1** (picker + pusta grupa + wyjazd) — zapisane w *Procesach* i *UI*.
-- [ ] Ostateczna reguła **usunięcia / triggera** przy 0/1 członku — wariant (A) / (B) / (C) z tabeli w *Procesach*; **pełne wyjaśnienie pytania:** podsekcja *Co to znaczy: «ostateczna reguła…»* w tym samym miejscu.
+- [x] Reguła usunięcia: **(A)** — tylko ręcznie, bez triggera po liczniku (2026-04-22). **Lista grup:** badge `member_count`, **inny** styl dla 0. Wyjaśnienie dylematu: podsekcja *Co to znaczy: «ostateczna reguła…»* w *Procesach*.
 - [x] **Tworzenie grupy z modala:** pojedynczy `POST /settlement-groups` z pełnym `members` (akceptacja 2026-04-22; typowa liczba członków &lt; 5).
 
 ---
@@ -352,8 +355,8 @@ flowchart LR
 ## Self-review (2026-04-22, aktualizacje: nazwa, desktop, proces, bilans)
 
 - **Nazwa UI** — **Powiązane operacje**; sekcja *Procesy powiązywania* opisuje przepływy 1–5.
-- **Puste grupy, lista grup, bilans, modal z unified** — w spec; **otwarta decyzja** tylko co do triggera &lt;2 członków (tabela wariantów). **POST z modala** — ustalone: **jeden request** z pełnymi `members`.
+- **Puste grupy, lista grup, bilans, modal z unified** — w spec. **Usuwanie grupy:** wariant **(A)**. **POST z modala** — ustalone: **jeden request** z pełnymi `members`. **Lista grup** — badge członków, odróżnienie dla 0.
 - **Scenariusze życiowe (A–F)** — referencyjne opowieści użytkownika; ułatwiają pełny obraz bez czytania tylko modelu technicznego.
-- **Spójność:** `receipt_*_links` nienaruszone; konflikt wcześniejszej rekomendacji triggera usunięty — zastąpiona wariantami w *Model danych* / *Procesy*.
+- **Spójność:** `receipt_*_links` nienaruszone; brak auto-kasowania `settlement_groups` po liczniku członków.
 - **Scope v1:** szersze niż pierwotny szkic (strona listy grup obowiązkowo); dalej bez alokacji kwot w obrębie jednego wpływu.
 - **Bilans:** wymagania neutralnego UI bez „alertu czerwonego” — w *Wymaganiach* i *SettlementGroupDetail*.
