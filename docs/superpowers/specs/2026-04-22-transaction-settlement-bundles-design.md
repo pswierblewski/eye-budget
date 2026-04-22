@@ -3,7 +3,7 @@
 **Nazwa w interfejsie (ustalona): „Powiązane operacje”.**
 
 **Date:** 2026-04-22  
-**Status:** Draft (aktualizacja procesów UX, bilans, lista grup — 2026-04-22)  
+**Status:** Approved  
 **Suggested branch:** `feature/transaction-settlement-bundles`
 
 ---
