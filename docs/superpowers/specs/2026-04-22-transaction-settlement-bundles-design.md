@@ -3,7 +3,7 @@
 **Nazwa w interfejsie (ustalona): „Powiązane operacje”.**
 
 **Date:** 2026-04-22  
-**Status:** Draft (do akceptacji przed implementacją)  
+**Status:** Draft (aktualizacja procesów UX, bilans, lista grup — 2026-04-22)  
 **Suggested branch:** `feature/transaction-settlement-bundles`
 
 ---
@@ -61,13 +61,14 @@ Paragon **nie** musi być osobnym „członkiem” tabeli grupy, jeśli jest ju�
 
 ## Wymagania funkcjonalne
 
-1. Użytkownik może **utworzyć zestaw** i dodać do niego co najmniej **dwa** wiersze typu: `bank_transactions` albo `cash_transactions` (dowolna mieszanka).
+1. Użytkownik może **utworzyć zestaw** i dodawać wiersze `bank_transactions` / `cash_transactions` w dowolnej kolejności, w tym: **(a)** zestaw z **pustym** zestawem członków (np. przed wyjazdem — „kontener” na późniejsze wydatki), **(b)** zestaw tworzony od razu z **wielu** wierszy (np. z modala), **(c)** dopisywanie do już utworzonej grupy. **W sensie merytorycznym** „powiązanie” użytkownik widzi, gdy w grupie jest **co najmniej dwa** wpisy; jednocześnie dopuszczalne są **0 lub 1** wpis tymczasowo (WIP albo pusta grupa).
 2. **Każdy** taki wiersz może należeć do **co najwyżej jednego** zestawu.
 3. Zestaw opcjonalnie ma **tytuł** i **notatkę** (obaj pola tekstowe, nullable).
 4. Z widoku **każdej** transakcji należącej do zestawu: sekcja z **listą pozostałych członków** + **zagregowane paragony** wynikające z istniejących `receipt_*_links` członków.
 5. Na **liście** transakcji (zunifikowanej / bank / gotówka — tam gdzie dziś pokazywany jest m.in. `has_receipt`) widoczna **ikonka** (lub odpowiednik `Badge`), że wiersz jest w zestawie.
 6. Użytkownik może **usunąć** członka z zestawu, **edytować** metadane zestawu, **rozwiazać** cały zestaw (usuwa powiązania, nie kasuje transakcji).
-7. Gdy w zestawie zostaje **mniej niż dwa** członki, system **likwiduje** cały zestaw (spójność: nie przechowujemy „grupy jednoelementowej”).
+7. **Rozwiązanie zestawu** (likwidacja `settlement_group` i zwolnienie członków): w **v1** głównie **ręcznie** (akcja „Usuń grupę” / potwierdzenie) oraz zasady po **usunięciu członka** (patrz sekcja *Procesy powiązywania* — edge case: grupa 0 członków vs. „skorupa planistyczna”). Wcześniej rozważane auto-kasowanie przy &lt;2 członkach musi współgrać z **pustą grupą utworzoną przed wydatkami** (scenariusz wyjazdu).
+8. W widoku **pojedynczej grupy** (oraz w `GET` detalu) użytkownik widzi **bilans** zestawu: suma wydatków, suma wpływów, różnica (netto) — **tylko informacyjnie**, bez semantyki błędu (bez czerwieni / „do zapłacenia”); to orientacja, nie dług księgowy.
 
 ---
 
@@ -111,17 +112,16 @@ CREATE UNIQUE INDEX uq_sgm_cash ON settlement_group_members (cash_transaction_id
 CREATE INDEX idx_sgm_group ON settlement_group_members (group_id);
 ```
 
-### Zachowanie przy usuwaniu transakcji
+### Zachowanie przy usuwaniu transakcji (członka / całej grupy)
 
-- `ON DELETE CASCADE` z członka: przy skasowaniu `bank_transactions` wiersz członka znika; **po tym** logika (trigger lub repozytorium) zmniejsza liczbę członków; jeśli &lt; 2 — **usuwa `settlement_groups` dla tego `group_id`** (i pozostali członkowie też znikają przez CASCADE z grupy — uwaga: kolejność musi być bezpieczna).  
-- Implementacyjnie bezpieczniej: **trigger** `AFTER DELETE ON settlement_group_members` aktualizujący/ sprawdzający `member_count` i usuwający pusty lub 1-elementowy zestaw **albo** pełna obsługa w warstwie repo w jednej transakcji DB (preferowane dla testowalności: jeden `DELETE ...` z `RETURNING` i follow-up).
-
-**Rekomendacja:** prosty trigger „jeśli po DELETE liczba członków grupy &lt; 2, DELETE FROM settlement_groups WHERE id = ...” w jednej transakcji zapewnia spójność także przy ręcznych `DELETE` w dev.
+- `ON DELETE CASCADE` z członka: skasowanie wiersza `bank_transactions` / `cash_transactions` usuwa odpowiedni wiersz w `settlement_group_members` (CASCADE w definicji FK do transakcji), potem w warstwie aplikacji (lub triggerze) **dopasować** regułę do **dopuszczalnych pustych grup** (scenariusz wyjazdu) — prosty trigger „`member_count` &lt; 2 ⇒ usuń grupę” **nie** wystarcza bez rozszerzenia (patrz *Procesy powiązywania*).
+- **Nie w specyfikujemy tutaj ostatecznego triggera** — decyzja w planie implementacji, po wyborze jednej z opcji: **(A)** brak auto-kasowania po liczniku; tylko jawne `DELETE` grupy i CASCADE z importu, **(B)** flaga / źródło utworzenia grupy, **(C)** inna spójna reguła opisana w teście integracyjnym.
 
 ### Inwarianty (aplikacja + DB)
 
-- Tworzenie / dodawanie: **odrzucenie** (409), jeśli wybrany `bank_transaction_id` lub `cash_transaction_id` już występuje w `settlement_group_members`.
-- **Minimalna liczba członków 2** przy `INSERT` nowej grupy (jedna transakcja: insert `settlement_groups` + ≥ 2 wiersze członków) **albo** dodanie do istniejącej grupy tak długo, jak po operacji |członkowie| ≥ 2.
+- Tworzenie / dodawanie: **odrzucenie (409)**, jeśli wybrany `bank_transaction_id` lub `cash_transaction_id` już występuje w `settlement_group_members` (lub w innej grupie).
+- `POST` nowej grupy: **`members` może być pustą listą** (grupa tylko z `title?` / `note?`) **albo** zawierać jeden albo wiele wierszy — **walidacja „co najmniej 2** wpisy” dotyczy **zapisu w modalu** „utwórz z bieżącej transakcji + inne” (UX), a nie twardo API, jeśli przewidujemy puste grupy.
+- **Zapis z modala** (łączenie bieżącej transakcji z co najmniej jedną inną): **przed utworzeniem** zbioru musi być **≥2 łączne** wybrane wiersze (bieżący + zaznaczone w wyszukiwaniu) — w przeciwnym razie brak `POST` (komunikat po polsku).
 
 ---
 
@@ -131,19 +131,26 @@ Wszystkie odpowiedzi JSON; błędy zgodne z `backend/AGENTS.md` / istniejącym `
 
 | Metoda | Ścieżka | Opis |
 |--------|---------|------|
-| `POST` | `/settlement-groups` | Ciało: `title?`, `note?`, `members: [{ "source_type": "bank" \| "cash", "id": int }, ...]`, `len(members) >= 2`, unikalne pary, brak konfliktu z istniejącymi członkostwami. Zwraca `SettlementGroupDetail`. |
-| `GET` | `/settlement-groups/{id}` | Pełny zestaw: członkowie + zagregowane paragony (patrz niżej). |
+| `POST` | `/settlement-groups` | Ciało: `title?`, `note?`, `members: [{ "source_type": "bank" \| "cash", "id": int }, ...]` — `members` **może być `[]`** (pusta grupa). Gdy `members` niepuste: unikalne pary, brak konfliktu. Zwraca `SettlementGroupDetail`. |
+| `GET` | `/settlement-groups` | **Lista grup** (paginacja + sort jak w innych listach) z parametrem **`search`** (opcjonalnie) po `title`, `note`, ewentualnie zdenormalizowanym podsumowaniu; **używany w pickerze** „dołącz do istniejącej grupy” (scen. 3 i 4). Zwraca wiersze `SettlementGroupListItem` (min.: `id`, `title`, `created_at`, `member_count`, opcjonalnie skrót bilansu). |
+| `GET` | `/settlement-groups/{id}` | Pełny zestaw: członkowie + `linked_receipts` + **bilans** (patrz *SettlementGroupDetail*). |
 | `GET` | `/settlement-groups/by-transaction?source_type=bank&transaction_id=…` (lub `cash`) | 404 jeśli brak; inaczej jak `GET /settlement-groups/{id}`. |
 | `PATCH` | `/settlement-groups/{id}` | Tylko `title`, `note`. |
 | `POST` | `/settlement-groups/{id}/members` | Pojedynczy członek; 409 gdy transakcja już w innej grupie. Po dodaniu przeliczyć spójność. |
-| `DELETE` | `/settlement-groups/{id}/members` | Ciało lub query: `source_type` + `transaction_id` — wyciąga członka; jeśli zostaje &lt; 2, usuwa całą grupę. |
+| `DELETE` | `/settlement-groups/{id}/members` | Ciało lub query: `source_type` + `transaction_id` — wyciąga członka; reakcja, gdy zostaje 0 / 1 członek — **zgodna z ustaloną w planie** regułą (patrz inwarianty pustych grup; nie wymuszać tutaj twardo sprzecznej z pustym „kontenerem” wyjazdu). |
 | `DELETE` | `/settlement-groups/{id}` | Usuwa grupę (CASCADE na członków); transakcje zostają. |
 
 **`SettlementGroupDetail` (Pydantic, szkic):**
 
 - `id`, `title`, `note`, `created_at`, `updated_at`
-- `members: list[SettlementMember]` — każdy z: `source_type`, `id`, dane do podglądu (data, kwota, opis, `vendor_name` — jak w listach) — możliwe użycie `UnifiedTransaction`-like slice lub odczyt z repozytoriów bank/cash.
-- `linked_receipts: list[LinkedReceiptSummary]` — złączenie: dla każdego `bank` z `receipt_bank_links` i każdego `cash` z `receipt_cash_links` (deduplikacja po `receipts_scans.id` / `receipt_transaction_id`).
+- `member_count: int` — liczba członków (dla pustych grup `0`).
+- `members: list[SettlementMember]` — każdy z: `source_type`, `id`, dane do podglądu (data, kwota, opis, `vendor_name` — jak w listach) — odczyt z repozytoriów bank/cash, spójnie ze znakiem `amount` jak w `UnifiedTransaction`.
+- `linked_receipts: list[LinkedReceiptSummary]` — dla każdego `bank` / `cash` w grupie, który ma `receipt_*_links` (deduplikacja po `receipts_scans.id`).
+- **Bilans (liczone na backendzie, ta sama logika znaku co lista zunifikowana):**  
+  - `total_expense: Decimal` (suma wydatków, np. ujemne `amount` w konwencji wyciągu — **dokładne mapowanie w implementacji** albo `abs` dla jawnej sumy wydanej)  
+  - `total_income: Decimal` (suma wpływów)  
+  - `net: Decimal` (różnica)  
+  W UI: **neutralna prezentacja** (np. mniejszy tekst, bez koloru „błąd/alert”); służy do orientacji przy częściowych zwrotach (np. 150 z 286,34 zł).
 
 Listy `GET` transakcji (unified, bank, cash) otrzymują **dodatkowe pole** schematycznie:
 
@@ -153,8 +160,55 @@ Listy `GET` transakcji (unified, bank, cash) otrzymują **dodatkowe pole** schem
 
 ## Repozytoria
 
-- `SettlementGroupsRepository` (nowy): CRUD + `get_by_id`, `get_id_for_member(source_type, id)`, `add_members`, `remove_member`, `delete_group`.
+- `SettlementGroupsRepository` (nowy): CRUD + `get_by_id`, `get_list(search, limit, offset)`, `get_id_for_member(source_type, id)`, `add_members`, `remove_member`, `delete_group`, agregaty pod **bilans** (sumy po `amount` z bank/cash z poprawnym znakiem).
 - Rozszerzenie zapytań w `UnifiedTransactionsRepository` oraz listach `BankTransactions` / `CashTransactions` o **jedną** kolumnę `settlement_group_id` (LEFT JOIN na `settlement_group_members`).
+
+---
+
+## Procesy powiązywania (UX)
+
+Poniżej ustalenia z brainstorningu — **v1 desktop**, spójne z sekcją „Powiązane operacje”.
+
+### Scenariusz 1 — od wydatku: nowa grupa z wyszukiwaniem
+
+1. Użytkownik jest w **szczególe transakcji bankowej** (np. Burrata). W sekcji **„Powiązane operacje”** klika akcję tworzenia (np. **„Dodaj…“**).
+2. Otwiera się **modal** z listą **pełnego zunifikowanego zestawienia** (ten sam charakter co główna lista transakcji: kolumny, sort, **wyszukiwanie tekstowe** po opisie / kontrahencie itd. — wzorzec z istniejącego ekranu unified).
+3. Wiersz **bieżącej** transakcji jest traktowany jako **„kotwica”**: pozostaje **na górze** (osobna strefa „Z wybranej transakcji” / **przypięte**), żeby **nie znikał** przy zmianie frazy w wyszukiwarce.
+4. W polu wyszukiwania użytkownik wpisuje np. **„Andrzej”** — na liście wyników zaznacza **checkbox** przy wpływie; zaznaczony wiersz ląduje w strefie przypiętych (jak punkt 3).
+5. Czyści / zmienia wyszukiwanie (np. **„Topchips”**), zaznacza **gotówkę** — kolejna przypięta pozycja.
+6. Opcjonalnie wypełnia **nazwę grupy** (pole w modalu; mapuje na `title`).
+7. **Zapisz** — jeden `POST /settlement-groups` z listą `members` odpowiadających przypiętym wierszom (łącznie z bieżącą) **lub** sekwencja `POST` grupy + `POST` members — **decyzja implementacyjna**, by zachować spójność transakcji DB; semantyka: **po zapisie** wszystkie wskazane operacje należą do jednej grupy.
+
+**Modal — minimum UX:** strefa **Przypięte** (bieżąca + zaznaczone), strefa **Wyniki wyszukiwania**; przycisk **Usuń z przypiętych** na każdym przypiętym (oprócz bieżącej, jeśli ma sens tylko jako kotwica — do drobnostki w planie).
+
+### Scenariusz 2 — późniejszy wpływ / nowa transakcja w istniejącej grupie
+
+- Wejście z **dowolnej** transakcji już w grupie (np. późniejszy wpływ od kolegi).
+- Ten sam **modal wyszukiwania** (pkt 1–5), z tą różnicą, że **domyślny tryb** to **„Dodaj do bieżącej grupy”** (pre-wybrany `group_id` z kontekstu) **albo** wybór **„Utwórz nową grupę”** (jak scen. 1). Oba warianty **nie psują** opisu: jedna ścieżka `POST .../members` do istniejącej grupy, druga `POST` nowej grupy z wieloma członkami.
+
+### Scenariusz 3 — nowa transakcja, **dołączenie do istniejącej** grupy (bez wyszukiwania wszystkich transakcji)
+
+- Użytkownik wchodzi w transakcję **jeszcze niewpiętą**; w sekcji **„Powiązane operacje”** wybiera wariant **„Dołącz do istniejącej grupy”** (język do dopracowania w copy, sens jednoznaczny).
+- Otwiera się **picker grup**: to **ten sam** zasób co **`GET /settlement-groups?search=...`** — czyli **widok listy wszystkich grup** (kolumny: tytuł, data utworzenia, liczba członków, ewentualnie skrót bilansu) z **polem wyszukiwania** po tytule / notatce.
+- Po wyborze grupy: **`POST /settlement-groups/{id}/members`** z bieżącym `source_type` + `id`.
+- Zgadza się to z tym, co wcześniej było opisane jako *„nice-to-have* `/settlement-groups`”: **lista + search jest potrzebna do tego pickera** — w spec podnosimy ją do **MVP (v1)**. Pełna strona nawigacyjna **„Wszystkie powiązane operacje”** może być tym samym komponentem co picker (osobna trasa) lub tylko ekran detalu grupy z linkami — **w planie** jeden spójny widok `GET /settlement-groups`.
+
+### Scenariusz 4 — grupa przed transakcjami (wyjazd w góry)
+
+- Użytkownik może **najpierw** utworzyć **pustą** grupę (tytuł np. **„Bieszczady 2026”**) z ekranu **`/settlement-groups`** (przycisk **„Nowa grupa”** → `POST` z `members: []`) **lub** z miejsca wyszczególnionego w nawigacji.
+- Później dodaje wydatki / wpływy: z list transakcji (akcja „Dodaj do powiązanych operacji” → wybór tej grupy) albo z modala w szczególe.
+- Wymusza to **API i reguły** dopuszczające **0 członków** — patrz inwarianty; **nawigacja** do listy grup w **v1** jest **obowiązkowa** (nie tylko nice-to-have).
+
+### Scenariusz 5 — bilans w grupie
+
+- Na **karcie / stronie** grupy (`GET /settlement-groups/{id}`) oraz w miejscu, gdzie pokazujemy skrót (lista grup): **suma wydatków**, **suma wpływów**, **netto** — neutralnie (bez czerwonego wyróżnienia „długu”); służy do szybkiej orientacji (np. częściowy zwrot 150 zł wobec 286,34 zł jest **OK**).
+
+### Warianty techniczne (część „skomplikowana”) — odniesienie
+
+| Temat | Opcje (skrót) |
+|-------|----------------|
+| Pusta grupa vs. auto-kasowanie po usunięciu członka | **(A)** brak auto-kasowania po liczniku, **(B)** kolumna statusu, **(C)** inna reguła — **wybór w planie** z testami, bez sprzeczności z pustym kontenerem wyjazdu. |
+| Zapis w modalu (jeden POST vs. wiele) | Jeden `POST` z pełną listą `members` vs. `POST` grupy + pętla `members` — wydajność i transakcja DB. |
 
 ---
 
@@ -172,24 +226,23 @@ Listy `GET` transakcji (unified, bank, cash) otrzymują **dodatkowe pole** schem
 ### Widok transakcji (detail)
 
 - Sekcja **„Powiązane operacje”**:
-  - jeśli `settlement_group_id` puste — przycisk **„Dodaj do powiązanych operacji”** (lub wariant powyżej) otwierający:
-    - tryb A: wyszukiwarka innych transakcji (data/kwota) + multiselect **albo**
-    - tryb B (v1, prostsze): użytkownik **wpisuje ID** / wybiera z ostatnich (minimalny MVP) — **rekomendacja v1:** modal w stylu **„Utwórz powiązane operacje”** z wyborem co najmniej **jednej** innej transakcji (obecna jest już znana) — dokładna iteracja UI w planie implementacji; spec domyśla, że **musi** dać się połączyć obecną stronę z co najmniej jednym innym wierszem.
-- jeśli jest w grupie: lista innych członków (linki do ich detaili) + skrót paragonów (miniaturka / data / kwota) zgodnie z `linked_receipts`.
-- **Edycja meta:** tytuł, notatka (inline lub podstrona grupy).
-- **Rozłącz** — usunięcie z grupy (z potwierdzeniem, jeśli to ostatni partner i grupa zniknie).
+  - **Brak grupy** — co najmniej dwie intencje: **(i)** **„Utwórz / dodaj wyszukiwaniem”** → modal jak w *Procesach* (zunifikowana lista + przypięcia + opcjonalna nazwa), **(ii)** **„Dołącz do istniejącej grupy”** → picker `GET /settlement-groups?search=`.
+  - **Jest w grupie** — lista pozostałych członków, **bilans** (skrót lub pełne wartości z `SettlementGroupDetail`), paragony z `linked_receipts`, akcje: **Dodaj kolejny** (ten sam modal / dołącz do tej grupy), **Rozłącz**, edycja metadanych grupy (jeśli przewidziane z tego ekranu).
+- Szczegóły modala: sekcja *Procesy powiązywania* (nie duplikować w implementation plan bez odesłania do tego miejsca).
 
-### Widok opcjonalny: `/settlement-groups` (lista wszystkich zestawów)
+### Widok **listy** `/settlement-groups` (v1)
 
-- Poza obowiązkowym MVP: **nice-to-have**; wystarczy nawigacja z ikony w liście do `GET` jednej grupy.
+- **MVP:** dedykowana strona (desktop) z listą grup, wyszukiwaniem, **„Nowa pusta grupa”**, wejściem w **detal** grupy (`/settlement-groups/{id}`) z pełnym **bilansem** i członkami.
+- Ten sam listowy endpoint obsługuje **picker** w trybie „dołącz do istniejącej” (scen. 3) — spójny komponent tabeli / listy, opcjonalnie wariant „compact” w modalu.
 
 ---
 
 ## Testy
 
-- Testy **repozytorium** (transakcja DB lub integracja z testową PG): unikalność, kasowanie grupy gdy &lt; 2 członków, 409 przy duplikacie członka.
-- Testy **API** (istniejący wzorzec `app` tests): happy path `POST` → `GET` → `DELETE` member → grupa usunięta.
-- **Zero** regresji: istniejące `receipt_*_links` — smoke po zmianach w SELECT list.
+- Testy **repozytorium** (transakcja DB lub integracja z testową PG): unikalność, **pusta grupa** + dodanie członków, **409** przy duplikacie członka, **bilans** (suma znaków) dla mieszanki wydatki + wpływy.
+- Reguła **automatycznego kasowania** po liczbie członków — testy zgodne z **wybraną w planie** opcją (A/B/C), bez sprzeczności z pustym kontenerem.
+- Testy **API** (wzorzec `app` tests): `POST` pustej, `GET` listy + `search`, `POST` members, `GET` by id z polami bilansu, ścieżka usuwania.
+- **Zero** regresji: `receipt_*_links` w SELECT list.
 
 ---
 
@@ -232,15 +285,16 @@ flowchart LR
 ## Checklist przed implementacją
 
 - [x] Nazwa w UI: **„Powiązane operacje”** (akceptacja 2026-04-22).
-- [ ] Czy tryb **v1** tworzy grupę tylko z ekranu transakcji, czy potrzebna jest osobna strona listy grup — decyzja produktowa.
-- [ ] Potwierdzenie: trigger vs repository-only dla `member_count < 2`.
+- [x] **Lista `/settlement-groups` + wyszukiwanie** w **v1** (picker + pusta grupa + wyjazd) — zapisane w *Procesach* i *UI*.
+- [ ] Ostateczna reguła **usunięcia / triggera** przy 0/1 członku (wariant A/B/C z tabeli w *Procesach*).
+- [ ] Jedna decyzja: **pojedynczy `POST` z pełnymi `members`** vs. wieloetapowe dodawanie w modalu.
 
 ---
 
-## Self-review (2026-04-22, aktualizacja nazwy 2026-04-22)
+## Self-review (2026-04-22, aktualizacje: nazwa, desktop, proces, bilans)
 
-- **Nazwa UI** — ustalone: **Powiązane operacje**; copy w sekcjach listy/detail/tooltip z tym słownictwem.
-- **Placeholdery:** brak TBD w modelu; szczegół modala (tryb A/B) pozostawiony jako decyzja implementacyjna z minimum „powiąż obecną z ≥1 inną”.
-- **Spójność:** `receipt_*_links` nienaruszone; nowe tabele ortogonalne.
-- **Scope:** ograniczony; alokacje i skany jako members poza v1.
-- **Jednoznaczność:** unikalność bank/cash per grupa, rozwiązanie grupy przy &lt; 2 członkach — jawnie opisane.
+- **Nazwa UI** — **Powiązane operacje**; sekcja *Procesy powiązywania* opisuje przepływy 1–5.
+- **Puste grupy, lista grup, bilans, modal z unified** — w spec; **otwarta decyzja** tylko co do triggera &lt;2 członków (tabela wariantów) i kształtu POST z modala.
+- **Spójność:** `receipt_*_links` nienaruszone; konflikt wcześniejszej rekomendacji triggera usunięty — zastąpiona wariantami w *Model danych* / *Procesy*.
+- **Scope v1:** szersze niż pierwotny szkic (strona listy grup obowiązkowo); dalej bez alokacji kwot w obrębie jednego wpływu.
+- **Bilans:** wymagania neutralnego UI bez „alertu czerwonego” — w *Wymaganiach* i *SettlementGroupDetail*.
