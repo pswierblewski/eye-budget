@@ -18,6 +18,46 @@ Dane referencyjne (prod): `bank_transactions` 2484 (Burrata, −450), 2481 (wpł
 
 ---
 
+## Scenariusze życiowe (referencyjne)
+
+Poniżej **spójne historie** z rozmów — nie są to wymagania testowe, tylko **obraz całości** produktu: po co grupy, jakie przypadki mają działać intuicyjnie.
+
+### A. Restauracja, paragon, kilka zwrotów (Burrata)
+
+- Płacisz kartą w **Burrata** — na wyciągu jest **jeden wydatek bankowy**; do tego samego wiersza masz już **powiązany paragon** (jak dziś przez `receipt_bank_links`).
+- Później **Andrzej** robi Ci **przelew 150 zł** (osobny wpływ na koncie).
+- Ktoś inny oddaje **150 zł gotówką** (np. „Topchips” — osobny wpis `cash_transactions`).
+- Chcesz **jednej grupy „Powiązane operacje”**, w której widać: wydatek + oba zwroty + **paragon** (wyciągnięty z linku do wydatku), bez dublowania paragonu jako osobnego „członka” w bazie.
+
+### B. Jeden przelew za dwie różne rzeczy (paliwo + jedzenie)
+
+- Masz **osobny wydatek** na stacji i **osobny** w restauracji (dwa paragony, dwie operacje bankowe).
+- Kolega **jednym przelewem** oddaje Ci pieniądze **za część obu** (np. „za paliwo z trasy i za moją pizzę”).
+- W grupie mają się znaleźć **oba wydatki** i **ten jeden wpływ** — bilans może być tylko **w przybliżeniu** „równe połówce” intencji; nie oczekujesz w systemie **alokacji kwot** między stacją a restauracją (to poza v1), tylko **czytelnego powiązania** opowieści.
+
+### C. Zwrot dopiero po czasie
+
+- Grupa już istnieje (np. scen. A). **Kilka dni później** pojawia się na koncie przelew od znajomego.
+- Wchodzisz w **tę nową transakcję** (albo w dowolną z grupy) i **dopinasz** ją do **tej samej** grupy — ten sam modal wyszukiwania / ta sama grupa z kontekstu (patrz *Procesy powiązywania*).
+
+### D. Wyjazd w góry — grupa zanim pojawią się wydatki
+
+- Szykuje się **wielodniowy wyjazd** ze znajomymi; rozliczenia będą **co kilka dni** albo **na koniec**, gdy zbiorzysz wszystkie koszty.
+- **Najpierw** tworzysz **pustą grupę** (np. tytuł „Bieszczady 2026”), **bez** jeszcze żadnej transakcji w środku.
+- W trakcie i po wyjeździe **dokładasz** wydatki i wpływy do tej grupy — jeden wspólny „worek” rozliczeniowy.
+
+### E. Bilans orientacyjny (częściowy zwrot)
+
+- W grupie jest np. wydatek **286,34 zł** i wpływ **150 zł** — wiesz, że to **„w założeniu połowa”**, a nie błąd w danych.
+- W UI pokazujesz **sumę wydatków, sumę wpływów, różnicę** jako **informację neutralną** (bez czerwonego alarmu), żeby szybko zobaczyć, czy jesteście w okolicy rozliczenia — **nie** jako windykację ani status długu.
+
+### F. Dołączenie samotnej operacji do istniejącej grupy (picker)
+
+- Pojawia się **nowa** transakcja (np. świeży wpływ); chcesz ją **wpiąć w już utworzoną grupę** bez przeszukiwania całej historii jak przy tworzeniu od zera.
+- Z poziomu szczegółu wybierasz **listę istniejących grup** (wyszukiwanie po tytule) i **dołączasz** — to ten sam widok danych co strona `/settlement-groups` / `GET` z parametrem `search`.
+
+---
+
 ## Stosunek do istniejących linków
 
 | Mechanizm | Znaczenie | Zmiana w tym feature |
@@ -295,6 +335,7 @@ flowchart LR
 
 - **Nazwa UI** — **Powiązane operacje**; sekcja *Procesy powiązywania* opisuje przepływy 1–5.
 - **Puste grupy, lista grup, bilans, modal z unified** — w spec; **otwarta decyzja** tylko co do triggera &lt;2 członków (tabela wariantów) i kształtu POST z modala.
+- **Scenariusze życiowe (A–F)** — referencyjne opowieści użytkownika; ułatwiają pełny obraz bez czytania tylko modelu technicznego.
 - **Spójność:** `receipt_*_links` nienaruszone; konflikt wcześniejszej rekomendacji triggera usunięty — zastąpiona wariantami w *Model danych* / *Procesy*.
 - **Scope v1:** szersze niż pierwotny szkic (strona listy grup obowiązkowo); dalej bez alokacji kwot w obrębie jednego wpływu.
 - **Bilans:** wymagania neutralnego UI bez „alertu czerwonego” — w *Wymaganiach* i *SettlementGroupDetail*.
