@@ -48,7 +48,8 @@ Poniżej: **pełne ścieżki**, powiązania i kolejność, żeby nic nie zostawi
 | Plik | Rola |
 |------|------|
 | `frontend/app/settlement-groups/page.tsx` | Lista: `"use client"`, tabela, `useQuery` z `listSettlementGroups`, pole szukaj, przycisk nowej pustej grupy, nawigacja do `/settlement-groups/[id]`, badge (patrz spec). |
-| `frontend/app/settlement-groups/[id]/page.tsx` | Detal: `useQuery` + `getSettlementGroup`, bilans, lista członków z `Link` do `/bank-transactions/[id]` i `/cash-transactions` (dla gotówki: tylko lista bez `[id]` — ewent. anchor/query `?highlight=` w przyszłości; w v1 wystarczy link do strony listy z filtrem albo tylko ID w tooltipie — **do decyzji implementacyjnej**: minimalnie link tylko dla banku, gotówka bez osobnej podstrony). |
+| `frontend/app/settlement-groups/[id]/page.tsx` | Detal: `useQuery` + `getSettlementGroup`, bilans, lista członków z `Link` do `/bank-transactions/[id]` (**bank**) i **`/cash-transactions/[id]`** (**gotówka** — po dodaniu prostego detailu, patrz wiersz poniżej). |
+| `frontend/app/cash-transactions/[id]/page.tsx` | **Nowy, prosty widok** pojedynczej transakcji gotówkowej. Źródło danych: istniejące `getCashTransaction(id)` → `CashTransactionDetail`. **Zakres treści = to, co widać w kolumnach wiersza** na `cash-transactions/page.tsx` (bez kopiowania całego `ExpandedRowContent`): data (`isoToDisplay(booking_date)`), opis / sklep (jak w kolumnie: `vendor_name` + ewent. druga linia `description`), **kwota** (`Amount`), **kategoria** (gałąź z paragonu vs ręczna — jak w kolumnie `Kategoria`: `receipt_category_name` / `receipt_category_count` vs `category_name`), **źródło** (`SourceBadge`), **tagi** (`Pill`). Layout: `PageHeader` + sekcje (`SectionLabel`) lub jedna karta — spójnie z `bank-transactions/[id]/page.tsx` (uprość). Link **Wstecz** do `/cash-transactions`. Sekcja **„Powiązane operacje”** (ten sam komponent / wzorzec co bank) **w zakresie tego samego feature** — w planie: umieścić ją na tej stronie albo zaimportować wspólny `SettlementSection` gdy będzie. |
 | `frontend/components/SettlementGroupBadge.tsx` (lub w `ui/`) | Mały **badge** z liczbą: `CountBadge` / `Badge` + `className` warunkowe dla `count === 0` — re-use na stronie listy i w pickerze. |
 | `frontend/components/SettlementGroupPickerModal.tsx` | Tabela/compact lista z tych samych danych co strona główna grup; wyszukiwanie; wybór → callback `onSelect(groupId)`; w środku `listSettlementGroups` + ten sam komponent badge. |
 | `frontend/components/LinkOperationsModal.tsx` (nazwa robocza) | Modal: strefa przypiętych, lista zunifikowana (najpewniej wyciągnąć fragment tabeli z `app/page.tsx` albo wspólny `UnifiedTransactionsPickerTable` w `components/`). Walidacja ≥2 łącznie → `createSettlementGroup`. |
@@ -60,10 +61,10 @@ Poniżej: **pełne ścieżki**, powiązania i kolejność, żeby nic nie zostawi
 | `frontend/lib/types.ts` | Schematy Zod dla wszystkich DTO z `data.py`; rozszerzenie schematów `UnifiedTransaction`, `BankTransactionListItem`, `CashTransactionListItem` (+ detale, jeśli używane w UI). |
 | `frontend/lib/api.ts` | Funkcje: `listSettlementGroups`, `getSettlementGroup`, `getSettlementGroupByTransaction`, `createSettlementGroup`, `updateSettlementGroup`, `deleteSettlementGroup`, `addSettlementGroupMember`, `removeSettlementGroupMember` — każda woła odpowiedni `fetch` na `/api/settlement-groups/...`. |
 | `frontend/components/Sidebar.tsx` | Nowy `navItems`: `{ href: "/settlement-groups", label: "…", icon: Link2 }` (lub `Users` — unikać ikony sugerującej „split”) — pozycja względem „Budżet” wg UX; w tym pliku `navItems` jest jedną tablicą. |
-| `frontend/app/page.tsx` | Kolumna z ikoną `Link2` gdy `settlement_group_id` ustawione; `Link` do `/settlement-groups/{id}`. Mutacje: `invalidateQueries` dla `settlement-groups` po zmianach. |
+| `frontend/app/page.tsx` | Kolumna z ikoną `Link2` gdy `settlement_group_id` ustawione; `Link` do `/settlement-groups/{id}`. **Poprawka linku gotówki:** w `UnifiedTxExpandedRow` (lub gdzie jest `detailHref`) obecnie `row.source_type === "cash"` → `href: "/cash-transactions"` — po dodaniu `cash-transactions/[id]/page.tsx` ustawić na **`/cash-transactions/${row.id}`** (jak dla banku). Mutacje: `invalidateQueries` dla `settlement-groups` po zmianach. |
 | `frontend/app/bank-transactions/page.tsx` | Ta sama kolumna (jeśli tabela główna; jeśli tylko link do `/bank-transactions/[id]`, tylko ikonka w wierszu). |
 | `frontend/app/bank-transactions/[id]/page.tsx` | Nowa sekcja „Powiązane operacje”: stan z `getSettlementGroupByTransaction` albo `settlement_group_id` z `getBankTransaction`; CTA, modale. |
-| `frontend/app/cash-transactions/page.tsx` | **Brak** `cash-transactions/[id]/page.tsx` w repo — cały UX gotówki siedzi na jednej stronie. Dodać sekcję/ panel powiązań w **tym** pliku (ten sam wzorzec co w bank: expanded row, modal, lub wyciągnięty panel obok tabeli). |
+| `frontend/app/cash-transactions/page.tsx` | (1) Dodać **nawigację do detailu** — np. `Link` z daty, opisu lub osobna kolumna / ikona strzałki → `/cash-transactions/[id]` (żeby z listy dało się wejść w prosty widok). (2) Rozszerzony wiersz (`ExpandedRowContent`) zostaje do pełnej edycji; **sekcja „Powiązane operacje”** docelowo też na **`/cash-transactions/[id]`** (spójność z bankiem) — ewent. duplikacja krótka: najpierw detail + sekcja, później opcjonalnie skrót w expandzie. |
 
 ### Migracja — jedna linia do skopiowania
 
@@ -123,7 +124,7 @@ depends: 20260421_01_wynagrodzenie-category-parent
 
 - [ ] **5.1 `/settlement-groups`** — tabela/karty: tytuł, data, **`member_count` jako Badge**; **`member_count === 0`** — inna klasa (np. `variant` z `components/ui` / stonowany kolor, **nie** czerwony błąd). Wyszukiwanie po `search`, paginacja, przycisk **„Nowa pusta grupa”** → `POST { members: [] }` z opcjonalnym tytułem w dialogu.
 
-- [ ] **5.2 `/settlement-groups/[id]`** — tytuł, notatka, bilans (neutralny), lista członków z linkami do `/bank-transactions/...` lub `/cash-transactions/...`, skrót paragonów, akcja **Usuń grupę** (potwierdzenie), edycja `PATCH` title/note jeśli w specu.
+- [ ] **5.2 `/settlement-groups/[id]`** — tytuł, notatka, bilans (neutralny), lista członków z linkami do `/bank-transactions/{id}` (**bank**) i `/cash-transactions/{id}` (**gotówka**; wymaga istniejącej strony z *Mapy*). Skrót paragonów, akcja **Usuń grupę** (potwierdzenie), edycja `PATCH` title/note jeśli w specu.
 
 - [ ] **5.3 Picker (modal)** — wspólny komponent listy z `GET /settlement-groups?search=` (compact); te same reguły badge dla 0.
 
@@ -133,13 +134,17 @@ depends: 20260421_01_wynagrodzenie-category-parent
 
 ## Faza 6 — UI: transakcje (detail + listy)
 
-- [ ] **6.1 Sekcja „Powiązane operacje”** na stronie detalu **transakcji bankowej** (i gotówkowej, jeśli jest osobny detail):  
-  - brak `settlement_group_id` → CTA: **Utwórz** (otwarcie modala z unified list + przypięcia; walidacja ≥2 łącznie przed `POST`) oraz **Dołącz do istniejącej** (picker).  
-  - jest w grupie → `GET` grupy (`by-transaction` lub `/{id}`), lista pozostałych, paragony, bilans, dodawanie kolejnych (`POST members` / modal), rozłącz / usuń z grupy.
+- [ ] **6.0 Prosty detail gotówki (wymaga wcześniej niż pełne „Powiązane” na gotówce, jeśli linki z grup mają działać)** — plik: `frontend/app/cash-transactions/[id]/page.tsx`. `useQuery` + `getCashTransaction` + `useParams`. Treść: **tylko pola odpowiadające kolumnom tabeli** (patrz *Mapa* / `columns` w `cash-transactions/page.tsx`: Data, Opis/sklep, Kwota, Kategoria, Źródło, Tagi). **Bez** obowiązku przenoszenia edycji kategorii / paragonu z `ExpandedRowContent` w v1 (zostają na liście w expandzie). Dopisek: proxy `GET` już jest (`frontend/app/api/cash-transactions/[id]/route.ts`); nowa strona tylko w `app/`.
+
+- [ ] **6.0b** `frontend/app/cash-transactions/page.tsx` — dodać linki do `/cash-transactions/[id]` (wiersz tabeli), żeby UX był spójny z bankiem. **`frontend/app/page.tsx`:** zaktualizować `detailHref` dla wierszy `source_type === "cash"` (z *Mapy*).
+
+- [ ] **6.1 Sekcja „Powiązane operacje”** na stronie detalu **transakcji bankowej** (`bank-transactions/[id]/page.tsx`) oraz na **nowym** detalu gotówki (`cash-transactions/[id]/page.tsx`):  
+  - brak `settlement_group_id` → CTA: **Utwórz** (modal) oraz **Dołącz do istniejącej** (picker).  
+  - jest w grupie → `GET` grupy, lista pozostałych, paragony, bilans, dodawanie / rozłącz.
 
 - [ ] **6.2 Modal z listą zunifikowaną** — reuse komponentów / stylu z `app/page.tsx` (tabela, filtry, search); strefa **Przypięte**; wykluczyć z wyników wyszukiwania zduplikowane id; `POST` jednym requestem.
 
-- [ ] **6.3 Ikona na listach** — `frontend/app/page.tsx`, `bank-transactions/page.tsx`, `cash-transactions/page.tsx` (oraz wiersz rozwijany, jeśli dotyczy): kolumna z ikoną gdy `settlement_group_id` ustawione; klik opcjonalnie → `/settlement-groups/{id}`.
+- [ ] **6.3 Ikona na listach** — `frontend/app/page.tsx`, `bank-transactions/page.tsx`, `cash-transactions/page.tsx`: kolumna z ikoną gdy `settlement_group_id` ustawione; klik opcjonalnie → `/settlement-groups/{id}`.
 
 ---
 
@@ -161,9 +166,10 @@ depends: 20260421_01_wynagrodzenie-category-parent
 
 1. Migracja + repo + modele + trasy + testy API.  
 2. Rozszerzenie list transakcji o `settlement_group_id`.  
-3. Strony `/settlement-groups` + sidebar.  
-4. Sekcja + modale na detailach + ikony na listach.  
-5. Testy E2E manualne, wersja, status speca.
+3. **`/cash-transactions/[id]`** (prosty detail) + linki z listy gotówki.  
+4. Strony `/settlement-groups` + sidebar.  
+5. Sekcja „Powiązane operacje” + modale na `bank-transactions/[id]`, `cash-transactions/[id]`, ikony na listach.  
+6. Testy E2E manualne, wersja.
 
 ---
 
@@ -172,6 +178,6 @@ depends: 20260421_01_wynagrodzenie-category-parent
 - **Bilans:** ujednolicić znak `amount` (wyciąg: wydatki ujemne) — spisać w teście jedną tabelkę przykładów.  
 - **CASCADE:** usunięcie transakcji usunie tylko membership; pusta grupa zostaje — użytkownik sprząta z listy (badge „0” ma to ułatwiać).  
 - **Wydajność:** `member_count` na liście grup — lepiej w jednym zapytaniu niż N+1.  
-- **Gotówka bez `/cash-transactions/[id]`:** link z detalu grupy do pojedynczej operacji gotówkowej może w v1 ograniczyć się do **listy** z wyszukiwaniem / zaznaczeniem w tabeli albo tylko wyświetlenia id — opisane w *Mapie*; pełna podstrona opcjonalnie później.  
+- **Spójność list/detail gotówki:** prosty `/cash-transactions/[id]` nie zastępuje expanded row — użytkownik nadal może edytować z listy; uniknąć rozjazdu copy (ta sama logika etykiet kolumn).  
 - **FastAPI path conflict:** upewnić się, że `.../by-transaction` nie mapuje się na `{id}` (test uruchomieniowy: `GET` z `source_type`/`transaction_id`).  
 - **DELETE member:** jeśli backend wymaga body, a `proxyDelete` nie przekazuje ciała — użyć `DELETE` z query string albo dodać cienką obudowę w `proxy.ts` (tylko jeśli konieczne; preferowane: query, jak w specu).
