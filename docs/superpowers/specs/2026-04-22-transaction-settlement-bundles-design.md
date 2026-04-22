@@ -285,14 +285,29 @@ To **gryzie się** z ważnym przypadkiem użycia: **pusta grupa** utworzona **z 
 
 ### Widok transakcji (detail)
 
-- Sekcja **„Powiązane operacje”**:
-  - **Brak grupy** — co najmniej dwie intencje: **(i)** **„Utwórz / dodaj wyszukiwaniem”** → modal jak w *Procesach* (zunifikowana lista + przypięcia + opcjonalna nazwa), **(ii)** **„Dołącz do istniejącej grupy”** → picker `GET /settlement-groups?search=`.
-  - **Jest w grupie** — lista pozostałych członków, **bilans** (skrót lub pełne wartości z `SettlementGroupDetail`), paragony z `linked_receipts`, akcje: **Dodaj kolejny** (ten sam modal / dołącz do tej grupy), **Rozłącz**, edycja metadanych grupy (jeśli przewidziane z tego ekranu).
-- Szczegóły modala: sekcja *Procesy powiązywania* (nie duplikować w implementation plan bez odesłania do tego miejsca).
+#### Transakcja bankowa
+
+- Istniejąca strona **`/bank-transactions/{id}`** — rozszerzenie o sekcję **„Powiązane operacje”** (poniżej ten sam zestaw zachowań co dla gotówki).
+
+#### Transakcja gotówkowa — nowy prosty szczegół (`/cash-transactions/{id}`)
+
+- W **v1** obowiązuje **osobna strona** szczegółu gotówki pod adresem **`/cash-transactions/{id}`**, analogicznie do banku (głęboki link z grup, z listy zunifikowanej i z listy gotówki).
+- **Zakres treści strony:** ograniczony do tego, co użytkownik widzi w **kolumnach wiersza** na liście `/cash-transactions`: data, opis / sklep, kwota, kategoria (w tym wariant z paragonem jak w kolumnie), źródło, tagi. **Nie** wymaga się w v1 przeniesienia całego rozbudowanego panelu z **rozwiniętego wiersza** (edycja kategorii, powiązanie paragonu, itd.) — ten tryb pozostaje na liście.
+- Nawigacja: link powrotu do **`/cash-transactions`**; ewentualnie spójny nagłówek strony jak na innych detailach.
+
+#### Sekcja **„Powiązane operacje”** (bank i gotówka)
+
+- **Brak grupy** — co najmniej dwie intencje: **(i)** **„Utwórz / dodaj wyszukiwaniem”** → modal jak w *Procesach* (zunifikowana lista + przypięcia + opcjonalna nazwa), **(ii)** **„Dołącz do istniejącej grupy”** → picker `GET /settlement-groups?search=`.
+- **Jest w grupie** — lista pozostałych członków, **bilans** (skrót lub pełne wartości z `SettlementGroupDetail`), paragony z `linked_receipts`, akcje: **Dodaj kolejny** (ten sam modal / dołącz do tej grupy), **Rozłącz**, edycja metadanych grupy (jeśli przewidziane z tego ekranu).
+- Szczegóły modala: sekcja *Procesy powiązywania*; implementacja: plan repozytorium.
+
+#### Lista zunifikowana — link do gotówki
+
+- Dla wiersza ze `source_type = cash` link prowadzący do szczegółu transakcji musi wskazywać **`/cash-transactions/{id}`**, a nie tylko listę `/cash-transactions` — **spójność** z bankiem i z detalem grupy.
 
 ### Widok **listy** `/settlement-groups` (v1)
 
-- **MVP:** dedykowana strona (desktop) z listą grup, wyszukiwaniem, **„Nowa pusta grupa”**, wejściem w **detal** grupy (`/settlement-groups/{id}`) z pełnym **bilansem** i członkami.
+- **MVP:** dedykowana strona (desktop) z listą grup, wyszukiwaniem, **„Nowa pusta grupa”**, wejściem w **detal** grupy (`/settlement-groups/{id}`) z pełnym **bilansem** i członkami. Przy każdym członku: link do **`/bank-transactions/{id}`** lub **`/cash-transactions/{id}`** (prosty detail gotówki — patrz wyżej).
 - **Badge liczby członków (wymagane):** w każdym wierszu listy (lub czytelnym odpowiedniku) widoczny **badge** z liczbą `member_count` (np. „3” lub copy „3 operacje” — ostateczna forma w copy, sens: ile wierszy z bank/cash jest w grupie). Dla **`member_count = 0`** — **inny wariant kolorystyczny** niż dla `>= 1` (np. stonowany / secondary w design systemie), **bez** czerwieni błędu — tylko odróżnienie „pusta grupa / szkielet przed wydatkami” od „grupa z już podpiętymi operacjami”. A11y: liczba lub tekst czytany przez czytnik.
 - Ten sam listowy endpoint obsługuje **picker** w trybie „dołącz do istniejącej” (scen. 3) — spójny komponent tabeli / listy, opcjonalnie wariant „compact” w modalu; **picker** też **pokazuje** `member_count` (i ten sam wzorzec badge dla 0, jeśli mieści się w UI modala).
 
@@ -328,8 +343,12 @@ flowchart LR
     U[Unified / Bank / Cash]
   end
   subgraph detail [Szczegół transakcji]
+    Bd["/bank-transactions/…"]
+    Cd["/cash-transactions/…"]
     D[Sekcja Powiązane operacje]
   end
+  Bd --> D
+  Cd --> D
   subgraph api [API]
     G[GET settlement-groups]
     T[by-transaction]
@@ -349,14 +368,15 @@ flowchart LR
 - [x] **Lista `/settlement-groups` + wyszukiwanie** w **v1** (picker + pusta grupa + wyjazd) — zapisane w *Procesach* i *UI*.
 - [x] Reguła usunięcia: **(A)** — tylko ręcznie, bez triggera po liczniku (2026-04-22). **Lista grup:** badge `member_count`, **inny** styl dla 0. Wyjaśnienie dylematu: podsekcja *Co to znaczy: «ostateczna reguła…»* w *Procesach*.
 - [x] **Tworzenie grupy z modala:** pojedynczy `POST /settlement-groups` z pełnym `members` (akceptacja 2026-04-22; typowa liczba członków &lt; 5).
+- [x] **Szczegół gotówki** `/cash-transactions/{id}` + linki z listy / unified (aktualizacja 2026-04-23).
 
 ---
 
-## Self-review (2026-04-22, aktualizacje: nazwa, desktop, proces, bilans)
+## Self-review (2026-04-22, aktualizacje: nazwa, desktop, proces, bilans, cash detail 2026-04-23)
 
 - **Nazwa UI** — **Powiązane operacje**; sekcja *Procesy powiązywania* opisuje przepływy 1–5.
 - **Puste grupy, lista grup, bilans, modal z unified** — w spec. **Usuwanie grupy:** wariant **(A)**. **POST z modala** — ustalone: **jeden request** z pełnymi `members`. **Lista grup** — badge członków, odróżnienie dla 0.
 - **Scenariusze życiowe (A–F)** — referencyjne opowieści użytkownika; ułatwiają pełny obraz bez czytania tylko modelu technicznego.
 - **Spójność:** `receipt_*_links` nienaruszone; brak auto-kasowania `settlement_groups` po liczniku członków.
-- **Scope v1:** szersze niż pierwotny szkic (strona listy grup obowiązkowo); dalej bez alokacji kwot w obrębie jednego wpływu.
+- **Scope v1:** strona listy grup obowiązkowo; **prosty** `/cash-transactions/{id}` dla linków z grup i nawigacji; dalej bez alokacji kwot w obrębie jednego wpływu.
 - **Bilans:** wymagania neutralnego UI bez „alertu czerwonego” — w *Wymaganiach* i *SettlementGroupDetail*.
