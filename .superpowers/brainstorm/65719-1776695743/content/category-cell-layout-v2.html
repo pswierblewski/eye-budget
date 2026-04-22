@@ -1,0 +1,86 @@
+<h2>Wariant A — dopasowanie do design systemu eye-budget</h2>
+<p class="subtitle">
+  Kolory i rozmiary jak w <code>tailwind.config.ts</code> oraz komponentach:
+  nagłówek tabeli <code>bg-[#f6f9fc]</code>, komórki <code>px-4 py-3</code>, kategoria <code>text-xs</code>,
+  przycisk jak <code>Button variant=&quot;secondary&quot; size=&quot;sm&quot;</code> (border gray-300, text-xs, rounded-md).
+  Akcent sortowania: <code>text-accent</code> → <strong style="color:#635bff">#635bff</strong>.
+</p>
+
+<div class="section">
+  <div class="mockup">
+    <div class="mockup-header">Fragment tabeli — jeden wiersz + nagłówek (skrócone kolumny)</div>
+    <div class="mockup-body" style="overflow-x:auto;">
+      <div
+        style="font-family:Inter,system-ui,sans-serif;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;min-width:520px;"
+      >
+        <table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:0.875rem;">
+          <thead>
+            <tr style="background:#f6f9fc;border-bottom:1px solid #e5e7eb;">
+              <th style="width:32px;padding:12px;"></th>
+              <th
+                style="padding:12px 16px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:#6b7280;white-space:nowrap;"
+              >
+                Data
+              </th>
+              <th
+                style="padding:12px 16px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:#6b7280;"
+              >
+                Kwota
+              </th>
+              <th
+                style="padding:12px 16px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:#635bff;"
+              >
+                Kategoria <span style="font-size:10px;">↓</span>
+              </th>
+              <th style="width:32px;padding:12px;"></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr style="border-bottom:1px solid #f3f4f6;">
+              <td style="padding:12px 12px;color:#9ca3af;text-align:center;">›</td>
+              <td style="padding:12px 16px;font-family:ui-monospace,monospace;font-size:12px;color:#4b5563;white-space:nowrap;">
+                15.04.2026
+              </td>
+              <td style="padding:12px 16px;text-align:right;font-size:14px;color:#374151;">−120,50 zł</td>
+              <td style="padding:12px 16px;">
+                <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;max-width:220px;">
+                  <span style="font-size:12px;color:#6b7280;">AI:</span>
+                  <span style="font-size:12px;color:#374151;font-weight:500;">Jedzenie</span>
+                  <span style="font-size:12px;color:#9ca3af;">0,87</span>
+                  <button
+                    type="button"
+                    style="font-size:12px;line-height:1;font-weight:500;padding:6px 12px;border-radius:6px;border:1px solid #d1d5db;background:#fff;color:#374151;cursor:default;"
+                  >
+                    Zapisz kategorię
+                  </button>
+                </div>
+              </td>
+              <td style="padding:12px;text-align:center;color:#9ca3af;">→</td>
+            </tr>
+          </tbody>
+        </table>
+        <div
+          style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-top:1px solid #e5e7eb;background:#f6f9fc;font-size:12px;color:#4b5563;"
+        >
+          <span>1–50 z 240</span>
+          <span>‹ 1 / 5 ›</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3 style="font-size:1rem;">Stan referencyjny (bez propozycji AI)</h3>
+  <p class="subtitle" style="margin-bottom:0.75rem;">Jak dziś — <code>italic text-gray-400 text-xs</code></p>
+  <div
+    style="font-family:Inter,system-ui,sans-serif;border:1px solid #e5e7eb;border-radius:12px;padding:12px 16px;background:#fff;"
+  >
+    <span style="font-size:12px;color:#9ca3af;font-style:italic;">Nie przypisano</span>
+  </div>
+</div>
+
+<p class="subtitle" style="margin-top:1.5rem;margin-bottom:0;">
+  Otwórz podgląd companiona — serwer pokazuje <strong>najnowszy</strong> plik HTML z katalogu <code>content/</code>.
+  Jeśli ekran nie odświeżył się, przeładuj stronę (Ctrl+R).
+</p>

@@ -1,6 +1,6 @@
 # eye-budget — kontekst dla agenta
 
-> Ostatnia aktualizacja: 2026-04-21
+> Ostatnia aktualizacja: 2026-04-22
 
 ## Co to jest
 Aplikacja do budżetu domowego: OCR paragonów (PaddleOCR + OpenAI), transakcje bankowe/gotówkowe, kategoryzacja i przegląd danych.
@@ -17,13 +17,13 @@ Dla agenta: zwięzły opis repo; szczegóły frontend/backend w `frontend/AGENTS
 - `frontend/components/ui/` — primitives (`index.ts` przed nowym UI)
 - `backend/src/` — `main.py` (route’y), `data.py` (Pydantic), `services/`, `repositories/`, `tasks/`, `version.py`, `bank_category_top.py`, `bank_inflow_salary_rules.py` (reguły pensji przed LLM)
 - `backend/migrations/` — Yoyo SQL
-- `specs/` oraz `docs/superpowers/` (`specs/` + `plans/`) — opisy funkcji i zatwierdzone plany (superpowers)
+- `specs/`, `docs/superpowers/`, `.cursor/skills/` — specyfikacje, plany superpowers, skille (m.in. diagnostyka DB/MinIO)
 
 ## Jak pracować
 - Frontend: `cd frontend && npm install && npm run dev` → :3000; `npm run lint`; testy: `npm run test:run`
-- Backend: venv (np. `backend/.venv311`), `pip install -r requirements.txt` (+ test deps); `uvicorn src.main:app --reload --host 0.0.0.0 --port 8000` (README bywa 8080 — zgodnie z `.env` / `BACKEND_URL`)
+- Backend: **`backend/.venv`**, `pip install -r requirements.txt` (+ test deps); `uvicorn src.main:app --reload --host 0.0.0.0 --port 8000` (README bywa 8080 — zgodnie z `.env` / `BACKEND_URL`)
 - Docker: `docker compose up` — backend na hoście **:8001** (8001→8000 w kontenerze)
-- DB: `cd backend && yoyo apply`; testy: `.venv/bin/python -m pytest` (`tests/unit/`, `tests/integration/`), coverage: `.coveragerc` → `source = src`
+- DB: `cd backend && yoyo apply`; testy: `backend/.venv/bin/python -m pytest` (`tests/unit/`, `tests/integration/`), coverage: `.coveragerc` → `source = src`
 - UI: copy po polsku
 
 ## Kluczowe decyzje
@@ -34,7 +34,7 @@ Dla agenta: zwięzły opis repo; szczegóły frontend/backend w `frontend/AGENTS
 - **Wersjonowanie przy ukończeniu pracy (merge-ready):** podbij **tylko** te składowe, których kod faktycznie dotknąłeś. **Tylko backend** → `backend/src/version.py` + `backend/tests/unit/test_version.py`. **Tylko frontend** → `frontend/package.json` + zgodne pola `version` w `frontend/package-lock.json` (root i `packages[""]`). **Zmiany w obu** → osobny bump każdej strony (numery mogą się różnić). Semver: zwykle **minor** przy nowej funkcji użytkowej, **patch** przy samych poprawkach — **osobno** dla FE i BE. Zob. też `.cursor/rules/00-core.mdc` → *Version bumps*.
 
 ## Gotchas i ograniczenia
-- Nie czytaj ani nie zmieniaj `.env`, `backend/.env` ani `backend/yoyo.ini` (sekrety)
+- **Sekrety:** nie zmieniaj w repo ani nie commituj `.env`, **`.env.agent`**, `backend/.env`, `backend/yoyo.ini`. Ad-hoc PostgreSQL / MinIO przy implementacji: **`.env.agent`** (root) + **`backend/.venv/bin/python`** — szczegóły w `AGENTS.md` → `.cursor/skills/eye-budget-db-check` i `eye-budget-minio-check` (bez wklejania kluczy do czatu).
 - **Git / GitHub:** `origin` to **`git@personal:…`** — w `~/.ssh/config` host **`personal`** → `github.com` + właściwy `IdentityFile`. Test: `ssh -T git@personal`. Samo `git@github.com` bez tego aliasu często nie ma klucza (np. w sandboxie agenta).
 - Różne porty backendu (8000 / 8080 / 8001 przy Dockerze) — sprawdź przed debugowaniem CORS/proxy
 - Nowe UI primitives tylko po konsultacji z `components/ui/index.ts`; nowe katalogi top-level — po uzgodnieniu

@@ -90,6 +90,10 @@ HTTP request
 See `.env.example` at the repo root for the full list.
 Key vars: `POSTGRESQL_*`, `OPENAI_API_KEY`, `MINIO_*`, `REDIS_URL`, `SOKETI_*`.
 
+**Ad-hoc DB diagnostics (live PostgreSQL):** follow project skill **`.cursor/skills/eye-budget-db-check/SKILL.md`** — load **`.env.agent`** from repo root, use **`backend/.venv/bin/python`**, match `EyeBudgetDbContext` env names (`POSTGRESQL_DB`, not `POSTGRESQL_DATABASE`), parameterized SQL (`%s`).
+
+**Ad-hoc MinIO diagnostics:** follow **`.cursor/skills/eye-budget-minio-check/SKILL.md`** — `load_dotenv(".env.agent")`, **`backend/.venv/bin/python`**, match `MinioStorageService` (`MINIO_ENDPOINT` without scheme, `MINIO_SECURE` string → bool); prefer read-only keys for list/stat/get only.
+
 ## Testing
 
 ### Quick reference

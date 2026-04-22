@@ -16,3 +16,5 @@ Po zakończeniu implementacji, zanim uznać PR za merge-ready: **podbij semver t
 - **`CLAUDE.md`** — stack, komendy, workflow `specs/`, skrót dla Claude Code.
 - **`.cursor/rules/00-core.mdc`** — stałe reguły monorepo w Cursorze (kontrakt API, język UI, sekrety).
 - **`frontend/AGENTS.md`** / **`backend/AGENTS.md`** — konwencje i „TL;DR” dla danej aplikacji.
+- **`.cursor/skills/eye-budget-db-check/SKILL.md`** — diagnostyka i walidacja danych w PostgreSQL podczas implementacji (`.env.agent`, `backend/.venv`, read-only gdy dostępne); stosuj przy ad-hoc zapytaniach do żywej bazy.
+- **`.cursor/skills/eye-budget-minio-check/SKILL.md`** — diagnostyka MinIO (bucket, listowanie kluczy, `secure`/endpoint) podczas implementacji; te same zasady: `.env.agent`, `backend/.venv`, preferuj konto read-only do odczytu.
