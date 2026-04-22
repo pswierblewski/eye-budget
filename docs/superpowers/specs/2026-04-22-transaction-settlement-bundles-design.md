@@ -217,7 +217,7 @@ Poniżej ustalenia z brainstorningu — **v1 desktop**, spójne z sekcją „Pow
 4. W polu wyszukiwania użytkownik wpisuje np. **„Andrzej”** — na liście wyników zaznacza **checkbox** przy wpływie; zaznaczony wiersz ląduje w strefie przypiętych (jak punkt 3).
 5. Czyści / zmienia wyszukiwanie (np. **„Topchips”**), zaznacza **gotówkę** — kolejna przypięta pozycja.
 6. Opcjonalnie wypełnia **nazwę grupy** (pole w modalu; mapuje na `title`).
-7. **Zapisz** — jeden `POST /settlement-groups` z listą `members` odpowiadających przypiętym wierszom (łącznie z bieżącą) **lub** sekwencja `POST` grupy + `POST` members — **decyzja implementacyjna**, by zachować spójność transakcji DB; semantyka: **po zapisie** wszystkie wskazane operacje należą do jednej grupy.
+7. **Zapisz** — **jeden** `POST /settlement-groups` z pełną listą `members` odpowiadającą przypiętym wierszom (łącznie z bieżącą), w jednej transakcji DB po stronie backendu. **Ustalenie (2026-04-22):** brak wieloetapowego tworzenia z modala — liczba członków w praktyce **&lt; 5**, więc pojedynczy request jest prostszy i wystarczający.
 
 **Modal — minimum UX:** strefa **Przypięte** (bieżąca + zaznaczone), strefa **Wyniki wyszukiwania**; przycisk **Usuń z przypiętych** na każdym przypiętym (oprócz bieżącej, jeśli ma sens tylko jako kotwica — do drobnostki w planie).
 
@@ -248,7 +248,7 @@ Poniżej ustalenia z brainstorningu — **v1 desktop**, spójne z sekcją „Pow
 | Temat | Opcje (skrót) |
 |-------|----------------|
 | Pusta grupa vs. auto-kasowanie po usunięciu członka | **(A)** brak auto-kasowania po liczniku, **(B)** kolumna statusu, **(C)** inna reguła — **wybór w planie** z testami, bez sprzeczności z pustym kontenerem wyjazdu. |
-| Zapis w modalu (jeden POST vs. wiele) | Jeden `POST` z pełną listą `members` vs. `POST` grupy + pętla `members` — wydajność i transakcja DB. |
+| Zapis przy **tworzeniu nowej grupy** z modala | **Ustalone:** jeden `POST /settlement-groups` z pełną listą `members` (typowe &lt; 5 pozycji). *Dodawanie pojedynczej operacji do już istniejącej grupy* — nadal **`POST /settlement-groups/{id}/members`** (jeden członek na request). |
 
 ---
 
@@ -327,14 +327,14 @@ flowchart LR
 - [x] Nazwa w UI: **„Powiązane operacje”** (akceptacja 2026-04-22).
 - [x] **Lista `/settlement-groups` + wyszukiwanie** w **v1** (picker + pusta grupa + wyjazd) — zapisane w *Procesach* i *UI*.
 - [ ] Ostateczna reguła **usunięcia / triggera** przy 0/1 członku (wariant A/B/C z tabeli w *Procesach*).
-- [ ] Jedna decyzja: **pojedynczy `POST` z pełnymi `members`** vs. wieloetapowe dodawanie w modalu.
+- [x] **Tworzenie grupy z modala:** pojedynczy `POST /settlement-groups` z pełnym `members` (akceptacja 2026-04-22; typowa liczba członków &lt; 5).
 
 ---
 
 ## Self-review (2026-04-22, aktualizacje: nazwa, desktop, proces, bilans)
 
 - **Nazwa UI** — **Powiązane operacje**; sekcja *Procesy powiązywania* opisuje przepływy 1–5.
-- **Puste grupy, lista grup, bilans, modal z unified** — w spec; **otwarta decyzja** tylko co do triggera &lt;2 członków (tabela wariantów) i kształtu POST z modala.
+- **Puste grupy, lista grup, bilans, modal z unified** — w spec; **otwarta decyzja** tylko co do triggera &lt;2 członków (tabela wariantów). **POST z modala** — ustalone: **jeden request** z pełnymi `members`.
 - **Scenariusze życiowe (A–F)** — referencyjne opowieści użytkownika; ułatwiają pełny obraz bez czytania tylko modelu technicznego.
 - **Spójność:** `receipt_*_links` nienaruszone; konflikt wcześniejszej rekomendacji triggera usunięty — zastąpiona wariantami w *Model danych* / *Procesy*.
 - **Scope v1:** szersze niż pierwotny szkic (strona listy grup obowiązkowo); dalej bez alokacji kwot w obrębie jednego wpływu.
