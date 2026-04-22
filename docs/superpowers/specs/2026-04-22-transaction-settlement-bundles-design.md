@@ -250,6 +250,24 @@ Poniżej ustalenia z brainstorningu — **v1 desktop**, spójne z sekcją „Pow
 | Pusta grupa vs. auto-kasowanie po usunięciu członka | **(A)** brak auto-kasowania po liczniku, **(B)** kolumna statusu, **(C)** inna reguła — **wybór w planie** z testami, bez sprzeczności z pustym kontenerem wyjazdu. |
 | Zapis przy **tworzeniu nowej grupy** z modala | **Ustalone:** jeden `POST /settlement-groups` z pełną listą `members` (typowe &lt; 5 pozycji). *Dodawanie pojedynczej operacji do już istniejącej grupy* — nadal **`POST /settlement-groups/{id}/members`** (jeden członek na request). |
 
+#### Co to znaczy: „ostateczna reguła usunięcia / triggera przy 0/1 członku” (checklista)
+
+**Problem:** Wcześniej rozważaliśmy **prostą regułę automatyczną**: gdy w grupie zostaje **mniej niż dwa** wpisy, **baza** (np. *trigger* SQL wykonywany po `DELETE` na tabeli członków) albo repozytorium **od razu kasuje** całą `settlement_groups`, żeby nie trzymać „pół‑par” w bazie.
+
+To **gryzie się** z ważnym przypadkiem użycia: **pusta grupa** utworzona **z góry** (wyjazd w góry) — tytuł „Bieszczady”, **0 transakcji** w środku. Taka grupa **ma mniej niż dwa** członków **celowo** i powinna **zostać**, dopóki użytkownik ją nie usunie ręcznie. Gdyby ten sam *trigger* robił „`member_count` &lt; 2 → usuń grupę”, pusta grupa mógłby zniknąć **w sekundę** albo w ogóle nie dałoby się jej utrzymać.
+
+**Drugi problem:** gdy w grupie było **np. 5 osób**, a użytkownik **odpina** członków aż zostaje **0** albo **1** operacja — czy to ma być to samo co „pusty plan wyjazdu”, czy **zawsze** kasujemy taki pusty szkielet, bo nie ma sensu trzymać? To już wola produktu.
+
+**„Trigger”** w checkliście to po prostu: *czy i kiedy system **sam** usuwa wiersz `settlement_groups` bez kliknięcia „Usuń grupę”* — czy tylko przez jawne polecenia użytkownika / usunięcie ostatniej transakcji w skrajnych przypadkach (CASCADE z banku itd.).
+
+| W skrócie | Kierunek |
+|-----------|-----------|
+| **(A)** | **Bez** automatycznego kasowania po samej liczbie — grupę usuwa użytkownik (albo jawny `DELETE` z API) / jawna akcja w UI. Najprościej do zrozumienia; wymaga ręcznego sprzątania „pustych po rozłączeniu”, jeśli takie uznajemy za brud. |
+| **(B)** | Dodatkowa informacja w DB (np. **„kontener planistyczny”** vs **„zwykła grupa”**), żeby *trigger* wiedział, że `0` członków w jednym wypadku **zostaw**, w drugim **skasuj**. |
+| **(C)** | Jedna spójna, opisana w teście reguła, niekoniecznie A ani B (np. *rozwiąż* grupę tylko gdy ostatni członek wypada z *niepustej* historycznie grupy) — *do doprecyzowania w planie* z tabelką przypadków. |
+
+**Dopóki** nie wybierzemy wariantu i nie zapiszemy go w teście integracyjnym, punkt w checkliście zostaje **otwarty** — to nie błąd, tylko **świadomie** odłożona decyzja, żeby nie zaimplementować triggera, który zje Twoje puste „Bieszczady 2026”.
+
 ---
 
 ## UI
@@ -326,7 +344,7 @@ flowchart LR
 
 - [x] Nazwa w UI: **„Powiązane operacje”** (akceptacja 2026-04-22).
 - [x] **Lista `/settlement-groups` + wyszukiwanie** w **v1** (picker + pusta grupa + wyjazd) — zapisane w *Procesach* i *UI*.
-- [ ] Ostateczna reguła **usunięcia / triggera** przy 0/1 członku (wariant A/B/C z tabeli w *Procesach*).
+- [ ] Ostateczna reguła **usunięcia / triggera** przy 0/1 członku — wariant (A) / (B) / (C) z tabeli w *Procesach*; **pełne wyjaśnienie pytania:** podsekcja *Co to znaczy: «ostateczna reguła…»* w tym samym miejscu.
 - [x] **Tworzenie grupy z modala:** pojedynczy `POST /settlement-groups` z pełnym `members` (akceptacja 2026-04-22; typowa liczba członków &lt; 5).
 
 ---
