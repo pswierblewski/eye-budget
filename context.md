@@ -1,30 +1,30 @@
 # eye-budget — kontekst dla agenta
 
-> Ostatnia aktualizacja: 2026-04-22
+> Ostatnia aktualizacja: 2026-04-23
 
 ## Co to jest
 Aplikacja do budżetu domowego: OCR paragonów (PaddleOCR + OpenAI), transakcje bankowe/gotówkowe, kategoryzacja i przegląd danych.
-Dla agenta: zwięzły opis repo; szczegóły frontend/backend w `frontend/AGENTS.md` i `backend/AGENTS.md`.
+W UI m.in. **grupy rozliczeń** (powiązane operacje). Dla agenta: zwięzły opis repo; szczegóły frontend/backend w `frontend/AGENTS.md` i `backend/AGENTS.md`.
 
 ## Stack / Technologie
-- Frontend: Next.js 14, App Router, TypeScript strict, Tailwind, Radix, TanStack Query, Zod, recharts, Pusher/Soketi; testy: **Vitest**, React Testing Library, jsdom (`npm run test` / `test:run`)
+- Frontend: Next.js 14, App Router, TypeScript strict, Tailwind, Radix, TanStack Query, Zod, recharts, Pusher/Soketi; testy: **Vitest**, React Testing Library, jsdom (`npm run test` / `test:run`); błędy API: **`QueryState`**, **`MutationErrorNotice`**, **`lib/query-error.ts`** (copy PL)
 - Backend: FastAPI, Pydantic v2, psycopg2 (SQL bez ORM), Yoyo, Celery + Redis, MinIO, PaddleOCR / OpenAI
 - Infra: PostgreSQL, MinIO, Redis, Soketi; `docker-compose.yml` — Redis, Soketi, backend, worker (bez serwisu Next w tym pliku)
 - Wersje produktu (**niezależne**): **frontend** — `frontend/package.json` oraz pole `version` root pakietu w `frontend/package-lock.json` (klucz główny i `packages[""]`); **backend** — `backend/src/version.py` + asercja w `backend/tests/unit/test_version.py`. Kontrakt i UI: `specs/006-semantic-versioning/`
 
 ## Struktura
-- `frontend/app/` — strony + proxy `app/api/*/route.ts`
-- `frontend/components/ui/` — primitives (`index.ts` przed nowym UI)
-- `backend/src/` — `main.py` (route’y), `data.py` (Pydantic), `services/`, `repositories/`, `tasks/`, `version.py`, `bank_category_top.py`, `bank_inflow_salary_rules.py` (reguły pensji przed LLM)
+- `frontend/app/` — strony App Router (m.in. **`settlement-groups/`**) + proxy `app/api/*/route.ts`
+- `frontend/components/ui/` — primitives (`index.ts` przed nowym UI); `components/QueryState.tsx` + `lib/query-error.ts` — błędy React Query (copy PL)
+- `backend/src/` — `main.py` (route’y), `data.py` (Pydantic), `services/`, `repositories/` (m.in. settlement), `tasks/`, `version.py`, `bank_category_top.py`, `bank_inflow_salary_rules.py` (reguły pensji przed LLM)
 - `backend/migrations/` — Yoyo SQL
 - `specs/`, `docs/superpowers/`, `.cursor/skills/` — specyfikacje, plany superpowers, skille (m.in. diagnostyka DB/MinIO)
 
 ## Jak pracować
-- Frontend: `cd frontend && npm install && npm run dev` → :3000; `npm run lint`; testy: `npm run test:run`
+- Frontend: `cd frontend && npm install && npm run dev` → :3000; `npm run lint`; testy: `npm run test:run`; **interfejs po polsku**
 - Backend: **`backend/.venv`**, `pip install -r requirements.txt` (+ test deps); `uvicorn src.main:app --reload --host 0.0.0.0 --port 8000` (README bywa 8080 — zgodnie z `.env` / `BACKEND_URL`)
 - Docker: `docker compose up` — backend na hoście **:8001** (8001→8000 w kontenerze)
 - DB: `cd backend && yoyo apply`; testy: `backend/.venv/bin/python -m pytest` (`tests/unit/`, `tests/integration/`), coverage: `.coveragerc` → `source = src`
-- UI: copy po polsku
+- CI: workflow GitHub Actions stosuje migracje Yoyo **przed** startem kontenera backendu
 
 ## Kluczowe decyzje
 - SQL przez psycopg2 z parametrami `%s` — bez ORM
@@ -37,4 +37,5 @@ Dla agenta: zwięzły opis repo; szczegóły frontend/backend w `frontend/AGENTS
 - **Sekrety:** nie zmieniaj w repo ani nie commituj `.env`, **`.env.agent`**, `backend/.env`, `backend/yoyo.ini`. Ad-hoc PostgreSQL / MinIO przy implementacji: **`.env.agent`** (root) + **`backend/.venv/bin/python`** — szczegóły w `AGENTS.md` → `.cursor/skills/eye-budget-db-check` i `eye-budget-minio-check` (bez wklejania kluczy do czatu).
 - **Git / GitHub:** `origin` to **`git@personal:…`** — w `~/.ssh/config` host **`personal`** → `github.com` + właściwy `IdentityFile`. Test: `ssh -T git@personal`. Samo `git@github.com` bez tego aliasu często nie ma klucza (np. w sandboxie agenta).
 - Różne porty backendu (8000 / 8080 / 8001 przy Dockerze) — sprawdź przed debugowaniem CORS/proxy
+- Nowe widoki z danymi z API: obsługa błędu przez **`QueryState`** / **`QueryErrorNotice`** / **`MutationErrorNotice`** — unikaj cichego UI przy błędzie backendu
 - Nowe UI primitives tylko po konsultacji z `components/ui/index.ts`; nowe katalogi top-level — po uzgodnieniu
