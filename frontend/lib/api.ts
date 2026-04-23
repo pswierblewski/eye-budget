@@ -82,6 +82,10 @@ import {
   SimulationTaskResponseSchema,
   VersionInfo,
   VersionInfoSchema,
+  SettlementGroupListItem,
+  SettlementGroupListItemSchema,
+  SettlementGroupDetail,
+  SettlementGroupDetailSchema,
 } from "./types";
 import { z } from "zod";
 
@@ -661,6 +665,125 @@ export async function getTransactionsAnalytics(
   return apiFetch(
     `/api/transactions/analytics${query ? `?${query}` : ""}`,
     AnalyticsSummarySchema
+  );
+}
+
+// ------------------------------------------------------------------
+// Settlement groups (powiązane operacje)
+// ------------------------------------------------------------------
+
+const settlementGroupDetailSchema: z.ZodType<SettlementGroupDetail> =
+  SettlementGroupDetailSchema as z.ZodType<SettlementGroupDetail>;
+
+export async function listSettlementGroups(
+  params: {
+    search?: string;
+    limit?: number;
+    offset?: number;
+    sort_by?: string;
+    sort_dir?: string;
+  } = {}
+): Promise<PaginatedResponse<SettlementGroupListItem>> {
+  const {
+    search,
+    limit = 50,
+    offset = 0,
+    sort_by = "created_at",
+    sort_dir = "desc",
+  } = params;
+  const qs = new URLSearchParams({
+    limit: String(limit),
+    offset: String(offset),
+    sort_by,
+    sort_dir,
+  });
+  if (search) qs.set("search", search);
+  return apiFetch(
+    `/api/settlement-groups?${qs}`,
+    paginatedSchema(SettlementGroupListItemSchema)
+  );
+}
+
+export async function getSettlementGroup(
+  id: number
+): Promise<SettlementGroupDetail> {
+  return apiFetch(`/api/settlement-groups/${id}`, settlementGroupDetailSchema);
+}
+
+export async function getSettlementGroupByTransaction(
+  sourceType: "bank" | "cash",
+  transactionId: number
+): Promise<SettlementGroupDetail | null> {
+  const qs = new URLSearchParams({
+    source_type: sourceType,
+    transaction_id: String(transactionId),
+  });
+  const res = await fetch(
+    `/api/settlement-groups/by-transaction?${qs}`,
+    { cache: "no-store" }
+  );
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    const t = await res.text().catch(() => res.statusText);
+    throw new Error(`API ${res.status}: ${t}`);
+  }
+  const json = await res.json();
+  return settlementGroupDetailSchema.parse(json);
+}
+
+export async function createSettlementGroup(
+  body: import("./types").CreateSettlementGroupRequest
+): Promise<SettlementGroupDetail> {
+  return apiFetch(`/api/settlement-groups`, settlementGroupDetailSchema, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function updateSettlementGroup(
+  id: number,
+  body: import("./types").UpdateSettlementGroupRequest
+): Promise<SettlementGroupDetail> {
+  return apiFetch(`/api/settlement-groups/${id}`, settlementGroupDetailSchema, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function deleteSettlementGroup(id: number): Promise<void> {
+  const res = await fetch(`/api/settlement-groups/${id}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    const t = await res.text().catch(() => res.statusText);
+    throw new Error(`API ${res.status}: ${t}`);
+  }
+}
+
+export async function addSettlementGroupMember(
+  groupId: number,
+  body: import("./types").AddSettlementGroupMemberRequest
+): Promise<SettlementGroupDetail> {
+  return apiFetch(
+    `/api/settlement-groups/${groupId}/members`,
+    settlementGroupDetailSchema,
+    { method: "POST", body: JSON.stringify(body) }
+  );
+}
+
+export async function removeSettlementGroupMember(
+  groupId: number,
+  sourceType: "bank" | "cash",
+  transactionId: number
+): Promise<SettlementGroupDetail> {
+  const qs = new URLSearchParams({
+    source_type: sourceType,
+    transaction_id: String(transactionId),
+  });
+  return apiFetch(
+    `/api/settlement-groups/${groupId}/members?${qs}`,
+    settlementGroupDetailSchema,
+    { method: "DELETE" }
   );
 }
 

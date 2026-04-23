@@ -6,6 +6,7 @@ import {
   Search,
   SlidersHorizontal,
   X,
+  Link2,
 } from "lucide-react";
 import { SOURCE_CONFIG } from "@/lib/sourceConfig";
 import {
@@ -123,7 +124,7 @@ function ExpandedRow({
     row.source_type === "bank"
       ? `/bank-transactions/${row.id}`
       : row.source_type === "cash"
-      ? `/cash-transactions`
+      ? `/cash-transactions/${row.id}`
       : `/receipts/${row.id}`;
 
   return (
@@ -545,6 +546,23 @@ export default function TransactionsPage() {
           </div>
         ) : (
           <span className="text-gray-300 text-xs">—</span>
+        ),
+    },
+    {
+      header: "",
+      className: "w-8 text-center",
+      accessor: (r) =>
+        r.settlement_group_id != null && r.source_type !== "receipt" ? (
+          <Link
+            href={`/settlement-groups/${r.settlement_group_id}`}
+            title="Powiązane operacje"
+            className="inline-flex text-violet-500 hover:text-violet-700"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Link2 className="h-4 w-4" />
+          </Link>
+        ) : (
+          <span className="text-gray-200">—</span>
         ),
     },
     {

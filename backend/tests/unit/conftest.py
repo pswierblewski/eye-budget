@@ -19,6 +19,7 @@ ALL_PARAMS = [
     "cash_transactions_repository",
     "cash_receipt_links_repository",
     "unified_transactions_repository",
+    "settlement_groups_repository",
     "prompt_analytics_repository",
     "budget_analysis_repository",
     "budget_goals_repository",
