@@ -481,6 +481,15 @@ export const AddSettlementGroupMemberRequestSchema = z.object({
 });
 export type AddSettlementGroupMemberRequest = z.infer<typeof AddSettlementGroupMemberRequestSchema>;
 
+export const MoveSettlementGroupMemberRequestSchema = z.object({
+  target_group_id: z.number(),
+  source_type: z.enum(["bank", "cash"]),
+  id: z.number(),
+});
+export type MoveSettlementGroupMemberRequest = z.infer<
+  typeof MoveSettlementGroupMemberRequestSchema
+>;
+
 export const SettlementMemberRowSchema = z
   .object({
     source_type: z.enum(["bank", "cash"]),

@@ -585,6 +585,14 @@ class AddSettlementGroupMemberRequest(BaseModel):
     id: int  # bank_transaction_id or cash_transaction_id
 
 
+class MoveSettlementGroupMemberRequest(BaseModel):
+    """Move a bank/cash transaction from the URL group to target_group_id in one DB transaction."""
+
+    target_group_id: int
+    source_type: Literal["bank", "cash"]
+    id: int  # bank_transaction_id or cash_transaction_id
+
+
 class SettlementMemberRow(BaseModel):
     source_type: Literal["bank", "cash"]
     id: int

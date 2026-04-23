@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { listUnifiedTransactions, createSettlementGroup } from "@/lib/api";
 import type { UnifiedTransaction } from "@/lib/types";
@@ -28,6 +28,13 @@ function keyOf(t: Pick<UnifiedTransaction, "source_type" | "id">) {
 export function LinkOperationsModal({ open, onClose, current, onCreated }: Props) {
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setSubmitError(null);
+  }, [open]);
 
   const { data, isLoading } = useQuery({
     queryKey: ["transactions", "link-ops", search],
@@ -76,12 +83,31 @@ export function LinkOperationsModal({ open, onClose, current, onCreated }: Props
   const canSubmit = membersPayload.length >= 2;
 
   const handleCreate = async () => {
-    if (!canSubmit) return;
-    const g = await createSettlementGroup({ members: membersPayload });
-    onCreated(g.id);
-    setSelected(new Set());
-    setSearch("");
-    onClose();
+    if (!canSubmit || isSubmitting) return;
+    setSubmitError(null);
+    setIsSubmitting(true);
+    try {
+      const g = await createSettlementGroup({ members: membersPayload });
+      onCreated(g.id);
+      setSelected(new Set());
+      setSearch("");
+      onClose();
+    } catch (e) {
+      const raw = e instanceof Error ? e.message : "";
+      if (raw.includes("API 409:")) {
+        setSubmitError(
+          "Jedna z wybranych transakcji jest już w innym zestawie powiązanych operacji."
+        );
+      } else if (raw.includes("API 400:")) {
+        setSubmitError(
+          "Co najmniej jedna z wybranych operacji nie istnieje lub jest nieprawidłowa."
+        );
+      } else {
+        setSubmitError("Nie udało się utworzyć grupy. Spróbuj ponownie.");
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -157,17 +183,22 @@ export function LinkOperationsModal({ open, onClose, current, onCreated }: Props
             </tbody>
           </table>
         </div>
+        {submitError && (
+          <p className="text-sm text-red-600" role="alert">
+            {submitError}
+          </p>
+        )}
         <div className="flex justify-end items-center gap-2 flex-wrap">
           <div className="flex gap-2">
-            <Button variant="secondary" onClick={onClose}>
+            <Button variant="secondary" onClick={onClose} disabled={isSubmitting}>
               Anuluj
             </Button>
             <Button
               variant="primary"
-              disabled={!canSubmit}
+              disabled={!canSubmit || isSubmitting}
               onClick={() => void handleCreate()}
             >
-              Utwórz grupę
+              {isSubmitting ? "Tworzenie…" : "Utwórz grupę"}
             </Button>
           </div>
         </div>

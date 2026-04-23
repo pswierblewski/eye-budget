@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   getSettlementGroupByTransaction,
   addSettlementGroupMember,
+  moveSettlementGroupMember,
   removeSettlementGroupMember,
   deleteSettlementGroup,
 } from "@/lib/api";
@@ -60,8 +61,11 @@ export function SettlementOperationsSection({ sourceType, transactionId }: Props
   const moveToGroupMutation = useMutation({
     mutationFn: async (newGroupId: number) => {
       if (!group) return;
-      await removeSettlementGroupMember(group.id, sourceType, transactionId);
-      await addSettlementGroupMember(newGroupId, { source_type: sourceType, id: transactionId });
+      await moveSettlementGroupMember(group.id, {
+        target_group_id: newGroupId,
+        source_type: sourceType,
+        id: transactionId,
+      });
     },
     onSuccess: () => invalidateAll(),
   });
