@@ -543,8 +543,8 @@ def test_get_list_no_conn():
 
 
 @pytest.mark.unit
-def test_get_list_db_error():
-    """Test get_list returns empty list on DB error."""
+def test_get_list_db_error_propagates():
+    """Test get_list re-raises on DB error."""
     # Arrange
     conn = MagicMock()
     cursor = MagicMock()
@@ -554,12 +554,9 @@ def test_get_list_db_error():
     repo = CashTransactionsRepository.__new__(CashTransactionsRepository)
     repo.conn = conn
 
-    # Act
-    items, total = repo.get_list()
-
-    # Assert
-    assert items == []
-    assert total == 0
+    # Act / Assert
+    with pytest.raises(Exception, match="DB error"):
+        repo.get_list()
 
 
 @pytest.mark.unit
@@ -727,8 +724,8 @@ def test_get_by_id_not_found():
 
 
 @pytest.mark.unit
-def test_get_by_id_db_error():
-    """Test get_by_id returns None on DB error."""
+def test_get_by_id_db_error_propagates():
+    """Test get_by_id re-raises on DB error."""
     # Arrange
     conn = MagicMock()
     cursor = MagicMock()
@@ -738,11 +735,9 @@ def test_get_by_id_db_error():
     repo = CashTransactionsRepository.__new__(CashTransactionsRepository)
     repo.conn = conn
 
-    # Act
-    result = repo.get_by_id(tx_id=42)
-
-    # Assert
-    assert result is None
+    # Act / Assert
+    with pytest.raises(Exception, match="DB error"):
+        repo.get_by_id(tx_id=42)
 
 
 @pytest.mark.unit

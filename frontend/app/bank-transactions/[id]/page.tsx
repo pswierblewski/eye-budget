@@ -35,6 +35,11 @@ import {
   ConfirmDeleteModal,
 } from "@/components/ui";
 import { SettlementOperationsSection } from "@/components/SettlementOperationsSection";
+import {
+  QueryState,
+  QueryErrorNotice,
+  MutationErrorNotice,
+} from "@/components/QueryState";
 
 // ─── Detail field ───────────────────────────────────────────────────
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
@@ -59,20 +64,25 @@ export default function BankTransactionDetailPage({
   const router = useRouter();
 
   // ── Main data ────────────────────────────────────────────────────
-  const { data: tx, isLoading } = useQuery({
+  const txQuery = useQuery({
     queryKey: ["bank-transaction", txId],
     queryFn: () => getBankTransaction(txId),
   });
 
   // ── Navigation ──────────────────────────────────────────────────
-  const { data: allTxs } = useQuery({
+  const navQuery = useQuery({
     queryKey: ["bank-transactions", "all", "nav"],
-    queryFn: () => listBankTransactions({ limit: 2000, sort_by: "booking_date", sort_dir: "desc" }),
+    queryFn: () =>
+      listBankTransactions({
+        limit: 2000,
+        sort_by: "booking_date",
+        sort_dir: "desc",
+      }),
   });
 
   const { prevId, nextId } = (() => {
-    if (!allTxs) return { prevId: null, nextId: null };
-    const ids = allTxs.items.map((t) => t.id);
+    if (!navQuery.data) return { prevId: null, nextId: null };
+    const ids = navQuery.data.items.map((t) => t.id);
     const idx = ids.indexOf(txId);
     return {
       prevId: idx > 0 ? ids[idx - 1] : null,
@@ -81,7 +91,7 @@ export default function BankTransactionDetailPage({
   })();
 
   // ── Tags all ────────────────────────────────────────────────────
-  const { data: allTags = [] } = useQuery({
+  const tagsQuery = useQuery({
     queryKey: ["tags"],
     queryFn: getAllTags,
     staleTime: 60_000,
@@ -89,10 +99,11 @@ export default function BankTransactionDetailPage({
 
   // ── Category state ───────────────────────────────────────────────
   const [selectedCategory, setSelectedCategory] = useState<number | undefined>(
-    tx?.category_id ?? undefined
+    undefined
   );
 
   useEffect(() => {
+    const tx = txQuery.data;
     if (!tx) return;
     if (tx.category_id != null) {
       setSelectedCategory(tx.category_id);
@@ -102,7 +113,7 @@ export default function BankTransactionDetailPage({
     if (candidates.length === 0) return;
     const top = [...candidates].sort((a, b) => b.category_score - a.category_score)[0];
     setSelectedCategory(top.category_id);
-  }, [tx?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [txQuery.data?.id, txQuery.data]);
 
   // ── Receipt linking state ────────────────────────────────────────
   const [showCandidates, setShowCandidates] = useState(false);
@@ -126,7 +137,7 @@ export default function BankTransactionDetailPage({
     },
   });
 
-  const { data: candidates = [], isFetching: candidatesLoading } = useQuery<ReceiptCandidateItem[]>({
+  const candidatesQuery = useQuery<ReceiptCandidateItem[]>({
     queryKey: ["bank-tx-receipt-candidates", txId],
     queryFn: () => getReceiptCandidates(txId),
     enabled: showCandidates,
@@ -156,31 +167,26 @@ export default function BankTransactionDetailPage({
     },
   });
 
-  // ── Loading / error states ───────────────────────────────────────
-  if (isLoading) {
-    return (
-      <div className="p-8 text-center text-gray-400 text-sm animate-pulse">
-        Ładowanie…
-      </div>
-    );
-  }
-
-  if (!tx) {
-    return (
-      <div className="p-8 text-center">
-        <p className="text-gray-500 text-sm">Nie znaleziono transakcji.</p>
-        <Link href="/bank-transactions" className="mt-4 inline-block text-accent text-sm hover:underline">
-          ← Wróć do listy
-        </Link>
-      </div>
-    );
-  }
-
-  const candidates2 = tx.category_candidates ?? [];
-  const receiptLink = tx.receipt_link ?? null;
-
   return (
+    <QueryState
+      query={txQuery}
+      errorTitle="Nie udało się pobrać transakcji bankowej."
+      loadingFallback={
+        <div className="p-8 text-center text-gray-400 text-sm animate-pulse">
+          Ładowanie…
+        </div>
+      }
+    >
+      {(tx) => {
+        const candidates2 = tx.category_candidates ?? [];
+        const receiptLink = tx.receipt_link ?? null;
+
+        return (
     <div className="h-full flex flex-col">
+      <MutationErrorNotice mutation={saveCategoryMutation} />
+      <MutationErrorNotice mutation={tagsMutation} />
+      <MutationErrorNotice mutation={linkMutation} />
+      <MutationErrorNotice mutation={unlinkMutation} />
       {/* ConfirmDeleteModal */}
       <ConfirmDeleteModal
         open={showDeleteModal}
@@ -200,6 +206,11 @@ export default function BankTransactionDetailPage({
         }
         actions={
           <div className="flex items-center gap-2">
+            <QueryErrorNotice
+              query={navQuery}
+              errorTitle="Nie udało się pobrać listy do nawigacji."
+              className="max-w-[200px]"
+            />
             <PrevNextNav
               hasPrev={!!prevId}
               hasNext={!!nextId}
@@ -339,11 +350,21 @@ export default function BankTransactionDetailPage({
         {/* Tags card */}
         <Card padding="md" className="space-y-3">
           <SectionLabel>Tagi</SectionLabel>
-          <TagsEditor
-            tags={tx.tags ?? []}
-            onChange={(tags) => tagsMutation.mutate(tags)}
-            allTags={allTags}
-          />
+          <QueryState
+            query={tagsQuery}
+            errorTitle="Nie udało się pobrać listy tagów."
+            loadingFallback={
+              <p className="text-sm text-gray-400">Ładowanie tagów…</p>
+            }
+          >
+            {(allTags) => (
+              <TagsEditor
+                tags={tx.tags ?? []}
+                onChange={(tags) => tagsMutation.mutate(tags)}
+                allTags={allTags}
+              />
+            )}
+          </QueryState>
         </Card>
         {/* Receipt link card */}
         <Card padding="md" className="space-y-3">
@@ -374,46 +395,56 @@ export default function BankTransactionDetailPage({
               </Button>
             </div>
           ) : showCandidates ? (
-            candidatesLoading ? (
-              <p className="text-xs text-gray-400 animate-pulse">Szukanie…</p>
-            ) : candidates.length === 0 ? (
-              <p className="text-xs text-gray-400 italic">
-                Nie znaleziono pasujących paragonów.
-              </p>
-            ) : (
-              <div className="space-y-1.5">
-                {candidates.map((c) => (
-                  <div
-                    key={c.receipt_transaction_id}
-                    className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white px-3 py-2"
-                  >
-                    <div className="text-xs space-y-0.5 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="font-medium text-gray-800 truncate">
-                          {c.vendor_name}
-                        </p>
-                        <MatchBadge score={c.match_score} />
+            <QueryState
+              query={candidatesQuery}
+              errorTitle="Nie udało się pobrać propozycji paragonów."
+              loadingFallback={
+                <p className="text-xs text-gray-400 animate-pulse">Szukanie…</p>
+              }
+            >
+              {(candidates) =>
+                candidates.length === 0 ? (
+                  <p className="text-xs text-gray-400 italic">
+                    Nie znaleziono pasujących paragonów.
+                  </p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {candidates.map((c) => (
+                      <div
+                        key={c.receipt_transaction_id}
+                        className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white px-3 py-2"
+                      >
+                        <div className="text-xs space-y-0.5 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium text-gray-800 truncate">
+                              {c.vendor_name}
+                            </p>
+                            <MatchBadge score={c.match_score} />
+                          </div>
+                          <p className="text-gray-500">
+                            {isoToDisplay(c.date)} · {c.total.toFixed(2)} PLN
+                          </p>
+                          <p className="text-gray-400 font-mono text-[10px] truncate">
+                            {c.scan_filename}
+                          </p>
+                        </div>
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          disabled={linkMutation.isPending}
+                          onClick={() =>
+                            linkMutation.mutate(c.receipt_transaction_id)
+                          }
+                          className="shrink-0"
+                        >
+                          {linkMutation.isPending ? "…" : "Powiąż"}
+                        </Button>
                       </div>
-                      <p className="text-gray-500">
-                        {isoToDisplay(c.date)} · {c.total.toFixed(2)} PLN
-                      </p>
-                      <p className="text-gray-400 font-mono text-[10px] truncate">
-                        {c.scan_filename}
-                      </p>
-                    </div>
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      disabled={linkMutation.isPending}
-                      onClick={() => linkMutation.mutate(c.receipt_transaction_id)}
-                      className="shrink-0"
-                    >
-                      {linkMutation.isPending ? "…" : "Powiąż"}
-                    </Button>
+                    ))}
                   </div>
-                ))}
-              </div>
-            )
+                )
+              }
+            </QueryState>
           ) : (
             <Button
               variant="secondary"
@@ -426,5 +457,8 @@ export default function BankTransactionDetailPage({
         </Card>
       </div>
     </div>
+        );
+      }}
+    </QueryState>
   );
 }

@@ -1,9 +1,14 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, type ReactNode } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { listCategories, createCategory } from "@/lib/api";
 import { CategoryItem } from "@/lib/types";
+import {
+  QueryState,
+  QueryErrorNotice,
+  MutationErrorNotice,
+} from "@/components/QueryState";
 
 type CategoryCandidate = {
   category_id: number;
@@ -36,10 +41,10 @@ export function CategoryDropdown({
   const searchRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
 
-  const { data: allCategories = [] } = useQuery({
+  const categoriesQuery = useQuery({
     queryKey: ["categories"],
     queryFn: listCategories,
-    enabled: open,
+    enabled: open || value != null,
   });
 
   const addMutation = useMutation({
@@ -84,10 +89,6 @@ export function CategoryDropdown({
     }
   }, [open, showCreate]);
 
-  const currentCategory = allCategories.find((c) => c.id === value);
-  const currentLabel = currentCategory ? breadcrumb(currentCategory) : undefined;
-
-  // Sorted candidates
   const sortedCandidates = [...candidates].sort(
     (a, b) => b.category_score - a.category_score
   );
@@ -99,19 +100,6 @@ export function CategoryDropdown({
     (c) => !search || c.category_name.toLowerCase().includes(searchLower)
   );
 
-  const filteredAll = allCategories
-    .filter((c) => !candidateIds.has(c.id))
-    .filter(
-      (c) => !search || breadcrumb(c).toLowerCase().includes(searchLower)
-    );
-
-  const hasResults = filteredCandidates.length > 0 || filteredAll.length > 0;
-
-  // Parent-level categories (no parent themselves) for the create form
-  const parentLevelCategories = allCategories.filter(
-    (c) => c.parent_name === null
-  );
-
   const handleSubmitCreate = () => {
     if (!newName.trim()) return;
     addMutation.mutate({
@@ -119,6 +107,28 @@ export function CategoryDropdown({
       parent_id: newParentId !== "" ? Number(newParentId) : null,
     });
   };
+
+  const currentCategory = categoriesQuery.data?.find((c) => c.id === value);
+  let triggerContent: ReactNode;
+  if (categoriesQuery.isError && value != null) {
+    triggerContent = (
+      <span className="text-red-700">Błąd wczytywania kategorii</span>
+    );
+  } else if (currentCategory) {
+    triggerContent = breadcrumb(currentCategory);
+  } else if (
+    value != null &&
+    categoriesQuery.isFetching &&
+    !categoriesQuery.data
+  ) {
+    triggerContent = <span className="text-gray-400">Ładowanie…</span>;
+  } else if (value != null) {
+    triggerContent = `Kategoria #${value}`;
+  } else {
+    triggerContent = (
+      <span className="text-gray-400">Wybierz kategorię…</span>
+    );
+  }
 
   return (
     <div
@@ -133,190 +143,225 @@ export function CategoryDropdown({
           bg-indigo-50 focus:outline-none focus:ring-2 focus:ring-[#635bff]
           text-gray-900"
       >
-        {currentLabel ?? <span className="text-gray-400">Wybierz kategorię…</span>}
+        {triggerContent}
       </button>
+
+      {categoriesQuery.isError && !open && (
+        <QueryErrorNotice
+          query={categoriesQuery}
+          className="mt-1"
+          errorTitle="Nie udało się pobrać listy kategorii."
+        />
+      )}
 
       {open && (
         <div
           className="absolute z-50 mt-1 w-full min-w-[280px] bg-white border border-gray-200
             rounded-lg shadow-lg overflow-hidden"
         >
-          {!showCreate ? (
-            <>
-              {/* Search */}
-              <div className="flex items-center gap-1 p-2 border-b border-gray-100">
-                <input
-                  ref={searchRef}
-                  type="text"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Escape") {
-                      setOpen(false);
-                      setSearch("");
-                    }
-                  }}
-                  placeholder="Szukaj kategorii…"
-                  className="flex-1 text-sm border border-gray-200 rounded-md px-2 py-1
-                    focus:outline-none focus:ring-2 focus:ring-[#635bff]"
-                />
-              </div>
+          <QueryState
+            query={categoriesQuery}
+            errorTitle="Nie udało się pobrać listy kategorii."
+            loadingFallback={
+              <div className="p-4 text-sm text-gray-400">Ładowanie…</div>
+            }
+          >
+            {(allCategories) => {
+              const filteredAll = allCategories
+                .filter((c) => !candidateIds.has(c.id))
+                .filter(
+                  (c) =>
+                    !search ||
+                    breadcrumb(c).toLowerCase().includes(searchLower)
+                );
 
-              <ul className="max-h-64 overflow-y-auto py-1">
-                {/* AI suggestions section */}
-                {filteredCandidates.length > 0 && (
-                  <>
-                    <li className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#635bff] bg-indigo-50 sticky top-0">
-                      Propozycje AI
-                    </li>
-                    {filteredCandidates.map((c) => {
-                      const cat = allCategories.find(
-                        (a) => a.id === c.category_id
-                      );
-                      const full = cat ? breadcrumb(cat) : c.category_name;
-                      return (
-                        <li key={c.category_id}>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              onChange(c.category_id);
+              const hasResults =
+                filteredCandidates.length > 0 || filteredAll.length > 0;
+
+              const parentLevelCategories = allCategories.filter(
+                (c) => c.parent_name === null
+              );
+
+              return (
+                <>
+                  <MutationErrorNotice mutation={addMutation} className="m-2" />
+                  {!showCreate ? (
+                    <>
+                      <div className="flex items-center gap-1 p-2 border-b border-gray-100">
+                        <input
+                          ref={searchRef}
+                          type="text"
+                          value={search}
+                          onChange={(e) => setSearch(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Escape") {
                               setOpen(false);
                               setSearch("");
-                            }}
-                            className={`w-full text-left px-3 py-1.5 text-sm hover:bg-indigo-50
-                              transition-colors flex items-center justify-between gap-2
-                              ${value === c.category_id ? "font-semibold text-[#635bff]" : "text-gray-800"}`}
-                          >
-                            <span>{full}</span>
-                            <span className="text-[10px] text-gray-400 shrink-0">
-                              {Math.round(c.category_score * 100)}%
-                            </span>
-                          </button>
-                        </li>
-                      );
-                    })}
-                    {filteredAll.length > 0 && (
-                      <li className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400 bg-gray-50 sticky top-6">
-                        Wszystkie kategorie
-                      </li>
-                    )}
-                  </>
-                )}
+                            }
+                          }}
+                          placeholder="Szukaj kategorii…"
+                          className="flex-1 text-sm border border-gray-200 rounded-md px-2 py-1
+                            focus:outline-none focus:ring-2 focus:ring-[#635bff]"
+                        />
+                      </div>
 
-                {/* All categories */}
-                {filteredAll.map((c) => {
-                  const prefix = c.parent_name ?? "";
-                  return (
-                    <li key={c.id}>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          onChange(c.id);
-                          setOpen(false);
-                          setSearch("");
-                        }}
-                        className={`w-full text-left px-3 py-1.5 text-sm hover:bg-indigo-50
-                          transition-colors
-                          ${value === c.id ? "font-semibold text-[#635bff]" : "text-gray-800"}`}
-                      >
-                        {prefix && (
-                          <span className="text-gray-400">{prefix} / </span>
+                      <ul className="max-h-64 overflow-y-auto py-1">
+                        {filteredCandidates.length > 0 && (
+                          <>
+                            <li className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#635bff] bg-indigo-50 sticky top-0">
+                              Propozycje AI
+                            </li>
+                            {filteredCandidates.map((c) => {
+                              const cat = allCategories.find(
+                                (a) => a.id === c.category_id
+                              );
+                              const full = cat
+                                ? breadcrumb(cat)
+                                : c.category_name;
+                              return (
+                                <li key={c.category_id}>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      onChange(c.category_id);
+                                      setOpen(false);
+                                      setSearch("");
+                                    }}
+                                    className={`w-full text-left px-3 py-1.5 text-sm hover:bg-indigo-50
+                                      transition-colors flex items-center justify-between gap-2
+                                      ${value === c.category_id ? "font-semibold text-[#635bff]" : "text-gray-800"}`}
+                                  >
+                                    <span>{full}</span>
+                                    <span className="text-[10px] text-gray-400 shrink-0">
+                                      {Math.round(c.category_score * 100)}%
+                                    </span>
+                                  </button>
+                                </li>
+                              );
+                            })}
+                            {filteredAll.length > 0 && (
+                              <li className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400 bg-gray-50 sticky top-6">
+                                Wszystkie kategorie
+                              </li>
+                            )}
+                          </>
                         )}
-                        <span>{c.name}</span>
-                      </button>
-                    </li>
-                  );
-                })}
 
-                {!hasResults && (
-                  <li className="px-3 py-2 text-xs text-gray-400">
-                    {search.trim()
-                      ? `Brak wyników dla „${search.trim()}"`
-                      : "Brak kategorii"}
-                  </li>
-                )}
-              </ul>
+                        {filteredAll.map((c) => {
+                          const prefix = c.parent_name ?? "";
+                          return (
+                            <li key={c.id}>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  onChange(c.id);
+                                  setOpen(false);
+                                  setSearch("");
+                                }}
+                                className={`w-full text-left px-3 py-1.5 text-sm hover:bg-indigo-50
+                                  transition-colors
+                                  ${value === c.id ? "font-semibold text-[#635bff]" : "text-gray-800"}`}
+                              >
+                                {prefix && (
+                                  <span className="text-gray-400">
+                                    {prefix} /{" "}
+                                  </span>
+                                )}
+                                <span>{c.name}</span>
+                              </button>
+                            </li>
+                          );
+                        })}
 
-              {/* Add new */}
-              <div className="border-t border-gray-100 p-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setNewName(search.trim());
-                    setShowCreate(true);
-                  }}
-                  className="w-full text-xs text-[#635bff] hover:text-[#4f46e5] text-left
-                    py-1 px-1 hover:bg-indigo-50 rounded transition-colors"
-                >
-                  + Nowa kategoria{search.trim() ? ` „${search.trim()}"` : ""}
-                </button>
-              </div>
-            </>
-          ) : (
-            /* Inline create form */
-            <div className="p-3 space-y-2">
-              <p className="text-xs font-semibold text-gray-700">
-                Nowa kategoria
-              </p>
+                        {!hasResults && (
+                          <li className="px-3 py-2 text-xs text-gray-400">
+                            {search.trim()
+                              ? `Brak wyników dla „${search.trim()}"`
+                              : "Brak kategorii"}
+                          </li>
+                        )}
+                      </ul>
 
-              <label className="block text-xs text-gray-600">
-                Nazwa
-                <input
-                  type="text"
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  autoFocus
-                  className="mt-1 w-full text-sm border border-gray-200 rounded-md px-2 py-1
-                    focus:outline-none focus:ring-2 focus:ring-[#635bff]"
-                />
-              </label>
+                      <div className="border-t border-gray-100 p-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setNewName(search.trim());
+                            setShowCreate(true);
+                          }}
+                          className="w-full text-xs text-[#635bff] hover:text-[#4f46e5] text-left
+                            py-1 px-1 hover:bg-indigo-50 rounded transition-colors"
+                        >
+                          + Nowa kategoria
+                          {search.trim() ? ` „${search.trim()}"` : ""}
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="p-3 space-y-2">
+                      <p className="text-xs font-semibold text-gray-700">
+                        Nowa kategoria
+                      </p>
 
-              <label className="block text-xs text-gray-600">
-                Nadrzędna (opcjonalnie)
-                <select
-                  value={newParentId}
-                  onChange={(e) =>
-                    setNewParentId(
-                      e.target.value === "" ? "" : Number(e.target.value)
-                    )
-                  }
-                  className="mt-1 w-full text-sm border border-gray-200 rounded-md px-2 py-1
-                    focus:outline-none focus:ring-2 focus:ring-[#635bff]"
-                >
-                  <option value="">Brak</option>
-                  {parentLevelCategories.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                      <label className="block text-xs text-gray-600">
+                        Nazwa
+                        <input
+                          type="text"
+                          value={newName}
+                          onChange={(e) => setNewName(e.target.value)}
+                          autoFocus
+                          className="mt-1 w-full text-sm border border-gray-200 rounded-md px-2 py-1
+                            focus:outline-none focus:ring-2 focus:ring-[#635bff]"
+                        />
+                      </label>
 
-              <div className="flex gap-2 pt-1">
-                <button
-                  type="button"
-                  disabled={
-                    !newName.trim() ||
-                    addMutation.isPending
-                  }
-                  onClick={handleSubmitCreate}
-                  className="flex-1 text-xs font-medium py-1.5 px-3 rounded-md bg-[#635bff]
-                    text-white disabled:opacity-40 disabled:cursor-not-allowed
-                    hover:bg-[#4f46e5] transition-colors"
-                >
-                  {addMutation.isPending ? "Dodawanie…" : "Dodaj"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowCreate(false)}
-                  className="flex-1 text-xs font-medium py-1.5 px-3 rounded-md border
-                    border-gray-200 hover:bg-gray-50 text-gray-600 transition-colors"
-                >
-                  Anuluj
-                </button>
-              </div>
-            </div>
-          )}
+                      <label className="block text-xs text-gray-600">
+                        Nadrzędna (opcjonalnie)
+                        <select
+                          value={newParentId}
+                          onChange={(e) =>
+                            setNewParentId(
+                              e.target.value === "" ? "" : Number(e.target.value)
+                            )
+                          }
+                          className="mt-1 w-full text-sm border border-gray-200 rounded-md px-2 py-1
+                            focus:outline-none focus:ring-2 focus:ring-[#635bff]"
+                        >
+                          <option value="">Brak</option>
+                          {parentLevelCategories.map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+
+                      <div className="flex gap-2 pt-1">
+                        <button
+                          type="button"
+                          disabled={!newName.trim() || addMutation.isPending}
+                          onClick={handleSubmitCreate}
+                          className="flex-1 text-xs font-medium py-1.5 px-3 rounded-md bg-[#635bff]
+                            text-white disabled:opacity-40 disabled:cursor-not-allowed
+                            hover:bg-[#4f46e5] transition-colors"
+                        >
+                          {addMutation.isPending ? "Dodawanie…" : "Dodaj"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowCreate(false)}
+                          className="flex-1 text-xs font-medium py-1.5 px-3 rounded-md border
+                            border-gray-200 hover:bg-gray-50 text-gray-600 transition-colors"
+                        >
+                          Anuluj
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              );
+            }}
+          </QueryState>
         </div>
       )}
     </div>

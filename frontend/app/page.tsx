@@ -1,7 +1,12 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  useQuery,
+  useMutation,
+  useQueryClient,
+  type UseQueryResult,
+} from "@tanstack/react-query";
 import {
   Search,
   SlidersHorizontal,
@@ -23,8 +28,15 @@ import {
   linkCashToReceipt,
   unlinkBankTransaction,
   unlinkCashTransaction,
+  getBankTransaction,
+  getCashTransaction,
 } from "@/lib/api";
-import { UnifiedTransaction, ReceiptCandidateItem } from "@/lib/types";
+import type {
+  UnifiedTransaction,
+  ReceiptCandidateItem,
+  BankTransactionDetail,
+  CashTransactionDetail,
+} from "@/lib/types";
 import { isoToDisplay } from "@/lib/utils";
 import { DataTable, Column } from "@/components/DataTable";
 import { CategoryDropdown } from "@/components/CategoryDropdown";
@@ -45,6 +57,11 @@ import {
   Button,
 } from "@/components/ui";
 import Link from "next/link";
+import {
+  QueryState,
+  QueryErrorNotice,
+  MutationErrorNotice,
+} from "@/components/QueryState";
 
 // ─── Helpers ───────────────────────────────────────────────────────
 function dateRangeFor(preset: string): { date_from: string; date_to: string } {
@@ -62,12 +79,12 @@ function dateRangeFor(preset: string): { date_from: string; date_to: string } {
 // ─── Expanded row ───────────────────────────────────────────────────
 function ExpandedRow({
   row,
-  allTags,
+  tagsQuery,
   onCategoryConfirm,
   onTagsChange,
 }: {
   row: UnifiedTransaction;
-  allTags: string[];
+  tagsQuery: UseQueryResult<string[], Error>;
   onCategoryConfirm: (row: UnifiedTransaction, categoryId: number) => void;
   onTagsChange: (row: UnifiedTransaction, tags: string[]) => void;
 }) {
@@ -76,16 +93,16 @@ function ExpandedRow({
 
   const isLinkable = row.source_type === "bank" || row.source_type === "cash";
 
-  const { data: detail } = useQuery({
+  const detailQuery = useQuery<BankTransactionDetail | CashTransactionDetail>({
     queryKey: ["tx-detail", row.source_type, row.id],
     queryFn: () =>
       row.source_type === "bank"
-        ? fetch(`/api/bank-transactions/${row.id}`).then((r) => r.json())
-        : fetch(`/api/cash-transactions/${row.id}`).then((r) => r.json()),
+        ? getBankTransaction(row.id)
+        : getCashTransaction(row.id),
     enabled: isLinkable,
   });
 
-  const { data: candidates = [], isFetching: candidatesLoading } = useQuery<ReceiptCandidateItem[]>({
+  const candidatesQuery = useQuery<ReceiptCandidateItem[]>({
     queryKey: ["tx-receipt-candidates", row.source_type, row.id],
     queryFn: () =>
       row.source_type === "bank"
@@ -117,8 +134,6 @@ function ExpandedRow({
       queryClient.invalidateQueries({ queryKey: ["tx-detail", row.source_type, row.id] });
     },
   });
-
-  const receiptLink = detail?.receipt_link ?? null;
 
   const detailHref =
     row.source_type === "bank"
@@ -220,85 +235,134 @@ function ExpandedRow({
       {/* ── Tags — separate border section ──────────────────────── */}
       <div className="mt-4 pt-4 border-t border-gray-200 space-y-1.5">
         <SectionLabel>Tagi</SectionLabel>
-        <TagsEditor
-          tags={row.tags ?? []}
-          allTags={allTags}
-          onChange={(tags) => onTagsChange(row, tags)}
-        />
+        <QueryState
+          query={tagsQuery}
+          errorTitle="Nie udało się pobrać listy tagów."
+          loadingFallback={
+            <p className="text-xs text-gray-400">Ładowanie tagów…</p>
+          }
+        >
+          {(allTags) => (
+            <TagsEditor
+              tags={row.tags ?? []}
+              allTags={allTags}
+              onChange={(tags) => onTagsChange(row, tags)}
+            />
+          )}
+        </QueryState>
       </div>
 
       {/* ── Receipt linking — only for bank/cash ────────────────── */}
       {isLinkable && (
         <div className="mt-4 pt-4 border-t border-gray-200 space-y-1.5">
           <SectionLabel>Powiązany paragon</SectionLabel>
-
-          {receiptLink ? (
-            <div className="flex items-center justify-between gap-4 rounded-lg border border-green-200 bg-green-50 px-3 py-2">
-              <Link
-                href={`/receipts/${receiptLink.scan_id}`}
-                className="text-xs space-y-0.5 hover:underline min-w-0"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <p className="font-medium text-accent">{receiptLink.vendor_name}</p>
-                <p className="text-gray-500">
-                  {isoToDisplay(receiptLink.date)} · {receiptLink.total.toFixed(2)} PLN
-                </p>
-                <p className="text-gray-400 font-mono">{receiptLink.scan_filename}</p>
-              </Link>
-              <Button
-                variant="danger"
-                size="sm"
-                disabled={unlinkMutation.isPending}
-                onClick={() => unlinkMutation.mutate()}
-                className="shrink-0"
-              >
-                {unlinkMutation.isPending ? "…" : "Odepnij"}
-              </Button>
-            </div>
-          ) : showCandidates ? (
-            candidatesLoading ? (
-              <p className="text-xs text-gray-400 animate-pulse">Szukanie…</p>
-            ) : candidates.length === 0 ? (
-              <p className="text-xs text-gray-400 italic">Nie znaleziono pasujących paragonów.</p>
-            ) : (
-              <div className="space-y-1.5">
-                {candidates.map((c) => (
-                  <div
-                    key={c.receipt_transaction_id}
-                    className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white px-3 py-2"
-                  >
-                    <div className="text-xs space-y-0.5 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="font-medium text-gray-800 truncate">{c.vendor_name}</p>
-                        <MatchBadge score={c.match_score} />
-                      </div>
-                      <p className="text-gray-500">
-                        {c.date} · {c.total.toFixed(2)} PLN
-                      </p>
-                      <p className="text-gray-400 font-mono text-[10px] truncate">{c.scan_filename}</p>
+          <QueryState
+            query={detailQuery}
+            errorTitle="Nie udało się pobrać szczegółów transakcji."
+            loadingFallback={
+              <p className="text-xs text-gray-400">Ładowanie powiązania…</p>
+            }
+          >
+            {(detail) => {
+              const receiptLink = detail.receipt_link ?? null;
+              return (
+                <>
+                  <MutationErrorNotice mutation={linkMutation} />
+                  <MutationErrorNotice mutation={unlinkMutation} />
+                  {receiptLink ? (
+                    <div className="flex items-center justify-between gap-4 rounded-lg border border-green-200 bg-green-50 px-3 py-2">
+                      <Link
+                        href={`/receipts/${receiptLink.scan_id}`}
+                        className="text-xs space-y-0.5 hover:underline min-w-0"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <p className="font-medium text-accent">
+                          {receiptLink.vendor_name}
+                        </p>
+                        <p className="text-gray-500">
+                          {isoToDisplay(receiptLink.date)} ·{" "}
+                          {receiptLink.total.toFixed(2)} PLN
+                        </p>
+                        <p className="text-gray-400 font-mono">
+                          {receiptLink.scan_filename}
+                        </p>
+                      </Link>
+                      <Button
+                        variant="danger"
+                        size="sm"
+                        disabled={unlinkMutation.isPending}
+                        onClick={() => unlinkMutation.mutate()}
+                        className="shrink-0"
+                      >
+                        {unlinkMutation.isPending ? "…" : "Odepnij"}
+                      </Button>
                     </div>
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      disabled={linkMutation.isPending}
-                      onClick={() => linkMutation.mutate(c.receipt_transaction_id)}
-                      className="shrink-0"
+                  ) : showCandidates ? (
+                    <QueryState
+                      query={candidatesQuery}
+                      errorTitle="Nie udało się pobrać propozycji paragonów."
+                      loadingFallback={
+                        <p className="text-xs text-gray-400 animate-pulse">
+                          Szukanie…
+                        </p>
+                      }
                     >
-                      {linkMutation.isPending ? "…" : "Powiąż"}
+                      {(candidates) =>
+                        candidates.length === 0 ? (
+                          <p className="text-xs text-gray-400 italic">
+                            Nie znaleziono pasujących paragonów.
+                          </p>
+                        ) : (
+                          <div className="space-y-1.5">
+                            {candidates.map((c) => (
+                              <div
+                                key={c.receipt_transaction_id}
+                                className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white px-3 py-2"
+                              >
+                                <div className="text-xs space-y-0.5 min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <p className="font-medium text-gray-800 truncate">
+                                      {c.vendor_name}
+                                    </p>
+                                    <MatchBadge score={c.match_score} />
+                                  </div>
+                                  <p className="text-gray-500">
+                                    {c.date} · {c.total.toFixed(2)} PLN
+                                  </p>
+                                  <p className="text-gray-400 font-mono text-[10px] truncate">
+                                    {c.scan_filename}
+                                  </p>
+                                </div>
+                                <Button
+                                  variant="primary"
+                                  size="sm"
+                                  disabled={linkMutation.isPending}
+                                  onClick={() =>
+                                    linkMutation.mutate(c.receipt_transaction_id)
+                                  }
+                                  className="shrink-0"
+                                >
+                                  {linkMutation.isPending ? "…" : "Powiąż"}
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        )
+                      }
+                    </QueryState>
+                  ) : (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => setShowCandidates(true)}
+                    >
+                      Znajdź pasujące paragony
                     </Button>
-                  </div>
-                ))}
-              </div>
-            )
-          ) : (
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setShowCandidates(true)}
-            >
-              Znajdź pasujące paragony
-            </Button>
-          )}
+                  )}
+                </>
+              );
+            }}
+          </QueryState>
         </div>
       )}
     </div>
@@ -387,7 +451,7 @@ export default function TransactionsPage() {
   ];
 
   // ── Data fetching ─────────────────────────────────────────────
-  const { data: listData, isFetching } = useQuery({
+  const listQuery = useQuery({
     queryKey: listKey,
     queryFn: () =>
       listUnifiedTransactions({
@@ -409,7 +473,7 @@ export default function TransactionsPage() {
     placeholderData: (prev) => prev,
   });
 
-  const { data: allTags = [] } = useQuery({
+  const tagsQuery = useQuery({
     queryKey: ["tags"],
     queryFn: getAllTags,
     staleTime: 120_000,
@@ -605,11 +669,10 @@ export default function TransactionsPage() {
     { label: "Przychody", value: "income" },
   ];
 
-  const items = listData?.items ?? [];
-  const total = listData?.total ?? 0;
-
   return (
     <div className="flex flex-col h-full gap-6">
+      <MutationErrorNotice mutation={categoryMutation} className="max-w-2xl" />
+      <MutationErrorNotice mutation={tagsMutation} className="max-w-2xl" />
       {/* ── Page header ─────────────────────────────────────────── */}
       <PageHeader
         title="Transakcje"
@@ -709,7 +772,11 @@ export default function TransactionsPage() {
           )}
 
           <span className="ml-auto text-xs text-gray-400">
-            {isFetching ? "Ładowanie…" : `${total.toLocaleString("pl-PL")} transakcji`}
+            {listQuery.isFetching && !listQuery.isError
+              ? "Ładowanie…"
+              : listQuery.isError
+                ? "—"
+                : `${(listQuery.data?.total ?? 0).toLocaleString("pl-PL")} transakcji`}
           </span>
         </div>
 
@@ -742,10 +809,15 @@ export default function TransactionsPage() {
                 className="w-full"
               />
               <datalist id="unified-tags">
-                {allTags.map((t) => (
+                {(tagsQuery.data ?? []).map((t) => (
                   <option key={t} value={t} />
                 ))}
               </datalist>
+              <QueryErrorNotice
+                query={tagsQuery}
+                className="mt-2"
+                errorTitle="Nie udało się pobrać listy tagów."
+              />
             </div>
             <div>
               <SectionLabel as="div" className="mb-1">Kwota min (abs)</SectionLabel>
@@ -782,30 +854,44 @@ export default function TransactionsPage() {
       </div>
 
       {/* ── Table ───────────────────────────────────────────────── */}
-      <DataTable<UnifiedTransaction>
-        columns={columns}
-        rows={items}
-        emptyMessage="Brak transakcji dla wybranych filtrów."
-        renderExpandedRow={(row) => (
-          <ExpandedRow
-            row={row}
-            allTags={allTags}
-            onCategoryConfirm={(r, catId) =>
-              categoryMutation.mutate({ row: r, categoryId: catId })
-            }
-            onTagsChange={(r, tags) => tagsMutation.mutate({ row: r, tags })}
+      <QueryState
+        query={listQuery}
+        errorTitle="Nie udało się pobrać transakcji."
+        loadingFallback={
+          <div className="rounded-lg border border-gray-200 bg-white p-8 text-center text-sm text-gray-500">
+            Ładowanie transakcji…
+          </div>
+        }
+      >
+        {(listData) => (
+          <DataTable<UnifiedTransaction>
+            columns={columns}
+            rows={listData.items}
+            emptyMessage="Brak transakcji dla wybranych filtrów."
+            renderExpandedRow={(row) => (
+              <ExpandedRow
+                row={row}
+                tagsQuery={tagsQuery}
+                onCategoryConfirm={(r, catId) =>
+                  categoryMutation.mutate({ row: r, categoryId: catId })
+                }
+                onTagsChange={(r, tags) =>
+                  tagsMutation.mutate({ row: r, tags })
+                }
+              />
+            )}
+            pagination={{
+              page,
+              pageSize: 50,
+              total: listData.total,
+              onPageChange: setPage,
+              sortBy,
+              sortDir,
+              onSortChange: handleSortChange,
+            }}
           />
         )}
-        pagination={{
-          page,
-          pageSize: 50,
-          total,
-          onPageChange: setPage,
-          sortBy,
-          sortDir,
-          onSortChange: handleSortChange,
-        }}
-      />
+      </QueryState>
     </div>
   );
 }
