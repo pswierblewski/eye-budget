@@ -15,6 +15,12 @@ import TagsEditor from "@/components/TagsEditor";
 import { BankTxCandidateItem, CashTxCandidateItem, ProductItem, ReceiptTransactionItem } from "@/lib/types";
 import Link from "next/link";
 import { ChevronDown } from "lucide-react";
+import {
+  QueryErrorCallout,
+  QueryErrorNotice,
+  MutationErrorNotice,
+} from "@/components/QueryState";
+import { formatQueryError } from "@/lib/query-error";
 
 export default function ReceiptReviewPage({
   params,
@@ -25,15 +31,17 @@ export default function ReceiptReviewPage({
   const queryClient = useQueryClient();
   const router = useRouter();
 
-  const { data: scan, isLoading: scanLoading } = useQuery({
+  const scanQuery = useQuery({
     queryKey: ["receipt", scanId],
     queryFn: () => getReceipt(scanId),
   });
+  const scan = scanQuery.data;
 
-  const { data: allCategories = [] } = useQuery({
+  const categoriesQuery = useQuery({
     queryKey: ["categories"],
     queryFn: listCategories,
   });
+  const allCategories = categoriesQuery.data ?? [];
 
   // Inline editing of a single product on a confirmed receipt
   const [editingItemId, setEditingItemId] = useState<number | null>(null);
@@ -43,20 +51,21 @@ export default function ReceiptReviewPage({
   const [editItemUnitPrice, setEditItemUnitPrice] = useState("");
   const [editItemPrice, setEditItemPrice] = useState("");
 
-  const { data: allProducts = [] } = useQuery({
+  const productsQuery = useQuery({
     queryKey: ["products"],
     queryFn: listProducts,
     enabled: editingItemId !== null,
   });
+  const allProducts = productsQuery.data ?? [];
 
-  const { data: allReceipts } = useQuery({
+  const navReceiptsQuery = useQuery({
     queryKey: ["receipts", "all", "nav"],
     queryFn: () => listReceipts({ limit: 1000 }),
   });
 
   const { prevReceiptId, nextReceiptId } = (() => {
-    if (!allReceipts) return { prevReceiptId: null, nextReceiptId: null };
-    const ids = allReceipts.items.map((r) => r.id).sort((a, b) => a - b);
+    if (!navReceiptsQuery.data) return { prevReceiptId: null, nextReceiptId: null };
+    const ids = navReceiptsQuery.data.items.map((r) => r.id).sort((a, b) => a - b);
     const idx = ids.indexOf(scanId);
     return {
       prevReceiptId: idx > 0 ? ids[idx - 1] : null,
@@ -209,11 +218,13 @@ export default function ReceiptReviewPage({
 
   const [showBankCandidates, setShowBankCandidates] = useState(false);
 
-  const { data: bankCandidates = [], isFetching: bankCandidatesLoading } = useQuery<BankTxCandidateItem[]>({
+  const bankCandidatesQuery = useQuery<BankTxCandidateItem[]>({
     queryKey: ["receipt-bank-candidates", scanId],
     queryFn: () => getBankTxCandidates(scanId),
     enabled: showBankCandidates || ((scan?.bank_candidate_count ?? 0) > 0 && !scan?.bank_link),
   });
+  const bankCandidates = bankCandidatesQuery.data ?? [];
+  const bankCandidatesLoading = bankCandidatesQuery.isFetching;
 
   const linkBankMutation = useMutation({
     mutationFn: (bankTxId: number) =>
@@ -235,11 +246,13 @@ export default function ReceiptReviewPage({
 
   const [showCashCandidates, setShowCashCandidates] = useState(false);
 
-  const { data: cashCandidates = [], isFetching: cashCandidatesLoading } = useQuery<CashTxCandidateItem[]>({
+  const cashCandidatesQuery = useQuery<CashTxCandidateItem[]>({
     queryKey: ["receipt-cash-candidates", scanId],
     queryFn: () => getCashTxCandidatesForReceipt(scanId),
     enabled: showCashCandidates || ((scan?.cash_candidate_count ?? 0) > 0 && !scan?.cash_link && !scan?.bank_link),
   });
+  const cashCandidates = cashCandidatesQuery.data ?? [];
+  const cashCandidatesLoading = cashCandidatesQuery.isFetching;
 
   const createCashMutation = useMutation({
     mutationFn: () => createCashFromReceipt(scanId),
@@ -281,11 +294,12 @@ export default function ReceiptReviewPage({
     },
   });
 
-  const { data: allTags = [] } = useQuery({
+  const tagsQuery = useQuery({
     queryKey: ["tags"],
     queryFn: getAllTags,
     staleTime: 60_000,
   });
+  const allTags = tagsQuery.data ?? [];
 
   const tagsMutation = useMutation({
     mutationFn: (tags: string[]) => updateReceiptTags(scanId, tags),
@@ -334,7 +348,20 @@ export default function ReceiptReviewPage({
     return mapping;
   }, [scan?.result?.products, scan?.transaction?.items]);
 
-  if (scanLoading) {
+  if (scanQuery.isError) {
+    return (
+      <div className="max-w-lg mx-auto py-16 px-4">
+        <QueryErrorCallout
+          variant="panel"
+          title="Nie udało się pobrać paragonu."
+          message={formatQueryError(scanQuery.error)}
+          onRetry={() => void scanQuery.refetch()}
+        />
+      </div>
+    );
+  }
+
+  if (scanQuery.data === undefined && scanQuery.isFetching) {
     return (
       <div className="text-sm text-gray-400 py-16 text-center">Ładowanie…</div>
     );
@@ -444,6 +471,35 @@ export default function ReceiptReviewPage({
 
   return (
     <div className="space-y-6">
+      <QueryErrorNotice
+        query={categoriesQuery}
+        errorTitle="Nie udało się pobrać kategorii."
+      />
+      <QueryErrorNotice
+        query={navReceiptsQuery}
+        errorTitle="Nie udało się pobrać listy paragonów do nawigacji."
+      />
+      <QueryErrorNotice
+        query={tagsQuery}
+        errorTitle="Nie udało się pobrać listy tagów."
+      />
+      <QueryErrorNotice
+        query={productsQuery}
+        errorTitle="Nie udało się pobrać listy produktów."
+      />
+      <MutationErrorNotice mutation={updateItemMutation} />
+      <MutationErrorNotice mutation={deleteItemMutation} />
+      <MutationErrorNotice mutation={confirmMutation} />
+      <MutationErrorNotice mutation={reopenMutation} />
+      <MutationErrorNotice mutation={retryMutation} />
+      <MutationErrorNotice mutation={deleteMutation} />
+      <MutationErrorNotice mutation={linkBankMutation} />
+      <MutationErrorNotice mutation={unlinkBankMutation} />
+      <MutationErrorNotice mutation={createCashMutation} />
+      <MutationErrorNotice mutation={linkCashMutation} />
+      <MutationErrorNotice mutation={unlinkCashMutation} />
+      <MutationErrorNotice mutation={tagsMutation} />
+      <MutationErrorNotice mutation={localizeMutation} />
       {/* Confirm Delete Modal */}
       <ConfirmDeleteModal
         open={showDeleteModal}
@@ -590,7 +646,14 @@ export default function ReceiptReviewPage({
                   </div>
                 ) : (scan.bank_candidate_count ?? 0) > 0 || showBankCandidates ? (
                   /* Candidate list — auto-loaded when bank_candidate_count > 0 */
-                  bankCandidatesLoading ? (
+                  bankCandidatesQuery.isError ? (
+                    <QueryErrorCallout
+                      variant="inline"
+                      title="Nie udało się pobrać kandydatów transakcji bankowych."
+                      message={formatQueryError(bankCandidatesQuery.error)}
+                      onRetry={() => void bankCandidatesQuery.refetch()}
+                    />
+                  ) : bankCandidatesLoading ? (
                     <p className="text-xs text-gray-400 animate-pulse">Szukanie…</p>
                   ) : bankCandidates.length === 0 ? (
                     <p className="text-xs text-gray-400 italic">
@@ -704,7 +767,14 @@ export default function ReceiptReviewPage({
                     </button>
                     {(scan.cash_candidate_count ?? 0) > 0 || showCashCandidates ? (
                       /* Candidate list — auto-loaded when cash_candidate_count > 0 */
-                      cashCandidatesLoading ? (
+                      cashCandidatesQuery.isError ? (
+                        <QueryErrorCallout
+                          variant="inline"
+                          title="Nie udało się pobrać kandydatów transakcji gotówkowych."
+                          message={formatQueryError(cashCandidatesQuery.error)}
+                          onRetry={() => void cashCandidatesQuery.refetch()}
+                        />
+                      ) : cashCandidatesLoading ? (
                         <p className="text-xs text-gray-400 animate-pulse">Szukanie…</p>
                       ) : cashCandidates.length === 0 ? (
                         <p className="text-xs text-gray-400 italic">Brak pasujących transakcji.</p>
@@ -829,9 +899,6 @@ export default function ReceiptReviewPage({
                   >
                     {localizeMutation.isPending ? "Wykrywam…" : "Wykryj pozycje na zdjęciu"}
                   </button>
-                  {localizeMutation.isError && (
-                    <p className="mt-1 text-xs text-red-500">{(localizeMutation.error as Error).message}</p>
-                  )}
                 </div>
                 {scan.transaction.items.length > 5 && (
                   <input
@@ -1205,9 +1272,6 @@ export default function ReceiptReviewPage({
                   >
                     {localizeMutation.isPending ? "Wykrywam…" : "Wykryj pozycje na zdjęciu"}
                   </button>
-                  {localizeMutation.isError && (
-                    <p className="mt-1 text-xs text-red-500">{(localizeMutation.error as Error).message}</p>
-                  )}
                 </div>
                 {products.length > 5 && (
                   <input
@@ -1367,11 +1431,6 @@ export default function ReceiptReviewPage({
                 {confirmMutation.isPending ? "Zapisywanie…" : "Potwierdź paragon"}
               </button>
 
-              {confirmMutation.isError && (
-                <p className="text-sm text-red-500 text-center">
-                  Błąd zapisu. Spróbuj ponownie.
-                </p>
-              )}
               </>)}
             </>
           )}

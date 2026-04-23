@@ -111,8 +111,8 @@ def test_get_list_no_conn():
 
 
 @pytest.mark.unit
-def test_get_list_db_error_returns_empty():
-    """Test get_list returns ([], 0) and handles exception on DB error."""
+def test_get_list_db_error_propagates():
+    """Test get_list re-raises on DB error (caller / HTTP layer must not fake empty list)."""
     # Arrange
     conn = MagicMock()
     cursor = MagicMock()
@@ -122,12 +122,9 @@ def test_get_list_db_error_returns_empty():
     repo = UnifiedTransactionsRepository.__new__(UnifiedTransactionsRepository)
     repo.conn = conn
 
-    # Act
-    result, total = repo.get_list()
-
-    # Assert
-    assert result == []
-    assert total == 0
+    # Act / Assert
+    with pytest.raises(Exception, match="DB connection lost"):
+        repo.get_list()
 
 
 @pytest.mark.unit
@@ -405,8 +402,8 @@ def test_get_analytics_no_conn():
 
 
 @pytest.mark.unit
-def test_get_analytics_db_error():
-    """Test get_analytics returns empty AnalyticsSummary on DB error."""
+def test_get_analytics_db_error_propagates():
+    """Test get_analytics re-raises on DB error."""
     # Arrange
     conn = MagicMock()
     cursor = MagicMock()
@@ -416,13 +413,9 @@ def test_get_analytics_db_error():
     repo = UnifiedTransactionsRepository.__new__(UnifiedTransactionsRepository)
     repo.conn = conn
 
-    # Act
-    result = repo.get_analytics()
-
-    # Assert
-    assert isinstance(result, AnalyticsSummary)
-    assert result.total_expense == 0
-    assert result.transaction_count == 0
+    # Act / Assert
+    with pytest.raises(Exception, match="DB connection lost"):
+        repo.get_analytics()
 
 
 @pytest.mark.unit

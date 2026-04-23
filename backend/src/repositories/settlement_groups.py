@@ -135,7 +135,7 @@ class SettlementGroupsRepository:
                 return int(r[0]) if r else None
         except Exception:
             logger.exception("get_group_id_for_transaction failed")
-            return None
+            raise
 
     def get_list(
         self,
@@ -200,7 +200,7 @@ class SettlementGroupsRepository:
             return items, total
         except Exception:
             logger.exception("get_list failed")
-            return [], 0
+            raise
 
     def _member_rows_for_group(
         self, cur: Any, group_id: int
@@ -336,7 +336,7 @@ class SettlementGroupsRepository:
             )
         except Exception:
             logger.exception("get_by_id failed")
-            return None
+            raise
 
     def move_member(
         self,

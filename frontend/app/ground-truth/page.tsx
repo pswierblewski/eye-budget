@@ -7,6 +7,7 @@ import { GroundTruthEntry } from "@/lib/types";
 import { isoToDisplay } from "@/lib/utils";
 import { DataTable, Column } from "@/components/DataTable";
 import Link from "next/link";
+import { QueryState } from "@/components/QueryState";
 
 export default function GroundTruthPage() {
   const queryClient = useQueryClient();
@@ -18,13 +19,17 @@ export default function GroundTruthPage() {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
-  const { data, isLoading } = useQuery({
+  const listQuery = useQuery({
     queryKey: ["ground-truth", page, sortBy, sortDir],
-    queryFn: () => listGroundTruth({ page, limit: PAGE_SIZE, sort_by: sortBy, sort_dir: sortDir }),
+    queryFn: () =>
+      listGroundTruth({
+        page,
+        limit: PAGE_SIZE,
+        sort_by: sortBy,
+        sort_dir: sortDir,
+      }),
     staleTime: 30_000,
   });
-  const entries = data?.items ?? [];
-  const total = data?.total ?? 0;
 
   const columns: Column<GroundTruthEntry>[] = [
     { header: "ID", accessor: "id", className: "w-16 text-gray-400 font-mono", serverSortKey: "id" },
@@ -124,21 +129,35 @@ export default function GroundTruthPage() {
         <p className="text-sm text-red-500">{uploadError}</p>
       )}
 
-      {isLoading ? (
-        <div className="text-sm text-gray-400 py-8 text-center">Ładowanie…</div>
-      ) : (
-        <DataTable
-          columns={columns}
-          rows={entries}
-          emptyMessage="Brak danych wzorcowych."
-          className="flex-1 min-h-0"
-          pagination={{
-            page, pageSize: PAGE_SIZE, total, onPageChange: setPage,
-            sortBy, sortDir,
-            onSortChange: (key, dir) => { setSortBy(key); setSortDir(dir); setPage(1); },
-          }}
-        />
-      )}
+      <QueryState
+        query={listQuery}
+        errorTitle="Nie udało się pobrać danych wzorcowych."
+        loadingFallback={
+          <div className="text-sm text-gray-400 py-8 text-center">Ładowanie…</div>
+        }
+      >
+        {(data) => (
+          <DataTable
+            columns={columns}
+            rows={data.items}
+            emptyMessage="Brak danych wzorcowych."
+            className="flex-1 min-h-0"
+            pagination={{
+              page,
+              pageSize: PAGE_SIZE,
+              total: data.total,
+              onPageChange: setPage,
+              sortBy,
+              sortDir,
+              onSortChange: (key, dir) => {
+                setSortBy(key);
+                setSortDir(dir);
+                setPage(1);
+              },
+            }}
+          />
+        )}
+      </QueryState>
     </div>
   );
 }

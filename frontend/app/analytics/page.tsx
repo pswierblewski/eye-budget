@@ -6,6 +6,7 @@ import { PromptAnalyticsRow } from "@/lib/types";
 import { PageHeader, Card } from "@/components/ui";
 import { isoToDisplay } from "@/lib/utils";
 import Link from "next/link";
+import { QueryState } from "@/components/QueryState";
 
 function StatCard({
   label,
@@ -31,20 +32,23 @@ function pct(count: number, total: number): string {
 }
 
 export default function PromptAnalyticsPage() {
-  const { data, isLoading } = useQuery({
+  const analyticsQuery = useQuery({
     queryKey: ["prompt-analytics"],
     queryFn: getPromptAnalytics,
     staleTime: 60_000,
   });
 
-  if (isLoading || !data) {
-    return (
-      <div className="p-8 text-sm text-gray-500">
-        {isLoading ? "Ładowanie danych analitycznych..." : "Brak danych."}
-      </div>
-    );
-  }
-
+  return (
+    <QueryState
+      query={analyticsQuery}
+      errorTitle="Nie udało się pobrać danych analitycznych."
+      loadingFallback={
+        <div className="p-8 text-sm text-gray-500">
+          Ładowanie danych analitycznych…
+        </div>
+      }
+    >
+      {(data) => {
   const {
     total_receipts,
     total_category_corrections,
@@ -244,5 +248,8 @@ export default function PromptAnalyticsPage() {
         )}
       </section>
     </div>
+  );
+      }}
+    </QueryState>
   );
 }

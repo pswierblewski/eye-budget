@@ -8,6 +8,7 @@ import { PageHeader, Button, Modal, Amount } from "@/components/ui";
 import { SimulationForm } from "@/components/budget/SimulationForm";
 import { Plus } from "lucide-react";
 import clsx from "clsx";
+import { QueryState } from "@/components/QueryState";
 
 const STATUS_CONFIG: Record<string, { label: string; cls: string }> = {
   pending: { label: "Oczekuje", cls: "bg-yellow-50 text-yellow-700" },
@@ -19,7 +20,7 @@ const STATUS_CONFIG: Record<string, { label: string; cls: string }> = {
 export default function SimulationsPage() {
   const [showForm, setShowForm] = useState(false);
 
-  const { data: simulations = [], isLoading } = useQuery({
+  const listQuery = useQuery({
     queryKey: ["budget-simulations"],
     queryFn: getBudgetSimulations,
   });
@@ -34,9 +35,13 @@ export default function SimulationsPage() {
         </Button>
       </div>
 
-      {isLoading ? (
-        <p className="text-sm text-gray-400">Ładowanie…</p>
-      ) : simulations.length === 0 ? (
+      <QueryState
+        query={listQuery}
+        errorTitle="Nie udało się pobrać symulacji."
+        loadingFallback={<p className="text-sm text-gray-400">Ładowanie…</p>}
+      >
+        {(simulations) =>
+          simulations.length === 0 ? (
         <div className="text-center py-16 text-gray-400">
           <p className="text-sm">Brak symulacji.</p>
           <p className="text-xs mt-1">
@@ -78,7 +83,9 @@ export default function SimulationsPage() {
             );
           })}
         </div>
-      )}
+        )
+        }
+      </QueryState>
 
       <Modal open={showForm} onClose={() => setShowForm(false)}>
         <div className="p-5">

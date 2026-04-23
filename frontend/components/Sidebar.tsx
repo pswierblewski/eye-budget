@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { getVersionInfo } from "@/lib/api";
+import { QueryState } from "@/components/QueryState";
 import {
   ReceiptText,
   BookMarked,
@@ -42,7 +43,7 @@ const adminItems = [
 
 export function Sidebar() {
   const pathname = usePathname();
-  const { data, isLoading } = useQuery({
+  const versionQuery = useQuery({
     queryKey: ["version"],
     queryFn: getVersionInfo,
     staleTime: Infinity,
@@ -127,13 +128,21 @@ export function Sidebar() {
           })}
         </ul>
       </nav>
-      <footer className="px-6 py-3 border-t border-gray-200">
+      <footer className="px-6 py-3 border-t border-gray-200 space-y-2">
         <p className="text-[10px] text-gray-400">
           Frontend: v{process.env.NEXT_PUBLIC_FRONTEND_VERSION ?? "?"}
         </p>
-        <p className="text-[10px] text-gray-400">
-          Backend: v{isLoading ? "ładowanie..." : (data?.version ?? "nieznana")}
-        </p>
+        <div className="text-[10px] text-gray-400">
+          Backend:{" "}
+          <QueryState
+            query={versionQuery}
+            errorVariant="inline"
+            errorTitle="Nie udało się pobrać wersji backendu."
+            loadingFallback={<span>ładowanie…</span>}
+          >
+            {(v) => <span>v{v.version}</span>}
+          </QueryState>
+        </div>
       </footer>
     </aside>
   );

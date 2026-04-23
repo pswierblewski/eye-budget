@@ -6,6 +6,7 @@ import { DataTable, Column } from "@/components/DataTable";
 import Link from "next/link";
 import { z } from "zod";
 import { EvaluationResultSchema } from "@/lib/types";
+import { QueryState } from "@/components/QueryState";
 
 type EvaluationResult = z.infer<typeof EvaluationResultSchema>;
 type ResultRow = EvaluationResult & { id: number };
@@ -34,26 +35,30 @@ export default function EvaluationDetailPage({
 }) {
   const runId = Number(params.id);
 
-  const { data: run, isLoading } = useQuery({
+  const runQuery = useQuery({
     queryKey: ["evaluation", runId],
     queryFn: () => getEvaluation(runId),
   });
 
-  if (isLoading) {
-    return (
-      <div className="text-sm text-gray-400 py-16 text-center">Ładowanie…</div>
-    );
-  }
-  if (!run) {
-    return (
-      <div className="text-sm text-red-500 py-16 text-center">
-        Nie znaleziono ewaluacji.{" "}
-        <Link href="/evaluations" className="underline">
-          Wróć
-        </Link>
-      </div>
-    );
-  }
+  return (
+    <QueryState
+      query={runQuery}
+      errorTitle="Nie udało się pobrać ewaluacji."
+      loadingFallback={
+        <div className="text-sm text-gray-400 py-16 text-center">Ładowanie…</div>
+      }
+    >
+      {(run) => {
+        if (!run) {
+          return (
+            <div className="text-sm text-red-500 py-16 text-center">
+              Nie znaleziono ewaluacji.{" "}
+              <Link href="/evaluations" className="underline">
+                Wróć
+              </Link>
+            </div>
+          );
+        }
 
   const resultsWithId: ResultRow[] = run.results.map((r, i) => ({ ...r, id: i }));
 
@@ -237,5 +242,8 @@ export default function EvaluationDetailPage({
         />
       </div>
     </div>
+  );
+      }}
+    </QueryState>
   );
 }

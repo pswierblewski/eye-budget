@@ -1,7 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  useQuery,
+  useMutation,
+  useQueryClient,
+  type UseQueryResult,
+} from "@tanstack/react-query";
 import {
   listCashTransactions,
   createCashTransaction,
@@ -14,11 +19,13 @@ import {
   updateCashTransactionTags,
   getAllTags,
   listVendors,
+  getCashTransaction,
 } from "@/lib/api";
 import { isoToDisplay } from "@/lib/utils";
 import {
   CashTransactionListItem,
   CashTransactionCreate,
+  CashTransactionDetail,
   ReceiptCandidateItem,
   VendorItem,
 } from "@/lib/types";
@@ -44,6 +51,11 @@ import {
   DateInput,
   AmountInput,
 } from "@/components/ui";
+import {
+  QueryState,
+  QueryErrorNotice,
+  MutationErrorNotice,
+} from "@/components/QueryState";
 
 // ---------------------------------------------------------------------------
 // Add Transaction Modal
@@ -64,10 +76,11 @@ function AddTransactionModal({
   const [vendorName, setVendorName] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  const { data: vendors = [] } = useQuery<VendorItem[]>({
+  const vendorsQuery = useQuery<VendorItem[]>({
     queryKey: ["vendors"],
     queryFn: listVendors,
   });
+  const vendors = vendorsQuery.data ?? [];
 
   const createMutation = useMutation({
     mutationFn: (data: CashTransactionCreate) => createCashTransaction(data),
@@ -103,6 +116,11 @@ function AddTransactionModal({
         <h2 className="text-base font-semibold text-gray-800 mb-4">
           Nowa transakcja gotówkowa
         </h2>
+        <QueryErrorNotice
+          query={vendorsQuery}
+          errorTitle="Nie udało się pobrać listy dostawców (dopasowanie przy zapisie)."
+        />
+        <MutationErrorNotice mutation={createMutation} />
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Date */}
           <div>
@@ -201,10 +219,10 @@ function AddTransactionModal({
 // ---------------------------------------------------------------------------
 type ExpandedRowProps = {
   tx: CashTransactionListItem;
-  allTags?: string[];
+  tagsQuery: UseQueryResult<string[], Error>;
 };
 
-function ExpandedRowContent({ tx, allTags = [] }: ExpandedRowProps) {
+function ExpandedRowContent({ tx, tagsQuery }: ExpandedRowProps) {
   const queryClient = useQueryClient();
   const [selectedCategory, setSelectedCategory] = useState<number | undefined>(
     tx.category_id ?? undefined
@@ -220,19 +238,20 @@ function ExpandedRowContent({ tx, allTags = [] }: ExpandedRowProps) {
   const [editDescription, setEditDescription] = useState(tx.description ?? "");
   const [editVendorName, setEditVendorName] = useState(tx.vendor_name ?? "");
 
-  const { data: vendors = [] } = useQuery<VendorItem[]>({
+  const vendorsQuery = useQuery<VendorItem[]>({
     queryKey: ["vendors"],
     queryFn: listVendors,
     enabled: editMode,
   });
+  const vendors = vendorsQuery.data ?? [];
 
-  const { data: detail } = useQuery({
+  const detailQuery = useQuery<CashTransactionDetail>({
     queryKey: ["cash-transaction", tx.id],
-    queryFn: () =>
-      fetch(`/api/cash-transactions/${tx.id}`).then((r) => r.json()),
+    queryFn: () => getCashTransaction(tx.id),
   });
+  const detail = detailQuery.data;
 
-  const { data: candidates = [], isFetching: candidatesLoading } = useQuery<ReceiptCandidateItem[]>({
+  const candidatesQuery = useQuery<ReceiptCandidateItem[]>({
     queryKey: ["cash-tx-receipt-candidates", tx.id],
     queryFn: () => getCashReceiptCandidates(tx.id),
     enabled: showCandidates,
@@ -301,6 +320,23 @@ function ExpandedRowContent({ tx, allTags = [] }: ExpandedRowProps) {
   const receiptLink = detail?.receipt_link ?? null;
 
   return (
+    <>
+    <QueryErrorNotice
+      query={detailQuery}
+      errorTitle="Nie udało się pobrać szczegółów transakcji."
+    />
+    {editMode && (
+      <QueryErrorNotice
+        query={vendorsQuery}
+        errorTitle="Nie udało się pobrać listy dostawców."
+      />
+    )}
+    <MutationErrorNotice mutation={saveCategoryMutation} />
+    <MutationErrorNotice mutation={deleteMutation} />
+    <MutationErrorNotice mutation={updateMutation} />
+    <MutationErrorNotice mutation={linkMutation} />
+    <MutationErrorNotice mutation={unlinkMutation} />
+    <MutationErrorNotice mutation={tagsMutation} />
     <div className="flex gap-8">
       {/* Left: details / edit form */}
       <div className="flex-1 space-y-3">
@@ -412,11 +448,21 @@ function ExpandedRowContent({ tx, allTags = [] }: ExpandedRowProps) {
         {/* Tags */}
         <div>
           <SectionLabel className="mb-1">Tagi</SectionLabel>
-          <TagsEditor
-            tags={tx.tags ?? []}
-            allTags={allTags}
-            onChange={(tags) => tagsMutation.mutate(tags)}
-          />
+          <QueryState
+            query={tagsQuery}
+            errorTitle="Nie udało się pobrać listy tagów."
+            loadingFallback={
+              <p className="text-xs text-gray-400">Ładowanie tagów…</p>
+            }
+          >
+            {(allTags) => (
+              <TagsEditor
+                tags={tx.tags ?? []}
+                allTags={allTags}
+                onChange={(tags) => tagsMutation.mutate(tags)}
+              />
+            )}
+          </QueryState>
         </div>
       </div>
 
@@ -530,14 +576,21 @@ function ExpandedRowContent({ tx, allTags = [] }: ExpandedRowProps) {
                   Znajdź pasujący paragon
                 </Button>
               ) : (
-                <div className="space-y-1.5">
-                  {candidatesLoading && (
+                <QueryState
+                  query={candidatesQuery}
+                  errorTitle="Nie udało się pobrać propozycji paragonów."
+                  loadingFallback={
                     <p className="text-xs text-gray-400">Szukanie…</p>
-                  )}
-                  {!candidatesLoading && candidates.length === 0 && (
-                    <p className="text-xs text-gray-400">Nie znaleziono pasujących paragonów.</p>
-                  )}
-                  {candidates.map((c) => (
+                  }
+                >
+                  {(candidates) => (
+                <div className="space-y-1.5">
+                  {candidates.length === 0 ? (
+                    <p className="text-xs text-gray-400">
+                      Nie znaleziono pasujących paragonów.
+                    </p>
+                  ) : (
+                    candidates.map((c) => (
                     <div
                       key={c.receipt_transaction_id}
                       className="flex items-center justify-between rounded-md bg-gray-50 border border-gray-200 px-3 py-2 text-xs"
@@ -561,20 +614,25 @@ function ExpandedRowContent({ tx, allTags = [] }: ExpandedRowProps) {
                         Powiąż
                       </Button>
                     </div>
-                  ))}
+                    ))
+                  )}
                   <button
+                    type="button"
                     onClick={() => setShowCandidates(false)}
                     className="text-xs text-gray-400 hover:text-gray-600"
                   >
                     Ukryj
                   </button>
                 </div>
+                  )}
+                </QueryState>
               )}
             </div>
           )}
         </div>
       </div>
     </div>
+    </>
   );
 }
 
@@ -589,7 +647,7 @@ export default function CashTransactionsPage() {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [showAddModal, setShowAddModal] = useState(false);
 
-  const { data, isLoading } = useQuery({
+  const listQuery = useQuery({
     queryKey: ["cash-transactions", page, sortBy, sortDir],
     queryFn: () =>
       listCashTransactions({
@@ -600,10 +658,8 @@ export default function CashTransactionsPage() {
       }),
     staleTime: 30_000,
   });
-  const transactions = data?.items ?? [];
-  const total = data?.total ?? 0;
 
-  const { data: allTags = [] } = useQuery({
+  const tagsQuery = useQuery({
     queryKey: ["tags"],
     queryFn: getAllTags,
     staleTime: 60_000,
@@ -736,32 +792,40 @@ export default function CashTransactionsPage() {
       />
 
       {/* Table */}
-      {isLoading ? (
-        <div className="p-8 text-center text-gray-400 text-sm">Ładowanie…</div>
-      ) : (
-        <DataTable
-          columns={columns}
-          rows={transactions}
-          emptyMessage={'Brak transakcji gotówkowych. Kliknij \u201eDodaj transakcję\u201d aby dodać pierwszą.'}
-          renderExpandedRow={(tx) => (
-            <ExpandedRowContent tx={tx} allTags={allTags} />
-          )}
-          className="flex-1 min-h-0"
-          pagination={{
-            page,
-            pageSize: PAGE_SIZE,
-            total,
-            onPageChange: setPage,
-            sortBy,
-            sortDir,
-            onSortChange: (key, dir) => {
-              setSortBy(key);
-              setSortDir(dir);
-              setPage(1);
-            },
-          }}
-        />
-      )}
+      <QueryState
+        query={listQuery}
+        errorTitle="Nie udało się pobrać transakcji gotówkowych."
+        loadingFallback={
+          <div className="p-8 text-center text-gray-400 text-sm">Ładowanie…</div>
+        }
+      >
+        {(data) => (
+          <DataTable
+            columns={columns}
+            rows={data.items}
+            emptyMessage={
+              "Brak transakcji gotówkowych. Kliknij „Dodaj transakcję” aby dodać pierwszą."
+            }
+            renderExpandedRow={(tx) => (
+              <ExpandedRowContent tx={tx} tagsQuery={tagsQuery} />
+            )}
+            className="flex-1 min-h-0"
+            pagination={{
+              page,
+              pageSize: PAGE_SIZE,
+              total: data.total,
+              onPageChange: setPage,
+              sortBy,
+              sortDir,
+              onSortChange: (key, dir) => {
+                setSortBy(key);
+                setSortDir(dir);
+                setPage(1);
+              },
+            }}
+          />
+        )}
+      </QueryState>
 
       {showAddModal && (
         <AddTransactionModal
