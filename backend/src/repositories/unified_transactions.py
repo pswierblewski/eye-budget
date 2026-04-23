@@ -300,7 +300,7 @@ class UnifiedTransactionsRepository:
         except Exception as e:
             print(f"UnifiedTransactionsRepository.get_list error: {e}")
             import traceback; traceback.print_exc()
-            return [], 0
+            raise
 
     # ------------------------------------------------------------------
     # Analytics
@@ -505,7 +505,7 @@ class UnifiedTransactionsRepository:
         except Exception as e:
             print(f"UnifiedTransactionsRepository.get_analytics error: {e}")
             import traceback; traceback.print_exc()
-            return _empty_analytics()
+            raise
 
 
 def _empty_analytics() -> AnalyticsSummary:

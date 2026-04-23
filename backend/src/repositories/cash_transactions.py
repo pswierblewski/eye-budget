@@ -254,7 +254,7 @@ class CashTransactionsRepository:
             ], total
         except Exception as e:
             print(f"CashTransactionsRepository.get_list error: {e}")
-            return [], 0
+            raise
 
     def get_by_id(self, tx_id: int) -> Optional[CashTransactionDetail]:
         if not self.conn:
@@ -316,7 +316,7 @@ class CashTransactionsRepository:
             )
         except Exception as e:
             print(f"CashTransactionsRepository.get_by_id error: {e}")
-            return None
+            raise
 
     def dispose(self) -> None:
         pass

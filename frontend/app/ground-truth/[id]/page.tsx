@@ -6,6 +6,7 @@ import { TransactionModel } from "@/lib/types";
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { QueryState, MutationErrorNotice } from "@/components/QueryState";
 
 function ReceiptImage({ entryId }: { entryId: number }) {
   const [error, setError] = useState(false);
@@ -65,7 +66,7 @@ export default function GroundTruthEditPage({
   const router = useRouter();
   const queryClient = useQueryClient();
 
-  const { data: entry, isLoading } = useQuery({
+  const entryQuery = useQuery({
     queryKey: ["ground-truth", entryId],
     queryFn: () => getGroundTruth(entryId),
   });
@@ -73,10 +74,11 @@ export default function GroundTruthEditPage({
   const [form, setForm] = useState<string>("");
 
   useEffect(() => {
+    const entry = entryQuery.data;
     if (entry) {
       setForm(JSON.stringify(entry.ground_truth, null, 2));
     }
-  }, [entry]);
+  }, [entryQuery.data]);
 
   const saveMutation = useMutation({
     mutationFn: (gt: TransactionModel) => updateGroundTruth(entryId, gt),
@@ -100,25 +102,18 @@ export default function GroundTruthEditPage({
     saveMutation.mutate(parsed);
   }
 
-  if (isLoading) {
-    return (
-      <div className="text-sm text-gray-400 py-16 text-center">Ładowanie…</div>
-    );
-  }
-
-  if (!entry) {
-    return (
-      <div className="text-sm text-red-500 py-16 text-center">
-        Nie znaleziono wpisu.{" "}
-        <Link href="/ground-truth" className="underline">
-          Wróć
-        </Link>
-      </div>
-    );
-  }
-
   return (
+    <QueryState
+      query={entryQuery}
+      errorTitle="Nie udało się pobrać wpisu danych wzorcowych."
+      loadingFallback={
+        <div className="text-sm text-gray-400 py-16 text-center">Ładowanie…</div>
+      }
+    >
+      {(entry) =>
+        entry ? (
     <div className="space-y-6">
+      <MutationErrorNotice mutation={saveMutation} />
       <div className="flex items-center gap-4">
         <Link
           href="/ground-truth"
@@ -155,11 +150,6 @@ export default function GroundTruthEditPage({
           {parseError && (
             <p className="text-sm text-red-500">{parseError}</p>
           )}
-          {saveMutation.isError && (
-            <p className="text-sm text-red-500">
-              Zapis nieudany. Sprawdź dane i spróbuj ponownie.
-            </p>
-          )}
           <button
             onClick={handleSave}
             disabled={saveMutation.isPending}
@@ -170,5 +160,15 @@ export default function GroundTruthEditPage({
         </div>
       </div>
     </div>
+        ) : (
+          <div className="text-sm text-red-500 py-16 text-center">
+            Nie znaleziono wpisu.{" "}
+            <Link href="/ground-truth" className="underline">
+              Wróć
+            </Link>
+          </div>
+        )
+      }
+    </QueryState>
   );
 }

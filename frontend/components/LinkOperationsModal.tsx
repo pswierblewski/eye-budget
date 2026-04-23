@@ -8,6 +8,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Button, Input } from "@/components/ui";
 import { Amount, SourceBadge } from "@/components/ui";
 import { isoToDisplay } from "@/lib/utils";
+import { QueryState } from "@/components/QueryState";
 
 type Props = {
   open: boolean;
@@ -36,7 +37,7 @@ export function LinkOperationsModal({ open, onClose, current, onCreated }: Props
     setSubmitError(null);
   }, [open]);
 
-  const { data, isLoading } = useQuery({
+  const listQuery = useQuery({
     queryKey: ["transactions", "link-ops", search],
     queryFn: () =>
       listUnifiedTransactions({
@@ -48,15 +49,6 @@ export function LinkOperationsModal({ open, onClose, current, onCreated }: Props
       }),
     enabled: open,
   });
-
-  const rows = useMemo(() => {
-    const list = data?.items ?? [];
-    return list.filter(
-      (r) =>
-        (r.source_type === "bank" || r.source_type === "cash") &&
-        !(r.source_type === current.source_type && r.id === current.id)
-    );
-  }, [data?.items, current.id, current.source_type]);
 
   const toggle = (r: UnifiedTransaction) => {
     const k = keyOf(r);
@@ -132,56 +124,72 @@ export function LinkOperationsModal({ open, onClose, current, onCreated }: Props
           placeholder="Szukaj po opisie lub sklepie…"
         />
         <div className="border rounded-lg overflow-y-auto flex-1 min-h-[200px]">
-          {isLoading && (
-            <p className="p-3 text-sm text-gray-500">Ładowanie…</p>
-          )}
-          {!isLoading && rows.length === 0 && (
-            <p className="p-3 text-sm text-gray-500">Brak wyników.</p>
-          )}
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 sticky top-0">
-              <tr>
-                <th className="text-left p-2 w-10" />
-                <th className="text-left p-2">Data</th>
-                <th className="text-left p-2">Źródło</th>
-                <th className="text-left p-2">Opis</th>
-                <th className="text-right p-2">Kwota</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => {
-                const k = keyOf(r);
-                const on = selected.has(k);
-                return (
-                  <tr
-                    key={k}
-                    className={on ? "bg-violet-50" : "hover:bg-gray-50"}
-                  >
-                    <td className="p-2">
-                      <input
-                        type="checkbox"
-                        checked={on}
-                        onChange={() => toggle(r)}
-                        aria-label="Wybierz"
-                      />
-                    </td>
-                    <td className="p-2 font-mono text-xs whitespace-nowrap">
-                      {isoToDisplay(r.date)}
-                    </td>
-                    <td className="p-2">
-                      <SourceBadge source={r.source_type} />
-                    </td>
-                    <td className="p-2 max-w-xs truncate">
-                      {r.vendor_name ?? r.description ?? "—"}
-                    </td>
-                    <td className="p-2 text-right whitespace-nowrap">
-                      <Amount value={r.amount} currency={r.currency} />
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <QueryState
+            query={listQuery}
+            errorTitle="Nie udało się pobrać transakcji."
+            loadingFallback={
+              <p className="p-3 text-sm text-gray-500">Ładowanie…</p>
+            }
+          >
+            {(data) => {
+              const rows = data.items.filter(
+                (r) =>
+                  (r.source_type === "bank" || r.source_type === "cash") &&
+                  !(r.source_type === current.source_type && r.id === current.id)
+              );
+              return (
+                <>
+                  {rows.length === 0 && (
+                    <p className="p-3 text-sm text-gray-500">Brak wyników.</p>
+                  )}
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50 sticky top-0">
+                      <tr>
+                        <th className="text-left p-2 w-10" />
+                        <th className="text-left p-2">Data</th>
+                        <th className="text-left p-2">Źródło</th>
+                        <th className="text-left p-2">Opis</th>
+                        <th className="text-right p-2">Kwota</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.map((r) => {
+                        const k = keyOf(r);
+                        const on = selected.has(k);
+                        return (
+                          <tr
+                            key={k}
+                            className={on ? "bg-violet-50" : "hover:bg-gray-50"}
+                          >
+                            <td className="p-2">
+                              <input
+                                type="checkbox"
+                                checked={on}
+                                onChange={() => toggle(r)}
+                                aria-label="Wybierz"
+                              />
+                            </td>
+                            <td className="p-2 font-mono text-xs whitespace-nowrap">
+                              {isoToDisplay(r.date)}
+                            </td>
+                            <td className="p-2">
+                              <SourceBadge source={r.source_type} />
+                            </td>
+                            <td className="p-2 max-w-xs truncate">
+                              {r.vendor_name ?? r.description ?? "—"}
+                            </td>
+                            <td className="p-2 text-right whitespace-nowrap">
+                              <Amount value={r.amount} currency={r.currency} />
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </>
+              );
+            }}
+          </QueryState>
         </div>
         {submitError && (
           <p className="text-sm text-red-600" role="alert">

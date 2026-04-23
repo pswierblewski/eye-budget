@@ -238,7 +238,7 @@ class BankTransactionsRepository:
             ], total
         except Exception as e:
             print(f"BankTransactionsRepository.get_list error: {e}")
-            return [], 0
+            raise
 
     def get_by_id(self, transaction_id: int) -> Optional[BankTransactionDetail]:
         """Return full detail for a single transaction."""
@@ -333,7 +333,7 @@ class BankTransactionsRepository:
             )
         except Exception as e:
             print(f"BankTransactionsRepository.get_by_id error: {e}")
-            return None
+            raise
 
     def get_new_ids_for_categorization(self) -> list[int]:
         """Return IDs of transactions that have been inserted but not yet categorized."""

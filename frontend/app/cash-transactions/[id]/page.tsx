@@ -14,6 +14,7 @@ import {
   SourceBadge,
 } from "@/components/ui";
 import { SettlementOperationsSection } from "@/components/SettlementOperationsSection";
+import { QueryState } from "@/components/QueryState";
 
 export default function CashTransactionDetailPage({
   params,
@@ -21,34 +22,24 @@ export default function CashTransactionDetailPage({
   params: { id: string };
 }) {
   const id = Number(params.id);
-  const { data: tx, isLoading } = useQuery({
+  const txQuery = useQuery({
     queryKey: ["cash-transaction", id],
     queryFn: () => getCashTransaction(id),
   });
 
-  if (isLoading) {
-    return (
-      <div className="p-8 text-center text-gray-400 text-sm animate-pulse">Ładowanie…</div>
-    );
-  }
-
-  if (!tx) {
-    return (
-      <div className="p-8 text-center">
-        <p className="text-gray-500 text-sm">Nie znaleziono transakcji.</p>
-        <Link
-          href="/cash-transactions"
-          className="mt-4 inline-block text-accent text-sm hover:underline"
-        >
-          ← Wróć do listy
-        </Link>
-      </div>
-    );
-  }
-
-  const title = tx.vendor_name ?? tx.description ?? `Gotówka #${tx.id}`;
-
   return (
+    <QueryState
+      query={txQuery}
+      errorTitle="Nie udało się pobrać transakcji gotówkowej."
+      loadingFallback={
+        <div className="p-8 text-center text-gray-400 text-sm animate-pulse">
+          Ładowanie…
+        </div>
+      }
+    >
+      {(tx) => {
+        const title = tx.vendor_name ?? tx.description ?? `Gotówka #${tx.id}`;
+        return (
     <div className="h-full flex flex-col pb-6">
       <PageHeader
         variant="detail"
@@ -116,5 +107,8 @@ export default function CashTransactionDetailPage({
         <SettlementOperationsSection sourceType="cash" transactionId={id} />
       </div>
     </div>
+        );
+      }}
+    </QueryState>
   );
 }

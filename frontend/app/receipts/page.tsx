@@ -11,6 +11,7 @@ import { Info, SlidersHorizontal, X } from "lucide-react";
 import Link from "next/link";
 import { StatusBadge, Pill, PageHeader, NavLink, Button, FilterTabs, DateInput, SectionLabel } from "@/components/ui";
 import TagsEditor from "@/components/TagsEditor";
+import { QueryState, QueryErrorNotice, MutationErrorNotice } from "@/components/QueryState";
 
 const STATUS_FILTERS = [
   "all",
@@ -386,40 +387,47 @@ export default function ReceiptsPage() {
     queryClient.invalidateQueries({ queryKey: ["receipts-counts"] });
   };
 
-  const { data, isLoading } = useQuery({
+  const listQuery = useQuery({
     queryKey: ["receipts", page, statusFilter, sortBy, sortDir, appliedFilters],
-    queryFn: () => listReceipts({
-      page,
-      limit: PAGE_SIZE,
-      status: statusFilter !== "all" ? statusFilter : undefined,
-      sort_by: sortBy,
-      sort_dir: sortDir,
-      search: appliedFilters.search || undefined,
-      vendor: appliedFilters.vendor || undefined,
-      product: appliedFilters.product || undefined,
-      date_from: appliedFilters.dateFrom || undefined,
-      date_to: appliedFilters.dateTo || undefined,
-      total_min: appliedFilters.totalMin ? parseFloat(appliedFilters.totalMin) : undefined,
-      total_max: appliedFilters.totalMax ? parseFloat(appliedFilters.totalMax) : undefined,
-      tag: appliedFilters.tag || undefined,
-    }),
+    queryFn: () =>
+      listReceipts({
+        page,
+        limit: PAGE_SIZE,
+        status: statusFilter !== "all" ? statusFilter : undefined,
+        sort_by: sortBy,
+        sort_dir: sortDir,
+        search: appliedFilters.search || undefined,
+        vendor: appliedFilters.vendor || undefined,
+        product: appliedFilters.product || undefined,
+        date_from: appliedFilters.dateFrom || undefined,
+        date_to: appliedFilters.dateTo || undefined,
+        total_min: appliedFilters.totalMin
+          ? parseFloat(appliedFilters.totalMin)
+          : undefined,
+        total_max: appliedFilters.totalMax
+          ? parseFloat(appliedFilters.totalMax)
+          : undefined,
+        tag: appliedFilters.tag || undefined,
+      }),
     staleTime: 30_000,
   });
-  const receipts = data?.items ?? [];
-  const total = data?.total ?? 0;
+  const receipts = listQuery.data?.items ?? [];
+  const total = listQuery.data?.total ?? 0;
 
-  const { data: statusCounts = {} } = useQuery({
+  const countsQuery = useQuery({
     queryKey: ["receipts-counts"],
     queryFn: getReceiptCounts,
     staleTime: 30_000,
   });
+  const statusCounts = countsQuery.data ?? {};
   const totalAll = Object.values(statusCounts).reduce<number>((sum, v) => sum + v, 0);
 
-  const { data: allTags = [] } = useQuery({
+  const tagsQuery = useQuery({
     queryKey: ["tags"],
     queryFn: getAllTags,
     staleTime: 60_000,
   });
+  const allTags = tagsQuery.data ?? [];
 
   const filtered = receipts;
 
@@ -590,6 +598,17 @@ export default function ReceiptsPage() {
         }
       />
 
+      <MutationErrorNotice mutation={processMutation} />
+      <MutationErrorNotice mutation={tagsMutation} />
+      <QueryErrorNotice
+        query={countsQuery}
+        errorTitle="Nie udało się pobrać liczników statusów paragonów."
+      />
+      <QueryErrorNotice
+        query={tagsQuery}
+        errorTitle="Nie udało się pobrać listy tagów."
+      />
+
       {/* Live progress bar */}
       {progress && (
         <div className="flex-shrink-0 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm">
@@ -711,24 +730,42 @@ export default function ReceiptsPage() {
         <FilterPanel onChange={handleFiltersChange} onCountChange={handleFilterCountChange} allTags={allTags} />
       )}
 
-      {isLoading ? (
-        <div className="text-sm text-gray-400 py-8 text-center">Ładowanie…</div>
-      ) : (
-        <DataTable
-          columns={columns}
-          rows={filtered}
-          emptyMessage="Brak paragonów spełniających filtr."
-          className="flex-1 min-h-0"
-          pagination={{
-            page, pageSize: PAGE_SIZE, total, onPageChange: setPage,
-            sortBy, sortDir,
-            onSortChange: (key, dir) => { setSortBy(key); setSortDir(dir); setPage(1); },
-          }}
-          renderExpandedRow={(row) => (
-            <ExpandedReceiptRow row={row} allTags={allTags} onTagsChange={handleTagsChange} />
-          )}
-        />
-      )}
+      <QueryState
+        query={listQuery}
+        errorTitle="Nie udało się pobrać listy paragonów."
+        loadingFallback={
+          <div className="text-sm text-gray-400 py-8 text-center">Ładowanie…</div>
+        }
+      >
+        {(data) => (
+          <DataTable
+            columns={columns}
+            rows={data.items}
+            emptyMessage="Brak paragonów spełniających filtr."
+            className="flex-1 min-h-0"
+            pagination={{
+              page,
+              pageSize: PAGE_SIZE,
+              total: data.total,
+              onPageChange: setPage,
+              sortBy,
+              sortDir,
+              onSortChange: (key, dir) => {
+                setSortBy(key);
+                setSortDir(dir);
+                setPage(1);
+              },
+            }}
+            renderExpandedRow={(row) => (
+              <ExpandedReceiptRow
+                row={row}
+                allTags={allTags}
+                onTagsChange={handleTagsChange}
+              />
+            )}
+          />
+        )}
+      </QueryState>
     </div>
   );
 }
