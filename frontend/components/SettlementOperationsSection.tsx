@@ -228,7 +228,8 @@ export function SettlementOperationsSection({ sourceType, transactionId }: Props
               )}
               <div className="flex flex-wrap items-center gap-2 pt-1">
                 <ThreeDotsMenu
-                  variant="outlined"
+                  variant="inline"
+                  align="left"
                   title="Więcej akcji — powiązane operacje"
                   items={[
                     {
@@ -253,9 +254,6 @@ export function SettlementOperationsSection({ sourceType, transactionId }: Props
                   ]}
                 />
               </div>
-              <p className="text-xs text-gray-500">
-                Informacje o bilansie mają charakter orientacyjny.
-              </p>
             </Card>
           );
         }}
