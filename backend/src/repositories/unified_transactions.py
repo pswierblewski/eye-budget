@@ -118,7 +118,7 @@ class UnifiedTransactionsRepository:
                         vendor_name, category_id, category_name,
                         tags, status, has_receipt, receipt_scan_id, currency,
                         receipt_category_name, receipt_category_count,
-                        receipt_categories,
+                        receipt_categories, settlement_group_id,
                         COUNT(*) OVER () AS total_count
                     FROM (
                         -- ── Bank transactions ──────────────────────────────────────
@@ -167,12 +167,14 @@ class UnifiedTransactionsRepository:
                                     WHERE rbl2.bank_transaction_id = bt.id
                                     GROUP BY rti.category_id, cat.id, cat.name, pc.name
                                 ) AS cats
-                            ) AS receipt_categories
+                            ) AS receipt_categories,
+                            sgm_u.group_id AS settlement_group_id
                         FROM bank_transactions bt
                         LEFT JOIN categories c ON c.id = bt.category_id
                         LEFT JOIN vendors v ON v.id = bt.vendor_id
                         LEFT JOIN receipt_bank_links rbl ON rbl.bank_transaction_id = bt.id
                         LEFT JOIN receipt_transactions rbl_scan ON rbl_scan.id = rbl.receipt_transaction_id
+                        LEFT JOIN settlement_group_members sgm_u ON sgm_u.bank_transaction_id = bt.id
 
                         UNION ALL
 
@@ -222,12 +224,14 @@ class UnifiedTransactionsRepository:
                                     WHERE rcl2.cash_transaction_id = ct.id
                                     GROUP BY rti.category_id, cat.id, cat.name, pc.name
                                 ) AS cats
-                            ) AS receipt_categories
+                            ) AS receipt_categories,
+                            sgm_uc.group_id AS settlement_group_id
                         FROM cash_transactions ct
                         LEFT JOIN categories c ON c.id = ct.category_id
                         LEFT JOIN vendors v ON v.id = ct.vendor_id
                         LEFT JOIN receipt_cash_links rcl ON rcl.cash_transaction_id = ct.id
                         LEFT JOIN receipt_transactions rcl_scan ON rcl_scan.id = rcl.receipt_transaction_id
+                        LEFT JOIN settlement_group_members sgm_uc ON sgm_uc.cash_transaction_id = ct.id
 
                         UNION ALL
 
@@ -248,7 +252,8 @@ class UnifiedTransactionsRepository:
                             'PLN'::text AS currency,
                             NULL::text AS receipt_category_name,
                             NULL::int AS receipt_category_count,
-                            NULL::json AS receipt_categories
+                            NULL::json AS receipt_categories,
+                            NULL::int AS settlement_group_id
                         FROM receipts_scans rs
                         LEFT JOIN receipt_transactions rt ON rt.scan_id = rs.id
                         LEFT JOIN vendors v ON v.id = rt.vendor_id
@@ -266,7 +271,7 @@ class UnifiedTransactionsRepository:
                 )
                 rows = cur.fetchall()
 
-            total = int(rows[0][16]) if rows else 0
+            total = int(rows[0][17]) if rows else 0
             return [
                 UnifiedTransaction(
                     id=r[0],
@@ -288,6 +293,7 @@ class UnifiedTransactionsRepository:
                         ReceiptCategory(id=cat['id'], name=cat['name'], product_count=cat['product_count'])
                         for cat in (r[15] or [])
                     ] or None,
+                    settlement_group_id=(int(r[16]) if r[16] is not None else None),
                 )
                 for r in rows
             ], total

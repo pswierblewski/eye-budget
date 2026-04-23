@@ -61,6 +61,7 @@ def test_get_list_happy_path():
         None,                       # receipt_category_name
         None,                       # receipt_category_count
         None,                       # receipt_categories
+        None,                       # settlement_group_id
         1,                          # total_count (window function)
     )
     repo, cursor = make_repo(fetchall_return=[row])
@@ -227,6 +228,7 @@ def test_get_list_converts_date_to_isoformat():
         None,
         None,
         None,
+        None,
         1,
     )
     repo, cursor = make_repo(fetchall_return=[row])
@@ -260,6 +262,7 @@ def test_get_list_handles_tags_as_list():
         None,
         None,
         None,
+        None,
         1,
     )
     repo, cursor = make_repo(fetchall_return=[row])
@@ -289,6 +292,7 @@ def test_get_list_handles_none_tags():
         False,
         None,
         'PLN',
+        None,
         None,
         None,
         None,
@@ -328,6 +332,7 @@ def test_get_list_handles_receipt_categories_json():
         'Food / Groceries',
         2,  # count of distinct categories
         receipt_cats,  # receipt_categories
+        None,  # settlement_group_id
         1,
     )
     repo, cursor = make_repo(fetchall_return=[row])

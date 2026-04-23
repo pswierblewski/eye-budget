@@ -72,6 +72,11 @@ from src.data import (
     EmergencyAdvisorRequest,
     EmergencyAdvisorResponse,
     VersionResponse,
+    CreateSettlementGroupRequest,
+    UpdateSettlementGroupRequest,
+    AddSettlementGroupMemberRequest,
+    SettlementGroupListItem,
+    SettlementGroupDetail,
 )
 from fastapi import FastAPI, File, UploadFile, HTTPException, Query
 from fastapi.responses import StreamingResponse
@@ -1013,6 +1018,166 @@ def update_cash_transaction_tags(tx_id: int, request: UpdateTagsRequest) -> Cash
         if result is None:
             raise HTTPException(status_code=404, detail=f"Cash transaction {tx_id} not found")
         return result
+    finally:
+        my_app.dispose()
+
+
+# ------------------------------------------------------------------
+# Settlement groups (powiązane operacje)
+# ------------------------------------------------------------------
+
+
+@app.get("/settlement-groups", response_model=PaginatedResponse[SettlementGroupListItem])
+def list_settlement_groups(
+    search: str | None = Query(None),
+    limit: int = Query(50),
+    offset: int = Query(0),
+    sort_by: str = Query("created_at"),
+    sort_dir: str = Query("desc"),
+) -> PaginatedResponse[SettlementGroupListItem]:
+    my_app = App()
+    try:
+        items, total = my_app.list_settlement_groups(
+            search=search, limit=limit, offset=offset, sort_by=sort_by, sort_dir=sort_dir
+        )
+        return PaginatedResponse(
+            items=items, total=total, limit=limit, offset=offset
+        )
+    finally:
+        my_app.dispose()
+
+
+@app.get(
+    "/settlement-groups/by-transaction",
+    response_model=SettlementGroupDetail,
+)
+def get_settlement_group_by_transaction(
+    source_type: str = Query(..., description="bank or cash"),
+    transaction_id: int = Query(...),
+) -> SettlementGroupDetail:
+    my_app = App()
+    try:
+        g = my_app.get_settlement_group_by_transaction(
+            source_type=source_type, transaction_id=transaction_id
+        )
+        if g is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Grupa powiązanych operacji nie znaleziona dla tej transakcji",
+            )
+        return g
+    finally:
+        my_app.dispose()
+
+
+@app.post(
+    "/settlement-groups",
+    response_model=SettlementGroupDetail,
+    status_code=201,
+)
+def post_settlement_group(
+    request: CreateSettlementGroupRequest,
+) -> SettlementGroupDetail:
+    my_app = App()
+    try:
+        g = my_app.create_settlement_group(request)
+        if g is None:
+            raise HTTPException(
+                status_code=409,
+                detail="Jedna z wybranych transakcji jest już w innym zestawie powiązanych operacji",
+            )
+        return g
+    finally:
+        my_app.dispose()
+
+
+@app.get("/settlement-groups/{group_id}", response_model=SettlementGroupDetail)
+def get_settlement_group(group_id: int) -> SettlementGroupDetail:
+    my_app = App()
+    try:
+        g = my_app.get_settlement_group(group_id)
+        if g is None:
+            raise HTTPException(
+                status_code=404, detail=f"Nie znaleziono grupy o id {group_id}"
+            )
+        return g
+    finally:
+        my_app.dispose()
+
+
+@app.patch("/settlement-groups/{group_id}", response_model=SettlementGroupDetail)
+def patch_settlement_group(
+    group_id: int, request: UpdateSettlementGroupRequest
+) -> SettlementGroupDetail:
+    my_app = App()
+    try:
+        g = my_app.update_settlement_group(group_id, request)
+        if g is None:
+            raise HTTPException(
+                status_code=404, detail=f"Nie znaleziono grupy o id {group_id}"
+            )
+        return g
+    finally:
+        my_app.dispose()
+
+
+@app.delete("/settlement-groups/{group_id}", status_code=204)
+def delete_settlement_group(group_id: int) -> None:
+    my_app = App()
+    try:
+        if not my_app.delete_settlement_group(group_id):
+            raise HTTPException(
+                status_code=404, detail=f"Nie znaleziono grupy o id {group_id}"
+            )
+    finally:
+        my_app.dispose()
+
+
+@app.post(
+    "/settlement-groups/{group_id}/members",
+    response_model=SettlementGroupDetail,
+)
+def post_settlement_group_member(
+    group_id: int, request: AddSettlementGroupMemberRequest
+) -> SettlementGroupDetail:
+    my_app = App()
+    try:
+        g = my_app.add_settlement_group_member(group_id, request)
+        if g is None:
+            raise HTTPException(
+                status_code=409,
+                detail="Transakcja jest już w innym zestawie lub nie można jej dodać",
+            )
+        return g
+    finally:
+        my_app.dispose()
+
+
+@app.delete(
+    "/settlement-groups/{group_id}/members",
+    response_model=SettlementGroupDetail,
+)
+def delete_settlement_group_member(
+    group_id: int,
+    source_type: str = Query(...),
+    transaction_id: int = Query(...),
+) -> SettlementGroupDetail:
+    my_app = App()
+    try:
+        if not my_app.get_settlement_group(group_id):
+            raise HTTPException(
+                status_code=404, detail=f"Nie znaleziono grupy o id {group_id}"
+            )
+        if not my_app.remove_settlement_group_member(
+            group_id, source_type, transaction_id
+        ):
+            raise HTTPException(
+                status_code=404, detail="Członkostwo w grupie nie zostało znalezione",
+            )
+        g = my_app.get_settlement_group(group_id)
+        if g is None:
+            raise HTTPException(status_code=404, detail="Grupa nie istnieje")
+        return g
     finally:
         my_app.dispose()
 

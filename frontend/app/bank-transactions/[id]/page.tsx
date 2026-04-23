@@ -34,6 +34,7 @@ import {
   ThreeDotsMenu,
   ConfirmDeleteModal,
 } from "@/components/ui";
+import { SettlementOperationsSection } from "@/components/SettlementOperationsSection";
 
 // ─── Detail field ───────────────────────────────────────────────────
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
@@ -334,6 +335,7 @@ export default function BankTransactionDetailPage({
             </>
           )}
         </Card>
+        <SettlementOperationsSection sourceType="bank" transactionId={txId} />
         {/* Tags card */}
         <Card padding="md" className="space-y-3">
           <SectionLabel>Tagi</SectionLabel>

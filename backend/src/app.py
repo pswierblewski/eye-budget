@@ -28,6 +28,7 @@ from .repositories.bank_transaction_splits import BankTransactionSplitsRepositor
 from .repositories.cash_transactions import CashTransactionsRepository
 from .repositories.cash_receipt_links import CashReceiptLinksRepository
 from .repositories.unified_transactions import UnifiedTransactionsRepository
+from .repositories.settlement_groups import SettlementGroupsRepository
 from .repositories.prompt_analytics import PromptAnalyticsRepository
 from .repositories.budget_analysis import BudgetAnalysisRepository
 from .repositories.budget_goals import BudgetGoalsRepository
@@ -95,6 +96,11 @@ from .data import (
     AIRecommendationsResponse,
     EmergencyAdvisorRequest,
     EmergencyAdvisorResponse,
+    CreateSettlementGroupRequest,
+    UpdateSettlementGroupRequest,
+    AddSettlementGroupMemberRequest,
+    SettlementGroupListItem,
+    SettlementGroupDetail,
 )
 from .db_contexts.eye_budget import EyeBudgetDbContext
 
@@ -122,6 +128,7 @@ class App(ABC):
         budget_analysis_repository=None,
         budget_goals_repository=None,
         budget_simulations_repository=None,
+        settlement_groups_repository=None,
         # Services
         ocr_service=None,
         preprocessing_service=None,
@@ -183,6 +190,9 @@ class App(ABC):
         self.budget_analysis_repository = budget_analysis_repository or BudgetAnalysisRepository(self.eye_budget_db_context)
         self.budget_goals_repository = budget_goals_repository or BudgetGoalsRepository(self.eye_budget_db_context)
         self.budget_simulations_repository = budget_simulations_repository or BudgetSimulationsRepository(self.eye_budget_db_context)
+        self.settlement_groups_repository = (
+            settlement_groups_repository or SettlementGroupsRepository(self.eye_budget_db_context)
+        )
         self.budget_analysis_service = budget_analysis_service or BudgetAnalysisService(
             budget_analysis_repo=self.budget_analysis_repository,
             categories_repo=self.categories_repository,
@@ -1567,6 +1577,101 @@ class App(ABC):
     def get_ai_recommendations(self) -> AIRecommendationsResponse:
         return self.budget_simulation_service.get_ai_recommendations_from_db()
 
+    # ------------------------------------------------------------------
+    # Settlement groups (powiązane operacje)
+    # ------------------------------------------------------------------
+
+    def list_settlement_groups(
+        self,
+        search: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+        sort_by: str = "created_at",
+        sort_dir: str = "desc",
+    ) -> tuple[list[SettlementGroupListItem], int]:
+        raw, total = self.settlement_groups_repository.get_list(
+            search=search,
+            limit=limit,
+            offset=offset,
+            sort_by=sort_by,
+            sort_dir=sort_dir,
+        )
+        return [SettlementGroupListItem(**x) for x in raw], total
+
+    def create_settlement_group(
+        self, request: CreateSettlementGroupRequest
+    ) -> SettlementGroupDetail | None:
+        import psycopg2.errors
+
+        for m in request.members:
+            if (
+                self.settlement_groups_repository.get_group_id_for_transaction(
+                    m.source_type, m.id
+                )
+                is not None
+            ):
+                return None
+        try:
+            gid = self.settlement_groups_repository.create_group(
+                request.title, request.note, list(request.members)
+            )
+        except psycopg2.errors.UniqueViolation:
+            return None
+        return self.settlement_groups_repository.get_by_id(gid)
+
+    def get_settlement_group(self, group_id: int) -> SettlementGroupDetail | None:
+        return self.settlement_groups_repository.get_by_id(group_id)
+
+    def get_settlement_group_by_transaction(
+        self, source_type: str, transaction_id: int
+    ) -> SettlementGroupDetail | None:
+        gid = self.settlement_groups_repository.get_group_id_for_transaction(
+            source_type, transaction_id
+        )
+        if gid is None:
+            return None
+        return self.settlement_groups_repository.get_by_id(gid)
+
+    def update_settlement_group(
+        self, group_id: int, request: UpdateSettlementGroupRequest
+    ) -> SettlementGroupDetail | None:
+        dump = request.model_dump(exclude_unset=True)
+        if not dump:
+            return self.settlement_groups_repository.get_by_id(group_id)
+        if not self.settlement_groups_repository.update_group(group_id, dump):
+            return None
+        return self.settlement_groups_repository.get_by_id(group_id)
+
+    def delete_settlement_group(self, group_id: int) -> bool:
+        return self.settlement_groups_repository.delete_group(group_id)
+
+    def add_settlement_group_member(
+        self, group_id: int, request: AddSettlementGroupMemberRequest
+    ) -> SettlementGroupDetail | None:
+        import psycopg2.errors
+
+        ex = self.settlement_groups_repository.get_group_id_for_transaction(
+            request.source_type, request.id
+        )
+        if ex is not None and ex != group_id:
+            return None
+        if ex == group_id:
+            return self.settlement_groups_repository.get_by_id(group_id)
+        try:
+            self.settlement_groups_repository.add_member(
+                group_id, request.source_type, request.id
+            )
+        except (psycopg2.errors.UniqueViolation, psycopg2.errors.ForeignKeyViolation):
+            return None
+        return self.settlement_groups_repository.get_by_id(group_id)
+
+    def remove_settlement_group_member(
+        self, group_id: int, source_type: str, transaction_id: int
+    ) -> bool:
+        return self.settlement_groups_repository.remove_member(
+            group_id, source_type, transaction_id
+        )
+
     def dispose(self):
         self.files_repository.dispose()
         self.receipts_scans_repository.dispose()
@@ -1581,6 +1686,7 @@ class App(ABC):
         self.bank_transaction_splits_repository.dispose()
         self.cash_transactions_repository.dispose()
         self.cash_receipt_links_repository.dispose()
+        self.settlement_groups_repository.dispose()
         self.ocr_service.dispose()
         # unified_transactions_repository has no own connection — no dispose needed
         self.minio_service.dispose()
