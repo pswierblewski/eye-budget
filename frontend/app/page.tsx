@@ -13,6 +13,7 @@ import {
   X,
   Link2,
 } from "lucide-react";
+import { SettlementOperationsSection } from "@/components/SettlementOperationsSection";
 import { SOURCE_CONFIG } from "@/lib/sourceConfig";
 import {
   listUnifiedTransactions,
@@ -365,6 +366,18 @@ function ExpandedRow({
           </QueryState>
         </div>
       )}
+
+      {isLinkable && (
+        <div
+          className="mt-4 pt-4 border-t border-gray-200"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <SettlementOperationsSection
+            sourceType={row.source_type as "bank" | "cash"}
+            transactionId={row.id}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -614,16 +627,25 @@ export default function TransactionsPage() {
     },
     {
       header: "",
-      className: "w-8 text-center",
+      className: "w-36 text-left",
       accessor: (r) =>
         r.settlement_group_id != null && r.source_type !== "receipt" ? (
           <Link
             href={`/settlement-groups/${r.settlement_group_id}`}
-            title="Powiązane operacje"
-            className="inline-flex text-violet-500 hover:text-violet-700"
+            title={
+              r.settlement_group_title?.trim()
+                ? r.settlement_group_title
+                : "Powiązane operacje"
+            }
+            className="inline-flex items-center gap-1 max-w-[10rem] text-violet-600 hover:text-violet-800 min-w-0"
             onClick={(e) => e.stopPropagation()}
           >
-            <Link2 className="h-4 w-4" />
+            <Link2 className="h-4 w-4 shrink-0" />
+            {r.settlement_group_title?.trim() ? (
+              <span className="truncate text-xs font-medium text-violet-800">
+                {r.settlement_group_title}
+              </span>
+            ) : null}
           </Link>
         ) : (
           <span className="text-gray-200">—</span>

@@ -324,6 +324,7 @@ export const BankTransactionListItemSchema = z.object({
   split_count: z.number().nullable().optional(),
   ai_top_candidate: CategoryCandidateSchema.optional(),
   settlement_group_id: z.number().nullable().optional(),
+  settlement_group_title: z.string().nullable().optional(),
 });
 export type BankTransactionListItem = z.infer<typeof BankTransactionListItemSchema>;
 
@@ -399,6 +400,7 @@ export const CashTransactionListItemSchema = z.object({
   receipt_category_count: z.number().nullable().optional(),
   receipt_categories: z.array(ReceiptCategorySchema).nullable().optional(),
   settlement_group_id: z.number().nullable().optional(),
+  settlement_group_title: z.string().nullable().optional(),
 });
 export type CashTransactionListItem = z.infer<typeof CashTransactionListItemSchema>;
 
@@ -445,6 +447,7 @@ export const UnifiedTransactionSchema = z.object({
   receipt_category_count: z.number().nullable().optional(),
   receipt_categories: z.array(ReceiptCategorySchema).nullable().optional(),
   settlement_group_id: z.number().nullable().optional(),
+  settlement_group_title: z.string().nullable().optional(),
 });
 export type UnifiedTransaction = z.infer<typeof UnifiedTransactionSchema>;
 

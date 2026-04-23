@@ -109,6 +109,7 @@ def test_create_group_with_members_and_by_transaction(
     assert txlist.status_code == 200
     rows = {x["id"]: x for x in txlist.json()["items"]}
     assert rows[b1].get("settlement_group_id") == gid
+    assert rows[b1].get("settlement_group_title") == "Split"
 
     d = client.delete(
         f"/settlement-groups/{gid}/members?source_type=bank&transaction_id={b1}"
@@ -168,7 +169,10 @@ def test_cash_list_has_settlement_group_id(client, integration_app, migrated_db)
     c = insert_cash_tx(migrated_db, 15.0)
     r = client.post(
         "/settlement-groups",
-        json={"members": [{"source_type": "cash", "id": c}]},
+        json={
+            "title": "CashGroupTitle",
+            "members": [{"source_type": "cash", "id": c}],
+        },
     )
     assert r.status_code == 201
     gid = r.json()["id"]
@@ -178,6 +182,7 @@ def test_cash_list_has_settlement_group_id(client, integration_app, migrated_db)
     row = next((x for x in lst.json()["items"] if x["id"] == c), None)
     assert row is not None
     assert row.get("settlement_group_id") == gid
+    assert row.get("settlement_group_title") == "CashGroupTitle"
 
     client.delete(f"/settlement-groups/{gid}")
 

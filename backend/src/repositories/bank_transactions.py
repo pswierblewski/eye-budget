@@ -195,13 +195,15 @@ class BankTransactionsRepository:
                                SELECT COUNT(*)
                                FROM bank_transaction_category_splits s
                                WHERE s.bank_transaction_id = bt.id
-                           ), 0) AS split_count,
+                           ), 0                           ) AS split_count,
                            sgm.group_id,
+                           sg.title AS settlement_group_title,
                            bt.category_candidates,
                            COUNT(*) OVER () AS total_count
                     FROM bank_transactions bt
                     LEFT JOIN categories c ON c.id = bt.category_id
                     LEFT JOIN settlement_group_members sgm ON sgm.bank_transaction_id = bt.id
+                    LEFT JOIN settlement_groups sg ON sg.id = sgm.group_id
                     {where}
                     ORDER BY {order_clause}
                     LIMIT %s OFFSET %s
@@ -209,7 +211,7 @@ class BankTransactionsRepository:
                     params + [limit, offset],
                 )
                 rows = cur.fetchall()
-            total = int(rows[0][17]) if rows else 0
+            total = int(rows[0][18]) if rows else 0
             return [
                 BankTransactionListItem(
                     id=r[0],
@@ -227,12 +229,13 @@ class BankTransactionsRepository:
                     receipt_category_count=int(r[12]) if r[12] is not None else None,
                     split_category_name=r[13],
                     split_count=int(r[14]) if r[14] is not None else None,
+                    settlement_group_id=(int(r[15]) if r[15] is not None else None),
+                    settlement_group_title=r[16],
                     ai_top_candidate=(
                         CategoryCandidate(**raw_top)
-                        if (raw_top := top_category_candidate_from_stored_json(r[16]))
+                        if (raw_top := top_category_candidate_from_stored_json(r[17]))
                         else None
                     ),
-                    settlement_group_id=(int(r[15]) if r[15] is not None else None),
                 )
                 for r in rows
             ], total
