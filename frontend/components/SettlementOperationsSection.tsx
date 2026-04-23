@@ -14,6 +14,7 @@ import { SettlementGroupPickerModal } from "./SettlementGroupPickerModal";
 import { LinkOperationsModal } from "./LinkOperationsModal";
 import { formatAmount } from "@/components/ui/Amount";
 import { Button, Card, SectionLabel, ConfirmDeleteModal } from "@/components/ui";
+import { ThreeDotsMenu } from "@/components/ui/ThreeDotsMenu";
 import { isoToDisplay } from "@/lib/utils";
 import { QueryState } from "@/components/QueryState";
 
@@ -104,11 +105,12 @@ export function SettlementOperationsSection({ sourceType, transactionId }: Props
                   wydatek i zwroty).
                 </p>
                 <div className="flex flex-wrap gap-2">
-                  <Button variant="primary" onClick={() => setLinkOpen(true)}>
+                  <Button variant="primary" size="sm" onClick={() => setLinkOpen(true)}>
                     Utwórz z wybranych…
                   </Button>
                   <Button
                     variant="secondary"
+                    size="sm"
                     onClick={() => {
                       setPickMode("add");
                       setPickOpen(true);
@@ -224,27 +226,32 @@ export function SettlementOperationsSection({ sourceType, transactionId }: Props
                   </ul>
                 </div>
               )}
-              <div className="flex flex-wrap gap-2 pt-1">
-                <Button
-                  variant="secondary"
-                  onClick={() => {
-                    setPickMode("move");
-                    setPickOpen(true);
-                  }}
-                  disabled={moveToGroupMutation.isPending}
-                >
-                  Przenieś do innej grupy…
-                </Button>
-                <Button
-                  variant="secondary"
-                  onClick={() => removeSelfMutation.mutate(group.id)}
-                  disabled={removeSelfMutation.isPending}
-                >
-                  Odepnij tę operację
-                </Button>
-                <Button variant="danger" onClick={() => setDeleteGroupOpen(true)}>
-                  Usuń całą grupę…
-                </Button>
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                <ThreeDotsMenu
+                  variant="outlined"
+                  title="Więcej akcji — powiązane operacje"
+                  items={[
+                    {
+                      label: "Przenieś do innej grupy…",
+                      onClick: () => {
+                        setPickMode("move");
+                        setPickOpen(true);
+                      },
+                      disabled: moveToGroupMutation.isPending,
+                    },
+                    {
+                      label: "Odepnij tę operację",
+                      onClick: () => removeSelfMutation.mutate(group.id),
+                      disabled: removeSelfMutation.isPending,
+                      separator: true,
+                    },
+                    {
+                      label: "Usuń całą grupę…",
+                      onClick: () => setDeleteGroupOpen(true),
+                      variant: "danger",
+                    },
+                  ]}
+                />
               </div>
               <p className="text-xs text-gray-500">
                 Informacje o bilansie mają charakter orientacyjny.

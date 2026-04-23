@@ -220,11 +220,13 @@ class CashTransactionsRepository:
                                WHERE rcl2.cash_transaction_id = ct.id
                            ) AS receipt_category_count,
                            sgm.group_id,
+                           sg.title AS settlement_group_title,
                            COUNT(*) OVER () AS total_count
                     FROM cash_transactions ct
                     LEFT JOIN categories c   ON c.id = ct.category_id
                     LEFT JOIN vendors v       ON v.id = ct.vendor_id
                     LEFT JOIN settlement_group_members sgm ON sgm.cash_transaction_id = ct.id
+                    LEFT JOIN settlement_groups sg ON sg.id = sgm.group_id
                     {where}
                     ORDER BY {order_clause}
                     LIMIT %s OFFSET %s
@@ -232,7 +234,7 @@ class CashTransactionsRepository:
                     params + [limit, offset],
                 )
                 rows = cur.fetchall()
-            total = int(rows[0][14]) if rows else 0
+            total = int(rows[0][15]) if rows else 0
             return [
                 CashTransactionListItem(
                     id=r[0],
@@ -249,6 +251,7 @@ class CashTransactionsRepository:
                     receipt_category_name=r[11],
                     receipt_category_count=int(r[12]) if r[12] is not None else None,
                     settlement_group_id=(int(r[13]) if r[13] is not None else None),
+                    settlement_group_title=r[14],
                 )
                 for r in rows
             ], total
