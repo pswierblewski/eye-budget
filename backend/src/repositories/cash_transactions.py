@@ -219,10 +219,12 @@ class CashTransactionsRepository:
                                JOIN receipt_transaction_items rti ON rti.transaction_id = rcl2.receipt_transaction_id
                                WHERE rcl2.cash_transaction_id = ct.id
                            ) AS receipt_category_count,
+                           sgm.group_id,
                            COUNT(*) OVER () AS total_count
                     FROM cash_transactions ct
                     LEFT JOIN categories c   ON c.id = ct.category_id
                     LEFT JOIN vendors v       ON v.id = ct.vendor_id
+                    LEFT JOIN settlement_group_members sgm ON sgm.cash_transaction_id = ct.id
                     {where}
                     ORDER BY {order_clause}
                     LIMIT %s OFFSET %s
@@ -230,7 +232,7 @@ class CashTransactionsRepository:
                     params + [limit, offset],
                 )
                 rows = cur.fetchall()
-            total = int(rows[0][13]) if rows else 0
+            total = int(rows[0][14]) if rows else 0
             return [
                 CashTransactionListItem(
                     id=r[0],
@@ -246,6 +248,7 @@ class CashTransactionsRepository:
                     tags=list(r[10]) if r[10] else [],
                     receipt_category_name=r[11],
                     receipt_category_count=int(r[12]) if r[12] is not None else None,
+                    settlement_group_id=(int(r[13]) if r[13] is not None else None),
                 )
                 for r in rows
             ], total
@@ -263,6 +266,8 @@ class CashTransactionsRepository:
                     SELECT ct.id, ct.booking_date, ct.description, ct.amount, ct.currency,
                            ct.source, ct.category_id, c.name AS category_name,
                            ct.vendor_id, v.name AS vendor_name,
+                           (SELECT sgm.group_id FROM settlement_group_members sgm
+                            WHERE sgm.cash_transaction_id = ct.id LIMIT 1) AS settlement_group_id,
                            ct.tags, ct.receipt_scan_id
                     FROM cash_transactions ct
                     LEFT JOIN categories c    ON c.id = ct.category_id
@@ -304,8 +309,9 @@ class CashTransactionsRepository:
                 category_name=r[7],
                 vendor_id=r[8],
                 vendor_name=r[9],
-                tags=list(r[10]) if r[10] else [],
-                receipt_scan_id=r[11],
+                settlement_group_id=(int(r[10]) if r[10] is not None else None),
+                tags=list(r[11]) if r[11] else [],
+                receipt_scan_id=r[12],
                 receipt_categories=receipt_categories,
             )
         except Exception as e:

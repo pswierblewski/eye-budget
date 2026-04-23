@@ -27,7 +27,7 @@ import { VendorDropdown } from "@/components/VendorDropdown";
 import TagsEditor from "@/components/TagsEditor";
 import { DataTable, Column } from "@/components/DataTable";
 import Link from "next/link";
-import { Plus } from "lucide-react";
+import { Plus, Link2, ArrowRight } from "lucide-react";
 import {
   SourceBadge,
   MatchBadge,
@@ -613,7 +613,13 @@ export default function CashTransactionsPage() {
     {
       header: "Data",
       accessor: (t) => (
-        <span className="font-mono text-xs text-gray-600">{isoToDisplay(t.booking_date)}</span>
+        <Link
+          href={`/cash-transactions/${t.id}`}
+          onClick={(e) => e.stopPropagation()}
+          className="font-mono text-xs text-violet-600 hover:underline"
+        >
+          {isoToDisplay(t.booking_date)}
+        </Link>
       ),
       serverSortKey: "booking_date",
       className: "whitespace-nowrap",
@@ -679,6 +685,35 @@ export default function CashTransactionsPage() {
             ))}
           </div>
         ) : null,
+    },
+    {
+      header: "",
+      accessor: (t) =>
+        t.settlement_group_id != null ? (
+          <Link
+            href={`/settlement-groups/${t.settlement_group_id}`}
+            onClick={(e) => e.stopPropagation()}
+            className="flex items-center justify-center p-1 rounded hover:bg-gray-100 text-violet-500"
+            title="Powiązane operacje"
+          >
+            <Link2 className="h-4 w-4" />
+          </Link>
+        ) : null,
+      className: "w-8 text-center",
+    },
+    {
+      header: "",
+      accessor: (t) => (
+        <Link
+          href={`/cash-transactions/${t.id}`}
+          onClick={(e) => e.stopPropagation()}
+          className="flex items-center justify-center p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-accent transition-colors"
+          title="Otwórz szczegóły"
+        >
+          <ArrowRight className="h-4 w-4" />
+        </Link>
+      ),
+      className: "w-8 text-center",
     },
   ];
 
