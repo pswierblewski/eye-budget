@@ -17,6 +17,7 @@ import {
   ConfirmDeleteModal,
 } from "@/components/ui";
 import { SettlementGroupBadge } from "@/components/SettlementGroupBadge";
+import { QueryState, MutationErrorNotice } from "@/components/QueryState";
 
 export default function SettlementGroupDetailPage({ params }: { params: { id: string } }) {
   const id = Number(params.id);
@@ -27,7 +28,7 @@ export default function SettlementGroupDetailPage({ params }: { params: { id: st
   const [note, setNote] = useState("");
   const [deleteOpen, setDeleteOpen] = useState(false);
 
-  const { data: g, isLoading } = useQuery({
+  const groupQuery = useQuery({
     queryKey: ["settlement-group", id],
     queryFn: () => getSettlementGroup(id),
   });
@@ -50,29 +51,24 @@ export default function SettlementGroupDetailPage({ params }: { params: { id: st
   });
 
   useEffect(() => {
+    const g = groupQuery.data;
     if (!g) return;
     if (!editing) {
       setTitle(g.title ?? "");
       setNote(g.note ?? "");
     }
-  }, [g, editing]);
-
-  if (isLoading) {
-    return <div className="p-8 text-gray-400 text-sm">Ładowanie…</div>;
-  }
-  if (!g) {
-    return (
-      <div className="p-8 text-center text-sm text-gray-500">
-        Nie znaleziono grupy.
-        <Link href="/settlement-groups" className="block mt-2 text-violet-600">
-          ← Lista
-        </Link>
-      </div>
-    );
-  }
+  }, [groupQuery.data, editing]);
 
   return (
+    <QueryState
+      query={groupQuery}
+      errorTitle="Nie udało się pobrać grupy."
+      loadingFallback={<div className="p-8 text-gray-400 text-sm">Ładowanie…</div>}
+    >
+      {(g) => (
     <div className="h-full flex flex-col gap-4 pb-8">
+      <MutationErrorNotice mutation={saveMutation} />
+      <MutationErrorNotice mutation={deleteMutation} />
       <ConfirmDeleteModal
         open={deleteOpen}
         onClose={() => setDeleteOpen(false)}
@@ -195,5 +191,7 @@ export default function SettlementGroupDetailPage({ params }: { params: { id: st
         </Card>
       )}
     </div>
+      )}
+    </QueryState>
   );
 }

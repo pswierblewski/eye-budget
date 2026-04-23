@@ -3,12 +3,13 @@
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { listEvaluations, runEvaluation, listGroundTruth } from "@/lib/api";
-import { EvaluationRunListItem, GroundTruthEntry } from "@/lib/types";
+import { EvaluationRunListItem } from "@/lib/types";
 import { DataTable, Column } from "@/components/DataTable";
 import { Modal } from "@/components/ui";
 import { getPusher } from "@/lib/pusher";
 import { isoToDisplay } from "@/lib/utils";
 import Link from "next/link";
+import { QueryState, MutationErrorNotice } from "@/components/QueryState";
 
 type ProgressState = {
   index: number;
@@ -36,36 +37,31 @@ export default function EvaluationsPage() {
     };
   }, []);
 
-  const { data, isLoading } = useQuery({
+  const evalListQuery = useQuery({
     queryKey: ["evaluations", page, sortBy, sortDir],
-    queryFn: () => listEvaluations({ page, limit: PAGE_SIZE, sort_by: sortBy, sort_dir: sortDir }),
+    queryFn: () =>
+      listEvaluations({
+        page,
+        limit: PAGE_SIZE,
+        sort_by: sortBy,
+        sort_dir: sortDir,
+      }),
     staleTime: 30_000,
   });
-  const runs = data?.items ?? [];
-  const total = data?.total ?? 0;
 
-  const { data: groundTruthData, isLoading: isLoadingGT } = useQuery({
+  const gtQuery = useQuery({
     queryKey: ["ground-truth-all"],
-    queryFn: () => listGroundTruth({ limit: 500, sort_by: "filename", sort_dir: "asc" }),
+    queryFn: () =>
+      listGroundTruth({ limit: 500, sort_by: "filename", sort_dir: "asc" }),
     enabled: showSelectModal,
     staleTime: 60_000,
   });
-  const gtEntries: GroundTruthEntry[] = groundTruthData?.items ?? [];
-
   function toggleEntry(id: number) {
     setSelectedIds((prev) => {
       const next = new Set(prev);
       next.has(id) ? next.delete(id) : next.add(id);
       return next;
     });
-  }
-
-  function toggleAll() {
-    if (selectedIds.size === gtEntries.length) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(gtEntries.map((e) => e.id)));
-    }
   }
 
   function openSelectModal() {
@@ -153,6 +149,7 @@ export default function EvaluationsPage() {
 
   return (
     <div className="flex flex-col h-full gap-6">
+      <MutationErrorNotice mutation={runMutation} />
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Ewaluacje</h1>
@@ -182,53 +179,78 @@ export default function EvaluationsPage() {
             <button onClick={() => setShowSelectModal(false)} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
           </div>
 
-          {isLoadingGT ? (
-            <p className="text-sm text-gray-400 py-4 text-center">Ładowanie…</p>
-          ) : (
-            <>
-              <div className="flex items-center justify-between shrink-0 border-b border-gray-100 pb-3">
-                <span className="text-sm text-gray-500">
-                  {selectedIds.size} / {gtEntries.length} zaznaczonych
-                </span>
-                <button
-                  onClick={toggleAll}
-                  className="text-sm text-accent hover:underline"
-                >
-                  {selectedIds.size === gtEntries.length ? "Odznacz wszystkie" : "Zaznacz wszystkie"}
-                </button>
-              </div>
-              <div className="overflow-y-auto flex-1 min-h-0">
-                <ul className="divide-y divide-gray-100">
-                  {gtEntries.map((entry) => (
-                    <li
-                      key={entry.id}
-                      onClick={() => toggleEntry(entry.id)}
-                      className="flex items-center gap-3 px-1 py-2.5 cursor-pointer hover:bg-gray-50 rounded"
+          <QueryState
+            query={gtQuery}
+            errorTitle="Nie udało się pobrać listy danych wzorcowych."
+            loadingFallback={
+              <p className="text-sm text-gray-400 py-4 text-center">Ładowanie…</p>
+            }
+          >
+            {(groundTruthData) => {
+              const entries = groundTruthData.items;
+              return (
+                <>
+                  <div className="flex items-center justify-between shrink-0 border-b border-gray-100 pb-3">
+                    <span className="text-sm text-gray-500">
+                      {selectedIds.size} / {entries.length} zaznaczonych
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (selectedIds.size === entries.length) {
+                          setSelectedIds(new Set());
+                        } else {
+                          setSelectedIds(new Set(entries.map((e) => e.id)));
+                        }
+                      }}
+                      className="text-sm text-accent hover:underline"
                     >
-                      <input
-                        type="checkbox"
-                        readOnly
-                        checked={selectedIds.has(entry.id)}
-                        className="h-4 w-4 rounded border-gray-300 accent-[#635bff] cursor-pointer shrink-0"
-                      />
-                      <span className="font-mono text-xs text-gray-700 flex-1 min-w-0 truncate" title={entry.filename}>
-                        {entry.filename}
-                      </span>
-                      <span className="text-xs text-gray-500 shrink-0 hidden sm:inline">
-                        {entry.ground_truth.vendor ?? "—"}
-                      </span>
-                      <span className="text-xs text-gray-400 font-mono shrink-0 hidden sm:inline">
-                        {entry.ground_truth.date ? isoToDisplay(entry.ground_truth.date) : "—"}
-                      </span>
-                      <span className="text-xs text-gray-500 shrink-0 w-20 text-right hidden sm:inline">
-                        {entry.ground_truth.total != null ? `${entry.ground_truth.total.toFixed(2)} PLN` : "—"}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </>
-          )}
+                      {selectedIds.size === entries.length
+                        ? "Odznacz wszystkie"
+                        : "Zaznacz wszystkie"}
+                    </button>
+                  </div>
+                  <div className="overflow-y-auto flex-1 min-h-0">
+                    <ul className="divide-y divide-gray-100">
+                      {entries.map((entry) => (
+                        <li
+                          key={entry.id}
+                          onClick={() => toggleEntry(entry.id)}
+                          className="flex items-center gap-3 px-1 py-2.5 cursor-pointer hover:bg-gray-50 rounded"
+                        >
+                          <input
+                            type="checkbox"
+                            readOnly
+                            checked={selectedIds.has(entry.id)}
+                            className="h-4 w-4 rounded border-gray-300 accent-[#635bff] cursor-pointer shrink-0"
+                          />
+                          <span
+                            className="font-mono text-xs text-gray-700 flex-1 min-w-0 truncate"
+                            title={entry.filename}
+                          >
+                            {entry.filename}
+                          </span>
+                          <span className="text-xs text-gray-500 shrink-0 hidden sm:inline">
+                            {entry.ground_truth.vendor ?? "—"}
+                          </span>
+                          <span className="text-xs text-gray-400 font-mono shrink-0 hidden sm:inline">
+                            {entry.ground_truth.date
+                              ? isoToDisplay(entry.ground_truth.date)
+                              : "—"}
+                          </span>
+                          <span className="text-xs text-gray-500 shrink-0 w-20 text-right hidden sm:inline">
+                            {entry.ground_truth.total != null
+                              ? `${entry.ground_truth.total.toFixed(2)} PLN`
+                              : "—"}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </>
+              );
+            }}
+          </QueryState>
 
           <div className="flex items-center justify-end gap-3 pt-3 border-t border-gray-100 shrink-0">
             <button
@@ -281,21 +303,35 @@ export default function EvaluationsPage() {
         </div>
       )}
 
-      {isLoading ? (
-        <div className="text-sm text-gray-400 py-8 text-center">Ładowanie…</div>
-      ) : (
-        <DataTable
-          columns={columns}
-          rows={runs}
-          emptyMessage="Brak przebiegów ewaluacji."
-          className="flex-1 min-h-0"
-          pagination={{
-            page, pageSize: PAGE_SIZE, total, onPageChange: setPage,
-            sortBy, sortDir,
-            onSortChange: (key, dir) => { setSortBy(key); setSortDir(dir); setPage(1); },
-          }}
-        />
-      )}
+      <QueryState
+        query={evalListQuery}
+        errorTitle="Nie udało się pobrać listy ewaluacji."
+        loadingFallback={
+          <div className="text-sm text-gray-400 py-8 text-center">Ładowanie…</div>
+        }
+      >
+        {(data) => (
+          <DataTable
+            columns={columns}
+            rows={data.items}
+            emptyMessage="Brak przebiegów ewaluacji."
+            className="flex-1 min-h-0"
+            pagination={{
+              page,
+              pageSize: PAGE_SIZE,
+              total: data.total,
+              onPageChange: setPage,
+              sortBy,
+              sortDir,
+              onSortChange: (key, dir) => {
+                setSortBy(key);
+                setSortDir(dir);
+                setPage(1);
+              },
+            }}
+          />
+        )}
+      </QueryState>
     </div>
   );
 }

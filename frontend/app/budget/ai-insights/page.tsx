@@ -6,11 +6,12 @@ import { getAIRecommendations } from "@/lib/api";
 import { PageHeader } from "@/components/ui";
 import { AIRecommendationsList } from "@/components/budget/AIRecommendationsList";
 import { getPusher } from "@/lib/pusher";
+import { QueryState } from "@/components/QueryState";
 
 export default function AIInsightsPage() {
   const queryClient = useQueryClient();
 
-  const { data, isLoading } = useQuery({
+  const recommendationsQuery = useQuery({
     queryKey: ["budget-ai-recommendations"],
     queryFn: getAIRecommendations,
   });
@@ -32,13 +33,21 @@ export default function AIInsightsPage() {
   return (
     <div className="max-w-3xl mx-auto w-full space-y-6">
       <PageHeader title="Rekomendacje AI" />
-      {isLoading ? (
-        <p className="text-sm text-gray-400">Ładowanie rekomendacji…</p>
-      ) : data ? (
-        <AIRecommendationsList data={data} />
-      ) : (
-        <p className="text-sm text-gray-400">Brak danych.</p>
-      )}
+      <QueryState
+        query={recommendationsQuery}
+        errorTitle="Nie udało się pobrać rekomendacji."
+        loadingFallback={
+          <p className="text-sm text-gray-400">Ładowanie rekomendacji…</p>
+        }
+      >
+        {(data) =>
+          data ? (
+            <AIRecommendationsList data={data} />
+          ) : (
+            <p className="text-sm text-gray-400">Brak danych.</p>
+          )
+        }
+      </QueryState>
     </div>
   );
 }

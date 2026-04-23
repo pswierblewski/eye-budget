@@ -21,6 +21,7 @@ import { RecurringExpensesList } from "@/components/budget/RecurringExpensesList
 import { AffordabilityChecker } from "@/components/budget/AffordabilityChecker";
 import { EmergencyAdvisorPanel } from "@/components/budget/EmergencyAdvisorPanel";
 import { Amount } from "@/components/ui";
+import { QueryState, QueryErrorNotice } from "@/components/QueryState";
 
 function getCurrentYearMonth() {
   const now = new Date();
@@ -37,22 +38,22 @@ export default function BudgetPage() {
   const [year, setYear] = useState(currentYear);
   const [month, setMonth] = useState(currentMonth);
 
-  const { data: monthly, isLoading: loadingMonthly } = useQuery({
+  const monthlyQuery = useQuery({
     queryKey: ["budget-monthly", year, month],
     queryFn: () => getBudgetMonthly(year, month),
   });
 
-  const { data: alerts = [] } = useQuery({
+  const alertsQuery = useQuery({
     queryKey: ["budget-cyclical-alerts"],
     queryFn: getBudgetCyclicalAlerts,
   });
 
-  const { data: recurring = [], isLoading: loadingRecurring } = useQuery({
+  const recurringQuery = useQuery({
     queryKey: ["budget-recurring-expenses"],
     queryFn: getBudgetRecurringExpenses,
   });
 
-  const { data: focus } = useQuery({
+  const focusQuery = useQuery({
     queryKey: ["financial-focus"],
     queryFn: getFinancialFocus,
   });
@@ -75,6 +76,7 @@ export default function BudgetPage() {
     }
   }
 
+  const monthly = monthlyQuery.data;
   const trendMonths = monthly
     ? [
         {
@@ -91,16 +93,30 @@ export default function BudgetPage() {
     <div className="max-w-4xl mx-auto w-full space-y-6">
       <PageHeader title="Analiza budżetu" />
 
-      {focus?.id != null && focus.label && (
+      <QueryErrorNotice
+        query={focusQuery}
+        errorTitle="Nie udało się pobrać priorytetu finansowego."
+      />
+      {focusQuery.data?.id != null && focusQuery.data.label && (
         <div className="text-xs text-[#635bff] font-medium">
-          Priorytet finansowy: {focus.label}
-          {focus.description && (
-            <span className="text-gray-400 ml-2">— {focus.description}</span>
+          Priorytet finansowy: {focusQuery.data.label}
+          {focusQuery.data.description && (
+            <span className="text-gray-400 ml-2">
+              — {focusQuery.data.description}
+            </span>
           )}
         </div>
       )}
 
-      {alerts.length > 0 && <CyclicalAlertBanner alerts={alerts} />}
+      <QueryState
+        query={alertsQuery}
+        errorTitle="Nie udało się pobrać alertów cyklicznych."
+        loadingFallback={null}
+      >
+        {(alerts) =>
+          alerts.length > 0 ? <CyclicalAlertBanner alerts={alerts} /> : null
+        }
+      </QueryState>
 
       {/* Month selector */}
       <div className="flex items-center gap-4">
@@ -111,54 +127,72 @@ export default function BudgetPage() {
       </div>
 
       {/* Summary cards */}
-      {loadingMonthly ? (
-        <div className="text-sm text-gray-400">Ładowanie danych…</div>
-      ) : monthly ? (
-        <>
-          <div className="grid grid-cols-3 gap-4">
-            <div className="rounded-lg border border-gray-200 p-4">
-              <p className="text-xs text-gray-400 mb-1">Dochody</p>
-              <Amount value={monthly.total_income_pln} className="text-lg font-bold text-green-600" />
-            </div>
-            <div className="rounded-lg border border-gray-200 p-4">
-              <p className="text-xs text-gray-400 mb-1">Wydatki</p>
-              <Amount value={monthly.total_expenses_pln} className="text-lg font-bold text-red-500" />
-              <p className="text-xs text-gray-400 mt-1">
-                {monthly.month_over_month_change_pct > 0 ? "+" : ""}
-                {monthly.month_over_month_change_pct.toFixed(1)}% vs poprzedni miesiąc
-              </p>
-            </div>
-            <div className="rounded-lg border border-gray-200 p-4">
-              <p className="text-xs text-gray-400 mb-1">Nadwyżka</p>
-              <Amount
-                value={monthly.surplus_pln}
-                className={`text-lg font-bold ${monthly.surplus_pln >= 0 ? "text-[#635bff]" : "text-red-500"}`}
-              />
-            </div>
-          </div>
+      <QueryState
+        query={monthlyQuery}
+        errorTitle="Nie udało się pobrać danych miesięcznych budżetu."
+        loadingFallback={
+          <div className="text-sm text-gray-400">Ładowanie danych…</div>
+        }
+      >
+        {(m) =>
+          m ? (
+            <>
+              <div className="grid grid-cols-3 gap-4">
+                <div className="rounded-lg border border-gray-200 p-4">
+                  <p className="text-xs text-gray-400 mb-1">Dochody</p>
+                  <Amount
+                    value={m.total_income_pln}
+                    className="text-lg font-bold text-green-600"
+                  />
+                </div>
+                <div className="rounded-lg border border-gray-200 p-4">
+                  <p className="text-xs text-gray-400 mb-1">Wydatki</p>
+                  <Amount
+                    value={m.total_expenses_pln}
+                    className="text-lg font-bold text-red-500"
+                  />
+                  <p className="text-xs text-gray-400 mt-1">
+                    {m.month_over_month_change_pct > 0 ? "+" : ""}
+                    {m.month_over_month_change_pct.toFixed(1)}% vs poprzedni miesiąc
+                  </p>
+                </div>
+                <div className="rounded-lg border border-gray-200 p-4">
+                  <p className="text-xs text-gray-400 mb-1">Nadwyżka</p>
+                  <Amount
+                    value={m.surplus_pln}
+                    className={`text-lg font-bold ${m.surplus_pln >= 0 ? "text-[#635bff]" : "text-red-500"}`}
+                  />
+                </div>
+              </div>
 
-          <div className="rounded-lg border border-gray-200 p-5">
-            <SectionLabel>Wydatki według kategorii</SectionLabel>
-            <MonthlyBreakdownChart categories={monthly.categories} />
-          </div>
+              <div className="rounded-lg border border-gray-200 p-5">
+                <SectionLabel>Wydatki według kategorii</SectionLabel>
+                <MonthlyBreakdownChart categories={m.categories} />
+              </div>
 
-          <div className="rounded-lg border border-gray-200 p-5">
-            <SectionLabel>Trend miesięczny</SectionLabel>
-            <TrendLineChart months={trendMonths} />
-          </div>
-        </>
-      ) : (
-        <div className="text-sm text-gray-400">Brak danych dla wybranego miesiąca.</div>
-      )}
+              <div className="rounded-lg border border-gray-200 p-5">
+                <SectionLabel>Trend miesięczny</SectionLabel>
+                <TrendLineChart months={trendMonths} />
+              </div>
+            </>
+          ) : (
+            <div className="text-sm text-gray-400">
+              Brak danych dla wybranego miesiąca.
+            </div>
+          )
+        }
+      </QueryState>
 
       {/* Recurring expenses */}
       <div className="rounded-lg border border-gray-200 p-5">
         <SectionLabel>Cykliczne wydatki</SectionLabel>
-        {loadingRecurring ? (
-          <p className="text-sm text-gray-400">Ładowanie…</p>
-        ) : (
-          <RecurringExpensesList expenses={recurring} />
-        )}
+        <QueryState
+          query={recurringQuery}
+          errorTitle="Nie udało się pobrać cyklicznych wydatków."
+          loadingFallback={<p className="text-sm text-gray-400">Ładowanie…</p>}
+        >
+          {(recurring) => <RecurringExpensesList expenses={recurring} />}
+        </QueryState>
       </div>
 
       {/* Affordability checker */}

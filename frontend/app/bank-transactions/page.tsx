@@ -1,7 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  useQuery,
+  useMutation,
+  useQueryClient,
+  type UseQueryResult,
+} from "@tanstack/react-query";
 import {
   importBankCsv,
   recategorizeBankTransactions,
@@ -40,25 +45,31 @@ import {
   Button,
   Amount,
 } from "@/components/ui";
+import {
+  QueryState,
+  QueryErrorNotice,
+  MutationErrorNotice,
+} from "@/components/QueryState";
 
 type ExpandedRowProps = {
   tx: BankTransactionListItem;
-  allTags?: string[];
+  tagsQuery: UseQueryResult<string[], Error>;
 };
 
-function ExpandedRowContent({ tx, allTags = [] }: ExpandedRowProps) {
+function ExpandedRowContent({ tx, tagsQuery }: ExpandedRowProps) {
   const queryClient = useQueryClient();
   const [selectedCategory, setSelectedCategory] = useState<number | undefined>(
     tx.category_id ?? undefined
   );
   const [showCandidates, setShowCandidates] = useState(false);
 
-  const { data: detail } = useQuery<BankTransactionDetail>({
+  const detailQuery = useQuery<BankTransactionDetail>({
     queryKey: ["bank-transaction", tx.id],
     queryFn: () => getBankTransaction(tx.id),
   });
+  const detail = detailQuery.data;
 
-  const { data: candidates = [], isFetching: candidatesLoading } = useQuery<ReceiptCandidateItem[]>({
+  const candidatesQuery = useQuery<ReceiptCandidateItem[]>({
     queryKey: ["bank-tx-receipt-candidates", tx.id],
     queryFn: () => getReceiptCandidates(tx.id),
     enabled: showCandidates,
@@ -113,6 +124,14 @@ function ExpandedRowContent({ tx, allTags = [] }: ExpandedRowProps) {
 
   return (
     <>
+    <QueryErrorNotice
+      query={detailQuery}
+      errorTitle="Nie udało się pobrać szczegółów transakcji."
+    />
+    <MutationErrorNotice mutation={saveCategoryMutation} />
+    <MutationErrorNotice mutation={tagsMutation} />
+    <MutationErrorNotice mutation={linkMutation} />
+    <MutationErrorNotice mutation={unlinkMutation} />
     <div className="flex gap-8">
           {/* Left: details */}
           <div className="flex-1 space-y-1 text-xs text-gray-600">
@@ -227,11 +246,21 @@ function ExpandedRowContent({ tx, allTags = [] }: ExpandedRowProps) {
         {/* Tags section */}
         <div className="mt-4 pt-4 border-t border-gray-200">
           <SectionLabel className="mb-2">Tagi</SectionLabel>
-          <TagsEditor
-            tags={detail?.tags ?? tx.tags ?? []}
-            onChange={(tags) => tagsMutation.mutate(tags)}
-            allTags={allTags}
-          />
+          <QueryState
+            query={tagsQuery}
+            errorTitle="Nie udało się pobrać listy tagów."
+            loadingFallback={
+              <p className="text-xs text-gray-400">Ładowanie tagów…</p>
+            }
+          >
+            {(allTags) => (
+              <TagsEditor
+                tags={detail?.tags ?? tx.tags ?? []}
+                onChange={(tags) => tagsMutation.mutate(tags)}
+                allTags={allTags}
+              />
+            )}
+          </QueryState>
         </div>
 
         {/* Split editor section — only when not receipt-linked */}
@@ -284,41 +313,56 @@ function ExpandedRowContent({ tx, allTags = [] }: ExpandedRowProps) {
               </Button>
             </div>
           ) : showCandidates ? (
-            /* Candidate list */
-            candidatesLoading ? (
-              <p className="text-xs text-gray-400 animate-pulse">Szukanie…</p>
-            ) : candidates.length === 0 ? (
-              <p className="text-xs text-gray-400 italic">Nie znaleziono pasujących paragonów.</p>
-            ) : (
-              <div className="space-y-1.5">
-                {candidates.map((c) => (
-                  <div
-                    key={c.receipt_transaction_id}
-                    className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white px-3 py-2"
-                  >
-                    <div className="text-xs space-y-0.5 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="font-medium text-gray-800 truncate">{c.vendor_name}</p>
-                        <MatchBadge score={c.match_score} />
+            <QueryState
+              query={candidatesQuery}
+              errorTitle="Nie udało się pobrać propozycji paragonów."
+              loadingFallback={
+                <p className="text-xs text-gray-400 animate-pulse">Szukanie…</p>
+              }
+            >
+              {(candidates) =>
+                candidates.length === 0 ? (
+                  <p className="text-xs text-gray-400 italic">
+                    Nie znaleziono pasujących paragonów.
+                  </p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {candidates.map((c) => (
+                      <div
+                        key={c.receipt_transaction_id}
+                        className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white px-3 py-2"
+                      >
+                        <div className="text-xs space-y-0.5 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium text-gray-800 truncate">
+                              {c.vendor_name}
+                            </p>
+                            <MatchBadge score={c.match_score} />
+                          </div>
+                          <p className="text-gray-500">
+                            {c.date} · {c.total.toFixed(2)} PLN
+                          </p>
+                          <p className="text-gray-400 font-mono text-[10px] truncate">
+                            {c.scan_filename}
+                          </p>
+                        </div>
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          disabled={linkMutation.isPending}
+                          onClick={() =>
+                            linkMutation.mutate(c.receipt_transaction_id)
+                          }
+                          className="shrink-0"
+                        >
+                          {linkMutation.isPending ? "…" : "Powiąż"}
+                        </Button>
                       </div>
-                      <p className="text-gray-500">
-                        {c.date} · {c.total.toFixed(2)} PLN
-                      </p>
-                      <p className="text-gray-400 font-mono text-[10px] truncate">{c.scan_filename}</p>
-                    </div>
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      disabled={linkMutation.isPending}
-                      onClick={() => linkMutation.mutate(c.receipt_transaction_id)}
-                      className="shrink-0"
-                    >
-                      {linkMutation.isPending ? "…" : "Powiąż"}
-                    </Button>
+                    ))}
                   </div>
-                ))}
-              </div>
-            )
+                )
+              }
+            </QueryState>
           ) : (
             /* Button to trigger search */
             <Button
@@ -403,20 +447,19 @@ export default function BankTransactionsPage() {
     };
   }, [page, queryClient, sortBy, sortDir]);
 
-  const { data, isLoading } = useQuery({
+  const listQuery = useQuery({
     queryKey: ["bank-transactions", page, sortBy, sortDir],
-    queryFn: () => listBankTransactions({
-      page,
-      limit: PAGE_SIZE,
-      sort_by: sortBy,
-      sort_dir: sortDir,
-    }),
+    queryFn: () =>
+      listBankTransactions({
+        page,
+        limit: PAGE_SIZE,
+        sort_by: sortBy,
+        sort_dir: sortDir,
+      }),
     staleTime: 30_000,
   });
-  const transactions = data?.items ?? [];
-  const total = data?.total ?? 0;
 
-  const { data: allTags = [] } = useQuery({
+  const tagsQuery = useQuery({
     queryKey: ["tags"],
     queryFn: getAllTags,
     staleTime: 60_000,
@@ -792,23 +835,43 @@ export default function BankTransactionsPage() {
         }
       />
 
+      <MutationErrorNotice mutation={saveCategoryFromListMutation} />
+      <MutationErrorNotice mutation={importMutation} />
+      <MutationErrorNotice mutation={recategorizeMutation} />
+
       {/* Table */}
-      {isLoading ? (
-        <div className="p-8 text-center text-gray-400 text-sm">Ładowanie…</div>
-      ) : (
-        <DataTable
-          columns={columns}
-          rows={transactions}
-          emptyMessage="Brak transakcji. Zaimportuj plik CSV z banku."
-          renderExpandedRow={(tx) => <ExpandedRowContent tx={tx} allTags={allTags} />}
-          className="flex-1 min-h-0"
-          pagination={{
-            page, pageSize: PAGE_SIZE, total, onPageChange: setPage,
-            sortBy, sortDir,
-            onSortChange: (key, dir) => { setSortBy(key); setSortDir(dir); setPage(1); },
-          }}
-        />
-      )}
+      <QueryState
+        query={listQuery}
+        errorTitle="Nie udało się pobrać transakcji bankowych."
+        loadingFallback={
+          <div className="p-8 text-center text-gray-400 text-sm">Ładowanie…</div>
+        }
+      >
+        {(data) => (
+          <DataTable
+            columns={columns}
+            rows={data.items}
+            emptyMessage="Brak transakcji. Zaimportuj plik CSV z banku."
+            renderExpandedRow={(tx) => (
+              <ExpandedRowContent tx={tx} tagsQuery={tagsQuery} />
+            )}
+            className="flex-1 min-h-0"
+            pagination={{
+              page,
+              pageSize: PAGE_SIZE,
+              total: data.total,
+              onPageChange: setPage,
+              sortBy,
+              sortDir,
+              onSortChange: (key, dir) => {
+                setSortBy(key);
+                setSortDir(dir);
+                setPage(1);
+              },
+            }}
+          />
+        )}
+      </QueryState>
     </div>
   );
 }
