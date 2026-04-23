@@ -3,39 +3,39 @@
 > Ostatnia aktualizacja: 2026-04-23
 
 ## Co to jest
-Aplikacja do budżetu domowego: OCR paragonów (PaddleOCR + OpenAI), transakcje bankowe/gotówkowe, kategoryzacja i przegląd danych.
-W UI m.in. **grupy rozliczeń** (powiązane operacje). Dla agenta: zwięzły opis repo; szczegóły frontend/backend w `frontend/AGENTS.md` i `backend/AGENTS.md`.
+Aplikacja do budżetu domowego: OCR paragonów (PaddleOCR + OpenAI), transakcje bankowe i gotówkowe, kategoryzacja, **grupy rozliczeń** (powiązane operacje) — listy, szczegół grupy, powiązania z transakcjami w UI.
+Dla agenta: skrót całości; szczegóły: `frontend/AGENTS.md`, `backend/AGENTS.md`.
 
 ## Stack / Technologie
-- Frontend: Next.js 14, App Router, TypeScript strict, Tailwind, Radix, TanStack Query, Zod, recharts, Pusher/Soketi; testy: **Vitest**, React Testing Library, jsdom (`npm run test` / `test:run`); błędy API: **`QueryState`**, **`MutationErrorNotice`**, **`lib/query-error.ts`** (copy PL)
-- Backend: FastAPI, Pydantic v2, psycopg2 (SQL bez ORM), Yoyo, Celery + Redis, MinIO, PaddleOCR / OpenAI
-- Infra: PostgreSQL, MinIO, Redis, Soketi; `docker-compose.yml` — Redis, Soketi, backend, worker (bez serwisu Next w tym pliku)
-- Wersje produktu (**niezależne**): **frontend** — `frontend/package.json` oraz pole `version` root pakietu w `frontend/package-lock.json` (klucz główny i `packages[""]`); **backend** — `backend/src/version.py` + asercja w `backend/tests/unit/test_version.py`. Kontrakt i UI: `specs/006-semantic-versioning/`
+- Frontend: Next.js 14, App Router, TypeScript strict, Tailwind, Radix, TanStack Query, Zod, recharts, Pusher/Soketi; testy: **Vitest**; błędy API: **`QueryState`**, **`lib/query-error.ts`** (copy PL)
+- Backend: FastAPI, Pydantic v2, psycopg2 (SQL bez ORM), Yoyo, Celery, Redis, MinIO, PaddleOCR / OpenAI
+- Infra: PostgreSQL, MinIO, Redis, Soketi; `docker compose` — m.in. Redis, Soketi, backend, worker (Postgres/MinIO często zewnętrzne — `README.md`)
+- Wersje **niezależne** (semver osobno): `frontend/package.json` + `frontend/package-lock.json` (root i `packages[""]`), `backend/src/version.py` + asercja w `tests/unit/test_version.py`; kontrakt: `docs/superpowers/specs/006-semantic-versioning/`. **Stan w momencie aktualizacji: 1.5.0 (FE i BE)**; liczby zawsze weryfikuj w plikach
 
 ## Struktura
-- `frontend/app/` — strony App Router (m.in. **`settlement-groups/`**) + proxy `app/api/*/route.ts`
-- `frontend/components/ui/` — primitives (`index.ts` przed nowym UI); `components/QueryState.tsx` + `lib/query-error.ts` — błędy React Query (copy PL)
-- `backend/src/` — `main.py` (route’y), `data.py` (Pydantic), `services/`, `repositories/` (m.in. settlement), `tasks/`, `version.py`, `bank_category_top.py`, `bank_inflow_salary_rules.py` (reguły pensji przed LLM)
+- `frontend/app/` — strony (m.in. `settlement-groups/`) + `app/api/*/route.ts` (proxy do backendu)
+- `frontend/components/`, `components/ui/`, `QueryState.tsx` + `lib/query-error.ts`
+- `backend/src/` — `main.py`, `data.py`, `repositories/` (m.in. unified, bank, cash — listy z opcjonalnym `settlement_group_title`), `services/`, `tasks/`, `version.py`
 - `backend/migrations/` — Yoyo SQL
-- `specs/`, `docs/superpowers/`, `.cursor/skills/` — specyfikacje, plany superpowers, skille (m.in. diagnostyka DB/MinIO)
+- `docs/superpowers/` (speci `specs/`, plany `plans/`), `.cursor/skills/` (m.in. DB, MinIO)
 
 ## Jak pracować
-- Frontend: `cd frontend && npm install && npm run dev` → :3000; `npm run lint`; testy: `npm run test:run`; **interfejs po polsku**
-- Backend: **`backend/.venv`**, `pip install -r requirements.txt` (+ test deps); `uvicorn src.main:app --reload --host 0.0.0.0 --port 8000` (README bywa 8080 — zgodnie z `.env` / `BACKEND_URL`)
-- Docker: `docker compose up` — backend na hoście **:8001** (8001→8000 w kontenerze)
-- DB: `cd backend && yoyo apply`; testy: `backend/.venv/bin/python -m pytest` (`tests/unit/`, `tests/integration/`), coverage: `.coveragerc` → `source = src`
-- CI: workflow GitHub Actions stosuje migracje Yoyo **przed** startem kontenera backendu
+- Frontend: `cd frontend && npm install && npm run dev` → :3000; `npm run lint`; testy: `npm run test:run`; **UI po polsku**
+- Backend: `backend/.venv`, `pip install -r requirements.txt`; `uvicorn src.main:app --reload --host 0.0.0.0 --port 8000` (README/docker — inne porty, patrz niżej)
+- Docker: `docker compose up` — backend na hoście często **:8001**; Postgres/MinIO zgodnie z `.env` / `README.md`
+- Migracje: `cd backend && yoyo apply …`; testy: `python -m pytest` z `backend/` (unit + integracja, coverage: `.coveragerc`)
+- CI: migracje Yoyo stosowane przed startem backendu w workflow
 
 ## Kluczowe decyzje
-- SQL przez psycopg2 z parametrami `%s` — bez ORM
-- HTTP: klient → `lib/api.ts` → proxy Next → FastAPI; `App()` na request w `main.py` + `dispose()` w `finally`
+- SQL przez psycopg2 z `%s` — bez ORM
+- HTTP: `lib/api.ts` → proxy Next → FastAPI; `App()` per request w `main.py` + `dispose()` w `finally`
 - Zmiana endpointu: `main.py` + `data.py` + `app/api/.../route.ts` + `lib/api.ts` + `lib/types.ts`
-- Lista transakcji bankowych: `ai_top_candidate`; po zapisie kandydatów Celery → Pusher **`categorization.transaction_updated`** / **`bank-transactions`** (React Query). LLM: **wpływ** (`amount > 0`) vs **wydatek** — osobny prompt i lista kategorii; pensje z kontrahenta **przed** LLM (`bank_inflow_salary_rules`). **Ponów kategoryzację** — także wiersze z już zapisanymi kandydatami, bez zapisanej kategorii użytkownika i bez paragonu (jak widoczność „Zapisz kategorię”).
-- **Wersjonowanie przy ukończeniu pracy (merge-ready):** podbij **tylko** te składowe, których kod faktycznie dotknąłeś. **Tylko backend** → `backend/src/version.py` + `backend/tests/unit/test_version.py`. **Tylko frontend** → `frontend/package.json` + zgodne pola `version` w `frontend/package-lock.json` (root i `packages[""]`). **Zmiany w obu** → osobny bump każdej strony (numery mogą się różnić). Semver: zwykle **minor** przy nowej funkcji użytkowej, **patch** przy samych poprawkach — **osobno** dla FE i BE. Zob. też `.cursor/rules/00-core.mdc` → *Version bumps*.
+- Lista bankowa: `ai_top_candidate`; po Celery Pusher `categorization.transaction_updated` / `bank-transactions`. LLM: wpływ vs wydatek — osobne prompty; pensje z kontrahenta przed LLM (`bank_inflow_salary_rules`)
+- **Wersjonowanie (merge-ready):** zmiana kodu w **frontend/** lub **backend/** wymaga podbicia semver **tej** strony monorepozytorium (major/minor/patch według SemVer — nowe zachowanie API/UI zwykle **minor**). Jedna PR-ka z obiema strefami = dwa bumpy, jeśli oba katalogi się zmieniły. Zob. `.cursor/rules/00-core.mdc` → *Version bumps*
 
 ## Gotchas i ograniczenia
-- **Sekrety:** nie zmieniaj w repo ani nie commituj `.env`, **`.env.agent`**, `backend/.env`, `backend/yoyo.ini`. Ad-hoc PostgreSQL / MinIO przy implementacji: **`.env.agent`** (root) + **`backend/.venv/bin/python`** — szczegóły w `AGENTS.md` → `.cursor/skills/eye-budget-db-check` i `eye-budget-minio-check` (bez wklejania kluczy do czatu).
-- **Git / GitHub:** `origin` to **`git@personal:…`** — w `~/.ssh/config` host **`personal`** → `github.com` + właściwy `IdentityFile`. Test: `ssh -T git@personal`. Samo `git@github.com` bez tego aliasu często nie ma klucza (np. w sandboxie agenta).
-- Różne porty backendu (8000 / 8080 / 8001 przy Dockerze) — sprawdź przed debugowaniem CORS/proxy
-- Nowe widoki z danymi z API: obsługa błędu przez **`QueryState`** / **`QueryErrorNotice`** / **`MutationErrorNotice`** — unikaj cichego UI przy błędzie backendu
-- Nowe UI primitives tylko po konsultacji z `components/ui/index.ts`; nowe katalogi top-level — po uzgodnieniu
+- **Sekrety:** nie commituj `.env`, **`.env.agent`**, lokalnych `backend/.env`. Diagnostyka DB/MinIO: skills + `.env.agent` — bez wklejania tajemnic do czatu
+- **Git / GitHub:** `origin` często `git@personal:…` (w `~/.ssh/config` host **`personal`** → `github.com`). Alternatywnie: **`gh`** (token HTTPS) lub `git@github.com` gdy skonfigurowany ten klucz. Środowisko agenta bywa **bez** Twojego SSH — `gh auth status` / HTTPS działają inaczej niż `git push` po SSH
+- Różne porty backendu (8000 / 8080 / 8001) — potwierdź przed debugowaniem CORS i proxy
+- Nowe widoki: błędy API przez **`QueryState`** / **`QueryErrorNotice`** / **`MutationErrorNotice`** — nie zostawiaj pustego UI przy błędzie
+- Nowe prymitywy UI — przez `components/ui` i `index.ts`; katalogi top-level — po uzgodnieniu
