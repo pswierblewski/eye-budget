@@ -16,6 +16,7 @@ import {
   Target,
   Sliders,
   Sparkles,
+  Link2,
 } from "lucide-react";
 
 const navItems = [
@@ -23,6 +24,7 @@ const navItems = [
   { href: "/receipts", label: "Paragony", icon: ReceiptText },
   { href: "/bank-transactions", label: "Transakcje bankowe", icon: Landmark },
   { href: "/cash-transactions", label: "Transakcje gotówkowe", icon: Wallet },
+  { href: "/settlement-groups", label: "Powiązane operacje", icon: Link2 },
   { href: "/budget", label: "Budżet", icon: PiggyBank },
 ];
 

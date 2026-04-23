@@ -196,10 +196,12 @@ class BankTransactionsRepository:
                                FROM bank_transaction_category_splits s
                                WHERE s.bank_transaction_id = bt.id
                            ), 0) AS split_count,
+                           sgm.group_id,
                            bt.category_candidates,
                            COUNT(*) OVER () AS total_count
                     FROM bank_transactions bt
                     LEFT JOIN categories c ON c.id = bt.category_id
+                    LEFT JOIN settlement_group_members sgm ON sgm.bank_transaction_id = bt.id
                     {where}
                     ORDER BY {order_clause}
                     LIMIT %s OFFSET %s
@@ -207,7 +209,7 @@ class BankTransactionsRepository:
                     params + [limit, offset],
                 )
                 rows = cur.fetchall()
-            total = int(rows[0][16]) if rows else 0
+            total = int(rows[0][17]) if rows else 0
             return [
                 BankTransactionListItem(
                     id=r[0],
@@ -227,9 +229,10 @@ class BankTransactionsRepository:
                     split_count=int(r[14]) if r[14] is not None else None,
                     ai_top_candidate=(
                         CategoryCandidate(**raw_top)
-                        if (raw_top := top_category_candidate_from_stored_json(r[15]))
+                        if (raw_top := top_category_candidate_from_stored_json(r[16]))
                         else None
                     ),
+                    settlement_group_id=(int(r[15]) if r[15] is not None else None),
                 )
                 for r in rows
             ], total
@@ -249,7 +252,10 @@ class BankTransactionsRepository:
                            bt.counterparty, bt.counterparty_address, bt.source_account,
                            bt.target_account, bt.description, bt.amount, bt.currency,
                            bt.operation_type, bt.category_id, c.name,
-                           bt.category_candidates, bt.vendor_id, bt.tags
+                           bt.category_candidates, bt.vendor_id,
+                           (SELECT sgm.group_id FROM settlement_group_members sgm
+                            WHERE sgm.bank_transaction_id = bt.id LIMIT 1) AS settlement_group_id,
+                           bt.tags
                     FROM bank_transactions bt
                     LEFT JOIN categories c ON c.id = bt.category_id
                     WHERE bt.id = %s
@@ -320,7 +326,8 @@ class BankTransactionsRepository:
                 category_name=r[13],
                 category_candidates=r[14],
                 vendor_id=r[15],
-                tags=list(r[16]) if r[16] else [],
+                settlement_group_id=(int(r[16]) if r[16] is not None else None),
+                tags=list(r[17]) if r[17] else [],
                 receipt_categories=receipt_categories,
                 category_splits=category_splits,
             )

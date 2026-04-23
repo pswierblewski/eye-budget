@@ -1,7 +1,8 @@
 import datetime
+from decimal import Decimal
 from enum import StrEnum
 from pydantic import BaseModel, Field
-from typing import List, Optional, Generic, TypeVar
+from typing import List, Literal, Optional, Generic, TypeVar
 
 T = TypeVar("T")
 
@@ -364,6 +365,7 @@ class BankTransactionListItem(BaseModel):
     split_category_name: str | None = None
     split_count: int | None = None
     ai_top_candidate: CategoryCandidate | None = None
+    settlement_group_id: int | None = None
 
 
 class BankTransactionDetail(BaseModel):
@@ -388,6 +390,7 @@ class BankTransactionDetail(BaseModel):
     receipt_categories: list['ReceiptCategory'] | None = None  # distinct categories from linked receipt
     tags: list[str] = []
     category_splits: list[BankTransactionSplit] | None = None
+    settlement_group_id: int | None = None
 
 
 class BankImportResult(BaseModel):
@@ -492,6 +495,7 @@ class CashTransactionListItem(BaseModel):
     receipt_category_name: str | None = None  # top category from linked receipt
     receipt_category_count: int | None = None  # total distinct categories from linked receipt
     receipt_categories: list['ReceiptCategory'] | None = None  # full list for detail views
+    settlement_group_id: int | None = None
 
 
 class CashTransactionDetail(CashTransactionListItem):
@@ -555,6 +559,80 @@ class CashTxCandidateItem(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Settlement groups ("Powiązane operacje")
+# ---------------------------------------------------------------------------
+
+
+class SettlementGroupMemberRef(BaseModel):
+    """Reference to a bank or cash row when creating or adding members."""
+    source_type: Literal["bank", "cash"]
+    id: int
+
+
+class CreateSettlementGroupRequest(BaseModel):
+    title: str | None = None
+    note: str | None = None
+    members: list[SettlementGroupMemberRef] = []
+
+
+class UpdateSettlementGroupRequest(BaseModel):
+    title: str | None = None
+    note: str | None = None
+
+
+class AddSettlementGroupMemberRequest(BaseModel):
+    source_type: Literal["bank", "cash"]
+    id: int  # bank_transaction_id or cash_transaction_id
+
+
+class MoveSettlementGroupMemberRequest(BaseModel):
+    """Move a bank/cash transaction from the URL group to target_group_id in one DB transaction."""
+
+    target_group_id: int
+    source_type: Literal["bank", "cash"]
+    id: int  # bank_transaction_id or cash_transaction_id
+
+
+class SettlementMemberRow(BaseModel):
+    source_type: Literal["bank", "cash"]
+    id: int
+    booking_date: str
+    amount: float
+    description: str | None = None
+    vendor_name: str | None = None
+    currency: str = "PLN"
+
+
+class LinkedReceiptSummary(BaseModel):
+    scan_id: int
+    filename: str | None = None
+    vendor_name: str | None = None
+
+
+class SettlementGroupListItem(BaseModel):
+    id: int
+    title: str | None = None
+    note: str | None = None
+    created_at: str
+    updated_at: str | None = None
+    member_count: int = 0
+
+
+class SettlementGroupDetail(BaseModel):
+    id: int
+    title: str | None = None
+    note: str | None = None
+    created_at: str
+    updated_at: str | None = None
+    member_count: int = 0
+    members: list[SettlementMemberRow] = []
+    linked_receipts: list[LinkedReceiptSummary] = []
+    total_expense: Decimal
+    total_income: Decimal
+    net: Decimal
+
+
+# ---------------------------------------------------------------------------
 # Unified transaction models (cross-source list + analytics)
 # ---------------------------------------------------------------------------
 
@@ -576,6 +654,7 @@ class UnifiedTransaction(BaseModel):
     receipt_category_name: str | None = None  # top category from linked receipt items
     receipt_category_count: int | None = None  # total distinct categories from linked receipt
     receipt_categories: list['ReceiptCategory'] | None = None  # full list of categories from linked receipt
+    settlement_group_id: int | None = None  # only for source bank | cash
 
 
 class MonthlySummary(BaseModel):

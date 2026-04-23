@@ -323,6 +323,7 @@ export const BankTransactionListItemSchema = z.object({
   split_category_name: z.string().nullable().optional(),
   split_count: z.number().nullable().optional(),
   ai_top_candidate: CategoryCandidateSchema.optional(),
+  settlement_group_id: z.number().nullable().optional(),
 });
 export type BankTransactionListItem = z.infer<typeof BankTransactionListItemSchema>;
 
@@ -347,6 +348,7 @@ export const BankTransactionDetailSchema = z.object({
   receipt_categories: z.array(ReceiptCategorySchema).nullable().optional(),
   tags: z.array(z.string()).optional(),
   category_splits: z.array(BankTransactionSplitSchema).nullable().optional(),
+  settlement_group_id: z.number().nullable().optional(),
 });
 export type BankTransactionDetail = z.infer<typeof BankTransactionDetailSchema>;
 
@@ -396,6 +398,7 @@ export const CashTransactionListItemSchema = z.object({
   receipt_category_name: z.string().nullable().optional(),
   receipt_category_count: z.number().nullable().optional(),
   receipt_categories: z.array(ReceiptCategorySchema).nullable().optional(),
+  settlement_group_id: z.number().nullable().optional(),
 });
 export type CashTransactionListItem = z.infer<typeof CashTransactionListItemSchema>;
 
@@ -441,8 +444,99 @@ export const UnifiedTransactionSchema = z.object({
   receipt_category_name: z.string().nullable().optional(),
   receipt_category_count: z.number().nullable().optional(),
   receipt_categories: z.array(ReceiptCategorySchema).nullable().optional(),
+  settlement_group_id: z.number().nullable().optional(),
 });
 export type UnifiedTransaction = z.infer<typeof UnifiedTransactionSchema>;
+
+// ------------------------------------------------------------------
+// Settlement groups
+// ------------------------------------------------------------------
+
+const decimalish = z.union([z.number(), z.string()]).transform((v) =>
+  typeof v === "string" ? parseFloat(v) : v
+);
+
+export const SettlementGroupMemberRefSchema = z.object({
+  source_type: z.enum(["bank", "cash"]),
+  id: z.number(),
+});
+export type SettlementGroupMemberRef = z.infer<typeof SettlementGroupMemberRefSchema>;
+
+export const CreateSettlementGroupRequestSchema = z.object({
+  title: z.string().nullable().optional(),
+  note: z.string().nullable().optional(),
+  members: z.array(SettlementGroupMemberRefSchema).optional().default([]),
+});
+export type CreateSettlementGroupRequest = z.infer<typeof CreateSettlementGroupRequestSchema>;
+
+export const UpdateSettlementGroupRequestSchema = z.object({
+  title: z.string().nullable().optional(),
+  note: z.string().nullable().optional(),
+});
+export type UpdateSettlementGroupRequest = z.infer<typeof UpdateSettlementGroupRequestSchema>;
+
+export const AddSettlementGroupMemberRequestSchema = z.object({
+  source_type: z.enum(["bank", "cash"]),
+  id: z.number(),
+});
+export type AddSettlementGroupMemberRequest = z.infer<typeof AddSettlementGroupMemberRequestSchema>;
+
+export const MoveSettlementGroupMemberRequestSchema = z.object({
+  target_group_id: z.number(),
+  source_type: z.enum(["bank", "cash"]),
+  id: z.number(),
+});
+export type MoveSettlementGroupMemberRequest = z.infer<
+  typeof MoveSettlementGroupMemberRequestSchema
+>;
+
+export const SettlementMemberRowSchema = z
+  .object({
+    source_type: z.enum(["bank", "cash"]),
+    id: z.number(),
+    booking_date: z.string(),
+    amount: z.number(),
+    description: z.string().nullable().optional(),
+    vendor_name: z.string().nullable().optional(),
+    currency: z.string().nullable().optional(),
+  })
+  .transform((row) => ({
+    ...row,
+    currency: row.currency?.trim() || "PLN",
+  }));
+export type SettlementMemberRow = z.output<typeof SettlementMemberRowSchema>;
+
+export const LinkedReceiptSummarySchema = z.object({
+  scan_id: z.number(),
+  filename: z.string().nullable().optional(),
+  vendor_name: z.string().nullable().optional(),
+});
+export type LinkedReceiptSummary = z.infer<typeof LinkedReceiptSummarySchema>;
+
+export const SettlementGroupListItemSchema = z.object({
+  id: z.number(),
+  title: z.string().nullable().optional(),
+  note: z.string().nullable().optional(),
+  created_at: z.string(),
+  updated_at: z.string().nullable().optional(),
+  member_count: z.number(),
+});
+export type SettlementGroupListItem = z.infer<typeof SettlementGroupListItemSchema>;
+
+export const SettlementGroupDetailSchema = z.object({
+  id: z.number(),
+  title: z.string().nullable().optional(),
+  note: z.string().nullable().optional(),
+  created_at: z.string(),
+  updated_at: z.string().nullable().optional(),
+  member_count: z.number(),
+  members: z.array(SettlementMemberRowSchema),
+  linked_receipts: z.array(LinkedReceiptSummarySchema),
+  total_expense: decimalish,
+  total_income: decimalish,
+  net: decimalish,
+});
+export type SettlementGroupDetail = z.output<typeof SettlementGroupDetailSchema>;
 
 export const MonthlySummarySchema = z.object({
   month: z.string(),
