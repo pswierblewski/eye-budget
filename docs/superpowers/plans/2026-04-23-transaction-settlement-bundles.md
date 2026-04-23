@@ -1,6 +1,7 @@
 # Powiązane operacje (settlement groups) — plan implementacji
 
 > **Odniesienie:** [docs/superpowers/specs/2026-04-22-transaction-settlement-bundles-design.md](../specs/2026-04-22-transaction-settlement-bundles-design.md) (źródło prawdy).  
+> **Dopracowanie po MVP (UI, modal, expand + reuse sekcji):** [2026-04-23-powiazane-operacje-polish.md](2026-04-23-powiazane-operacje-polish.md).  
 > **Branch (sugestia):** `feature/transaction-settlement-bundles`
 
 **Cel:** Grupy `settlement_groups` + członkowie `settlement_group_members` (tylko bank / gotówka), API z listą, detailem, bilansem, paragonami z istniejących linków, UI desktop (lista grup z badge, szczegóły transakcji, modale), ikony na listach, **wariant (A):** grupę kasuje tylko użytkownik; **jeden** `POST` przy tworzeniu grupy z modala z pełnym `members`.

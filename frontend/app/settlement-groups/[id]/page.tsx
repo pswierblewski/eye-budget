@@ -6,7 +6,6 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { getSettlementGroup, updateSettlementGroup, deleteSettlementGroup } from "@/lib/api";
-import { formatAmount } from "@/components/ui/Amount";
 import {
   PageHeader,
   NavLink,
@@ -15,9 +14,14 @@ import {
   SectionLabel,
   Input,
   ConfirmDeleteModal,
+  formatAmount,
+  SourceBadge,
+  Amount,
 } from "@/components/ui";
 import { SettlementGroupBadge } from "@/components/SettlementGroupBadge";
 import { QueryState, MutationErrorNotice } from "@/components/QueryState";
+import { isoToDisplay } from "@/lib/utils";
+import type { SettlementMemberRow } from "@/lib/types";
 
 export default function SettlementGroupDetailPage({ params }: { params: { id: string } }) {
   const id = Number(params.id);
@@ -87,11 +91,12 @@ export default function SettlementGroupDetailPage({ params }: { params: { id: st
           <div className="flex gap-2">
             {editing ? (
               <>
-                <Button variant="secondary" onClick={() => setEditing(false)}>
+                <Button variant="secondary" size="sm" onClick={() => setEditing(false)}>
                   Anuluj
                 </Button>
                 <Button
                   variant="primary"
+                  size="sm"
                   disabled={saveMutation.isPending}
                   onClick={() => saveMutation.mutate()}
                 >
@@ -101,6 +106,7 @@ export default function SettlementGroupDetailPage({ params }: { params: { id: st
             ) : (
               <Button
                 variant="secondary"
+                size="sm"
                 onClick={() => {
                   setTitle(g.title ?? "");
                   setNote(g.note ?? "");
@@ -110,7 +116,7 @@ export default function SettlementGroupDetailPage({ params }: { params: { id: st
                 Edytuj
               </Button>
             )}
-            <Button variant="danger" onClick={() => setDeleteOpen(true)}>
+            <Button variant="danger" size="sm" onClick={() => setDeleteOpen(true)}>
               Usuń grupę
             </Button>
           </div>
@@ -157,24 +163,41 @@ export default function SettlementGroupDetailPage({ params }: { params: { id: st
       </Card>
       <Card padding="md" className="space-y-2">
         <SectionLabel>Operacje w zestawie</SectionLabel>
-        <ul className="divide-y">
-          {g.members.map((m) => (
-            <li key={`${m.source_type}-${m.id}`} className="py-2 flex flex-wrap justify-between gap-2 text-sm">
-              <Link
-                href={m.source_type === "bank" ? `/bank-transactions/${m.id}` : `/cash-transactions/${m.id}`}
-                className="text-violet-600 hover:underline"
-              >
-                {m.source_type === "bank" ? "Bank" : "Gotówka"} #{m.id}
-                {m.description || m.vendor_name
-                  ? ` — ${m.vendor_name ?? m.description ?? ""}`
-                  : ""}
-              </Link>
-              <span className="text-gray-500 text-xs">
-                {m.booking_date} · {formatAmount(m.amount, m.currency || "PLN")}
-              </span>
-            </li>
-          ))}
-        </ul>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[520px]">
+            <thead>
+              <tr className="text-left text-xs text-gray-500 border-b border-gray-100">
+                <th className="py-2 pr-3 w-20">Źródło</th>
+                <th className="py-2 pr-3 w-32">Data</th>
+                <th className="py-2 pr-3">Opis</th>
+                <th className="py-2 text-right w-32">Kwota</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {g.members.map((m: SettlementMemberRow) => (
+                <tr key={`${m.source_type}-${m.id}`}>
+                  <td className="py-2 pr-3 align-middle">
+                    <SourceBadge source={m.source_type} />
+                  </td>
+                  <td className="py-2 pr-3 font-mono text-xs text-gray-700 whitespace-nowrap">
+                    {isoToDisplay(m.booking_date)}
+                  </td>
+                  <td className="py-2 pr-3 align-middle">
+                    <Link
+                      href={m.source_type === "bank" ? `/bank-transactions/${m.id}` : `/cash-transactions/${m.id}`}
+                      className="text-violet-600 hover:underline"
+                    >
+                      {m.vendor_name?.trim() || m.description?.trim() || "—"}
+                    </Link>
+                  </td>
+                  <td className="py-2 text-right align-middle tabular-nums">
+                    <Amount value={m.amount} currency={m.currency || "PLN"} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </Card>
       {g.linked_receipts.length > 0 && (
         <Card padding="md" className="space-y-2">

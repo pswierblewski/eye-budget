@@ -366,6 +366,7 @@ class BankTransactionListItem(BaseModel):
     split_count: int | None = None
     ai_top_candidate: CategoryCandidate | None = None
     settlement_group_id: int | None = None
+    settlement_group_title: str | None = None  # from settlement_groups.title when in a group
 
 
 class BankTransactionDetail(BaseModel):
@@ -496,6 +497,7 @@ class CashTransactionListItem(BaseModel):
     receipt_category_count: int | None = None  # total distinct categories from linked receipt
     receipt_categories: list['ReceiptCategory'] | None = None  # full list for detail views
     settlement_group_id: int | None = None
+    settlement_group_title: str | None = None  # from settlement_groups.title when in a group
 
 
 class CashTransactionDetail(CashTransactionListItem):
@@ -655,6 +657,7 @@ class UnifiedTransaction(BaseModel):
     receipt_category_count: int | None = None  # total distinct categories from linked receipt
     receipt_categories: list['ReceiptCategory'] | None = None  # full list of categories from linked receipt
     settlement_group_id: int | None = None  # only for source bank | cash
+    settlement_group_title: str | None = None  # from settlement_groups.title when in a group; null for receipt
 
 
 class MonthlySummary(BaseModel):
