@@ -20,6 +20,7 @@ import {
 } from "@/components/ui";
 import { SettlementGroupBadge } from "@/components/SettlementGroupBadge";
 import { QueryState, MutationErrorNotice } from "@/components/QueryState";
+import { ThreeDotsMenu } from "@/components/ui/ThreeDotsMenu";
 import { isoToDisplay } from "@/lib/utils";
 import type { SettlementMemberRow } from "@/lib/types";
 
@@ -88,7 +89,7 @@ export default function SettlementGroupDetailPage({ params }: { params: { id: st
           <NavLink href="/settlement-groups" label="Powiązane operacje" variant="back" size="xs" />
         }
         actions={
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2">
             {editing ? (
               <>
                 <Button variant="secondary" size="sm" onClick={() => setEditing(false)}>
@@ -104,21 +105,31 @@ export default function SettlementGroupDetailPage({ params }: { params: { id: st
                 </Button>
               </>
             ) : (
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => {
-                  setTitle(g.title ?? "");
-                  setNote(g.note ?? "");
-                  setEditing(true);
-                }}
-              >
-                Edytuj
-              </Button>
+              <>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    setTitle(g.title ?? "");
+                    setNote(g.note ?? "");
+                    setEditing(true);
+                  }}
+                >
+                  Edytuj
+                </Button>
+                <ThreeDotsMenu
+                  variant="inline"
+                  title="Więcej akcji — grupa"
+                  items={[
+                    {
+                      label: "Usuń całą grupę…",
+                      variant: "danger",
+                      onClick: () => setDeleteOpen(true),
+                    },
+                  ]}
+                />
+              </>
             )}
-            <Button variant="danger" size="sm" onClick={() => setDeleteOpen(true)}>
-              Usuń grupę
-            </Button>
           </div>
         }
       />
