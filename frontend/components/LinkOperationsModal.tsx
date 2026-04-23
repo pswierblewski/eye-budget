@@ -28,13 +28,16 @@ function keyOf(t: Pick<UnifiedTransaction, "source_type" | "id">) {
  */
 export function LinkOperationsModal({ open, onClose, current, onCreated }: Props) {
   const [search, setSearch] = useState("");
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  /** Extra members (not the anchor) — key → row snapshot for display. */
+  const [extraPinned, setExtraPinned] = useState<Record<string, UnifiedTransaction>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     setSubmitError(null);
+    setExtraPinned({});
+    setSearch("");
   }, [open]);
 
   const listQuery = useQuery({
@@ -52,10 +55,18 @@ export function LinkOperationsModal({ open, onClose, current, onCreated }: Props
 
   const toggle = (r: UnifiedTransaction) => {
     const k = keyOf(r);
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(k)) next.delete(k);
-      else next.add(k);
+    setExtraPinned((prev) => {
+      const next = { ...prev };
+      if (k in next) delete next[k];
+      else next[k] = r;
+      return next;
+    });
+  };
+
+  const unpin = (k: string) => {
+    setExtraPinned((prev) => {
+      const next = { ...prev };
+      delete next[k];
       return next;
     });
   };
@@ -64,13 +75,20 @@ export function LinkOperationsModal({ open, onClose, current, onCreated }: Props
     const m: { source_type: "bank" | "cash"; id: number }[] = [
       { source_type: current.source_type, id: current.id },
     ];
-    for (const k of Array.from(selected)) {
-      const [st, idStr] = k.split(":");
-      if (st !== "bank" && st !== "cash") continue;
-      m.push({ source_type: st, id: Number(idStr) });
+    for (const t of Object.values(extraPinned)) {
+      if (t.source_type === "receipt") continue;
+      m.push({ source_type: t.source_type, id: t.id });
     }
-    return m;
-  }, [current, selected]);
+    const seen = new Set<string>();
+    const out: typeof m = [];
+    for (const x of m) {
+      const s = `${x.source_type}:${x.id}`;
+      if (seen.has(s)) continue;
+      seen.add(s);
+      out.push(x);
+    }
+    return out;
+  }, [current, extraPinned]);
 
   const canSubmit = membersPayload.length >= 2;
 
@@ -81,7 +99,7 @@ export function LinkOperationsModal({ open, onClose, current, onCreated }: Props
     try {
       const g = await createSettlementGroup({ members: membersPayload });
       onCreated(g.id);
-      setSelected(new Set());
+      setExtraPinned({});
       setSearch("");
       onClose();
     } catch (e) {
@@ -103,7 +121,12 @@ export function LinkOperationsModal({ open, onClose, current, onCreated }: Props
   };
 
   return (
-    <Modal open={open} onClose={onClose} className="max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+    <Modal
+      open={open}
+      onClose={onClose}
+      maxWidth="4xl"
+      className="max-h-[90vh] overflow-hidden flex flex-col w-full"
+    >
       <div className="p-4 space-y-3 flex flex-col min-h-0 flex-1">
         <h2 className="text-lg font-semibold text-gray-900">
           Utwórz powiązane operacje
@@ -112,18 +135,43 @@ export function LinkOperationsModal({ open, onClose, current, onCreated }: Props
           Zaznacz co najmniej jedną dodatkową operację (obok bieżącej). Łącznie
           muszą być co najmniej dwie.
         </p>
-        <div className="rounded-lg border border-violet-100 bg-violet-50/40 p-2 text-sm">
-          <span className="text-gray-600">Przypięta (bieżąca): </span>
-          <span className="font-medium">
-            {current.source_type === "bank" ? "Bank" : "Gotówka"} #{current.id}
-          </span>
+        <div>
+          <div className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5">
+            Przypięte
+          </div>
+          <div className="rounded-lg border border-violet-100 bg-violet-50/40 divide-y max-h-40 overflow-y-auto">
+            <div className="p-2 flex flex-wrap items-center justify-between gap-2 text-sm">
+              <span>
+                <span className="text-gray-600">Bieżąca: </span>
+                <span className="font-medium">
+                  {current.source_type === "bank" ? "Bank" : "Gotówka"} #{current.id}
+                </span>
+              </span>
+            </div>
+            {Object.entries(extraPinned).map(([k, t]) => (
+              <div
+                key={k}
+                className="p-2 flex flex-wrap items-center justify-between gap-2 text-sm"
+              >
+                <span>
+                  {t.source_type === "bank" ? "Bank" : "Gotówka"} #{t.id}
+                  {t.vendor_name || t.description
+                    ? ` — ${t.vendor_name ?? t.description ?? ""}`
+                    : ""}
+                </span>
+                <Button type="button" variant="secondary" size="sm" onClick={() => unpin(k)}>
+                  Usuń z przypiętych
+                </Button>
+              </div>
+            ))}
+          </div>
         </div>
         <Input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Szukaj po opisie lub sklepie…"
         />
-        <div className="border rounded-lg overflow-y-auto flex-1 min-h-[200px]">
+        <div className="border rounded-lg overflow-x-auto overflow-y-auto flex-1 min-h-[200px]">
           <QueryState
             query={listQuery}
             errorTitle="Nie udało się pobrać transakcji."
@@ -142,7 +190,7 @@ export function LinkOperationsModal({ open, onClose, current, onCreated }: Props
                   {rows.length === 0 && (
                     <p className="p-3 text-sm text-gray-500">Brak wyników.</p>
                   )}
-                  <table className="w-full text-sm">
+                  <table className="w-full min-w-[640px] text-sm">
                     <thead className="bg-gray-50 sticky top-0">
                       <tr>
                         <th className="text-left p-2 w-10" />
@@ -155,7 +203,7 @@ export function LinkOperationsModal({ open, onClose, current, onCreated }: Props
                     <tbody>
                       {rows.map((r) => {
                         const k = keyOf(r);
-                        const on = selected.has(k);
+                        const on = k in extraPinned;
                         return (
                           <tr
                             key={k}
@@ -198,11 +246,17 @@ export function LinkOperationsModal({ open, onClose, current, onCreated }: Props
         )}
         <div className="flex justify-end items-center gap-2 flex-wrap">
           <div className="flex gap-2">
-            <Button variant="secondary" onClick={onClose} disabled={isSubmitting}>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={onClose}
+              disabled={isSubmitting}
+            >
               Anuluj
             </Button>
             <Button
               variant="primary"
+              size="sm"
               disabled={!canSubmit || isSubmitting}
               onClick={() => void handleCreate()}
             >

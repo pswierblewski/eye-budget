@@ -34,6 +34,7 @@ import TagsEditor from "@/components/TagsEditor";
 import { getPusher } from "@/lib/pusher";
 import { Upload, ArrowRight, RefreshCw, Link2 } from "lucide-react";
 import { DataTable, Column } from "@/components/DataTable";
+import { SettlementOperationsSection } from "@/components/SettlementOperationsSection";
 import Link from "next/link";
 import { CandidateBar } from "@/components/BankHelpers";
 import {
@@ -374,6 +375,13 @@ function ExpandedRowContent({ tx, tagsQuery }: ExpandedRowProps) {
             </Button>
           )}
     </div>
+
+        <div
+          className="mt-4 pt-4 border-t border-gray-200"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <SettlementOperationsSection sourceType="bank" transactionId={tx.id} />
+        </div>
 
     </>
   );
@@ -722,13 +730,22 @@ export default function BankTransactionsPage() {
           <Link
             href={`/settlement-groups/${t.settlement_group_id}`}
             onClick={(e) => e.stopPropagation()}
-            className="flex items-center justify-center p-1 rounded hover:bg-gray-100 text-violet-500"
-            title="Powiązane operacje"
+            className="inline-flex items-center gap-1 max-w-[10rem] p-1 rounded hover:bg-violet-50 text-violet-600 min-w-0"
+            title={
+              t.settlement_group_title?.trim()
+                ? t.settlement_group_title
+                : "Powiązane operacje"
+            }
           >
-            <Link2 className="h-4 w-4" />
+            <Link2 className="h-4 w-4 shrink-0" />
+            {t.settlement_group_title?.trim() ? (
+              <span className="truncate text-xs font-medium text-violet-800">
+                {t.settlement_group_title}
+              </span>
+            ) : null}
           </Link>
         ) : null,
-      className: "w-8 text-center",
+      className: "w-36",
     },
     {
       header: "",

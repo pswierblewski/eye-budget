@@ -493,7 +493,7 @@ def test_get_list_happy_path():
     """Test successful retrieval of cash transactions list."""
     # Arrange
     booking_date = datetime.date(2026, 4, 15)
-    # Row tuple must match get_list SELECT (indices 0-14)
+    # Row tuple must match get_list SELECT (indices 0-15)
     row = (
         1,                                  # 0: ct.id
         booking_date,                       # 1: ct.booking_date
@@ -509,7 +509,8 @@ def test_get_list_happy_path():
         "Groceries / Food",                 # 11: receipt_category_name
         2,                                  # 12: receipt_category_count
         None,                               # 13: settlement_group_id
-        1,                                  # 14: total_count (COUNT(*) OVER ())
+        None,                               # 14: settlement_group_title
+        1,                                  # 15: total_count (COUNT(*) OVER ())
     )
     repo, cursor = make_repo(fetchall_return=[row])
 
@@ -579,7 +580,7 @@ def test_get_list_with_tag_filter():
     # Arrange
     row = (
         1, datetime.date(2026, 4, 15), "Groceries", 150.50, "PLN", "manual",
-        5, "Food", 3, "Lidl", ["food"], "Groceries / Food", 1, None, 1,
+        5, "Food", 3, "Lidl", ["food"], "Groceries / Food", 1, None, None, 1,
     )
     repo, cursor = make_repo(fetchall_return=[row])
 
@@ -599,7 +600,7 @@ def test_get_list_with_sort():
     # Arrange
     row = (
         1, datetime.date(2026, 4, 15), "Groceries", 150.50, "PLN", "manual",
-        5, "Food", 3, "Lidl", [], None, None, None, 1,
+        5, "Food", 3, "Lidl", [], None, None, None, None, 1,
     )
     repo, cursor = make_repo(fetchall_return=[row])
 
@@ -618,7 +619,7 @@ def test_get_list_null_tags():
     # Arrange
     row = (
         1, datetime.date(2026, 4, 15), "Groceries", 150.50, "PLN", "manual",
-        5, "Food", 3, "Lidl", None, None, None, None, 1,
+        5, "Food", 3, "Lidl", None, None, None, None, None, 1,
     )
     repo, cursor = make_repo(fetchall_return=[row])
 
@@ -636,7 +637,7 @@ def test_get_list_null_receipt_category_count():
     # Arrange
     row = (
         1, datetime.date(2026, 4, 15), "Groceries", 150.50, "PLN", "manual",
-        5, "Food", 3, "Lidl", [], None, None, None, 1,
+        5, "Food", 3, "Lidl", [], None, None, None, None, 1,
     )
     repo, cursor = make_repo(fetchall_return=[row])
 

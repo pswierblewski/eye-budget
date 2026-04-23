@@ -1,11 +1,11 @@
 import React, { useEffect } from "react";
-import { clsx } from "clsx";
+import { twMerge } from "tailwind-merge";
 
 interface ModalProps {
   open: boolean;
   onClose: () => void;
   children: React.ReactNode;
-  maxWidth?: "sm" | "md" | "lg";
+  maxWidth?: "sm" | "md" | "lg" | "4xl" | "5xl";
   className?: string;
 }
 
@@ -13,6 +13,8 @@ const maxWidthClasses = {
   sm: "max-w-sm",
   md: "max-w-md",
   lg: "max-w-lg",
+  "4xl": "max-w-4xl",
+  "5xl": "max-w-5xl",
 };
 
 export function Modal({
@@ -41,7 +43,7 @@ export function Modal({
       }}
     >
       <div
-        className={clsx(
+        className={twMerge(
           "bg-white rounded-xl shadow-xl w-full mx-4",
           maxWidthClasses[maxWidth],
           className
