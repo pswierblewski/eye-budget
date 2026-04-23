@@ -103,7 +103,7 @@ def test_create_group_with_members_and_by_transaction(
     assert b.status_code == 200
     assert b.json()["id"] == gid
     assert b.json()["member_count"] == 2
-    assert float(b.json()["net"]) < 0 or float(b.json()["net"]) != 0
+    assert float(b.json()["net"]) == pytest.approx(-50.0)
 
     txlist = client.get("/bank-transactions?limit=5")
     assert txlist.status_code == 200
@@ -189,3 +189,58 @@ def test_get_by_transaction_404(client, integration_app, migrated_db):
         f"/settlement-groups/by-transaction?source_type=bank&transaction_id={missing}"
     )
     assert r.status_code == 404
+
+
+@pytest.mark.integration
+def test_create_group_invalid_transaction_returns_400(
+    client, integration_app, migrated_db
+):
+    r = client.post(
+        "/settlement-groups",
+        json={
+            "members": [{"source_type": "bank", "id": 999_999_999}],
+        },
+    )
+    assert r.status_code == 400
+
+
+@pytest.mark.integration
+def test_move_member_between_groups(client, integration_app, migrated_db):
+    b = insert_bank_tx(migrated_db, -10.0, "MV1")
+    r1 = client.post(
+        "/settlement-groups",
+        json={"title": "A", "members": [{"source_type": "bank", "id": b}]},
+    )
+    assert r1.status_code == 201
+    g1 = r1.json()["id"]
+
+    r2 = client.post(
+        "/settlement-groups",
+        json={"title": "B", "members": []},
+    )
+    assert r2.status_code == 201
+    g2 = r2.json()["id"]
+
+    mv = client.post(
+        f"/settlement-groups/{g1}/members/move",
+        json={
+            "target_group_id": g2,
+            "source_type": "bank",
+            "id": b,
+        },
+    )
+    assert mv.status_code == 200, mv.text
+    assert mv.json()["id"] == g2
+    assert mv.json()["member_count"] == 1
+
+    by = client.get(
+        f"/settlement-groups/by-transaction?source_type=bank&transaction_id={b}"
+    )
+    assert by.status_code == 200
+    assert by.json()["id"] == g2
+
+    left = client.get(f"/settlement-groups/{g1}")
+    assert left.status_code == 200
+    assert left.json()["member_count"] == 0
+
+    client.delete(f"/settlement-groups/{g2}")

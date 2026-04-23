@@ -86,6 +86,7 @@ import {
   SettlementGroupListItemSchema,
   SettlementGroupDetail,
   SettlementGroupDetailSchema,
+  MoveSettlementGroupMemberRequest,
 } from "./types";
 import { z } from "zod";
 
@@ -766,6 +767,17 @@ export async function addSettlementGroupMember(
 ): Promise<SettlementGroupDetail> {
   return apiFetch(
     `/api/settlement-groups/${groupId}/members`,
+    settlementGroupDetailSchema,
+    { method: "POST", body: JSON.stringify(body) }
+  );
+}
+
+export async function moveSettlementGroupMember(
+  fromGroupId: number,
+  body: MoveSettlementGroupMemberRequest
+): Promise<SettlementGroupDetail> {
+  return apiFetch(
+    `/api/settlement-groups/${fromGroupId}/members/move`,
     settlementGroupDetailSchema,
     { method: "POST", body: JSON.stringify(body) }
   );

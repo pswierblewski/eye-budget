@@ -2,9 +2,14 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from decimal import Decimal
-from typing import Optional
+from typing import Literal, Optional
 
-from src.app import App
+from src.app import (
+    App,
+    InvalidSettlementMemberIdError,
+    SettlementMembershipNotFoundError,
+    SettlementTargetGroupNotFoundError,
+)
 from src.celery_app import celery_app
 from src.tasks.process_receipts import process_receipts_task
 from src.tasks.run_evaluation import run_evaluation_task
@@ -75,6 +80,7 @@ from src.data import (
     CreateSettlementGroupRequest,
     UpdateSettlementGroupRequest,
     AddSettlementGroupMemberRequest,
+    MoveSettlementGroupMemberRequest,
     SettlementGroupListItem,
     SettlementGroupDetail,
 )
@@ -1052,7 +1058,7 @@ def list_settlement_groups(
     response_model=SettlementGroupDetail,
 )
 def get_settlement_group_by_transaction(
-    source_type: str = Query(..., description="bank or cash"),
+    source_type: Literal["bank", "cash"] = Query(..., description="bank or cash"),
     transaction_id: int = Query(...),
 ) -> SettlementGroupDetail:
     my_app = App()
@@ -1080,7 +1086,13 @@ def post_settlement_group(
 ) -> SettlementGroupDetail:
     my_app = App()
     try:
-        g = my_app.create_settlement_group(request)
+        try:
+            g = my_app.create_settlement_group(request)
+        except InvalidSettlementMemberIdError:
+            raise HTTPException(
+                status_code=400,
+                detail="Podana transakcja bankowa lub gotówkowa nie istnieje",
+            ) from None
         if g is None:
             raise HTTPException(
                 status_code=409,
@@ -1142,11 +1154,53 @@ def post_settlement_group_member(
 ) -> SettlementGroupDetail:
     my_app = App()
     try:
-        g = my_app.add_settlement_group_member(group_id, request)
+        try:
+            g = my_app.add_settlement_group_member(group_id, request)
+        except InvalidSettlementMemberIdError:
+            raise HTTPException(
+                status_code=400,
+                detail="Podana transakcja bankowa lub gotówkowa nie istnieje",
+            ) from None
         if g is None:
             raise HTTPException(
                 status_code=409,
                 detail="Transakcja jest już w innym zestawie lub nie można jej dodać",
+            )
+        return g
+    finally:
+        my_app.dispose()
+
+
+@app.post(
+    "/settlement-groups/{group_id}/members/move",
+    response_model=SettlementGroupDetail,
+)
+def post_move_settlement_group_member(
+    group_id: int, request: MoveSettlementGroupMemberRequest
+) -> SettlementGroupDetail:
+    my_app = App()
+    try:
+        try:
+            g = my_app.move_settlement_group_member(group_id, request)
+        except InvalidSettlementMemberIdError:
+            raise HTTPException(
+                status_code=400,
+                detail="Nie można przenieść — nieprawidłowa transakcja lub grupa",
+            ) from None
+        except SettlementTargetGroupNotFoundError:
+            raise HTTPException(
+                status_code=404,
+                detail="Grupa docelowa nie istnieje",
+            ) from None
+        except SettlementMembershipNotFoundError:
+            raise HTTPException(
+                status_code=404,
+                detail="Transakcja nie należy do tej grupy źródłowej",
+            ) from None
+        if g is None:
+            raise HTTPException(
+                status_code=409,
+                detail="Nie można przenieść — konflikt z innym zestawem powiązanych operacji",
             )
         return g
     finally:

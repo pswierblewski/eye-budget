@@ -99,10 +99,23 @@ from .data import (
     CreateSettlementGroupRequest,
     UpdateSettlementGroupRequest,
     AddSettlementGroupMemberRequest,
+    MoveSettlementGroupMemberRequest,
     SettlementGroupListItem,
     SettlementGroupDetail,
 )
 from .db_contexts.eye_budget import EyeBudgetDbContext
+
+
+class InvalidSettlementMemberIdError(Exception):
+    """Bank/cash transaction id (or related FK) is invalid for settlement membership."""
+
+
+class SettlementTargetGroupNotFoundError(Exception):
+    """Target settlement group does not exist."""
+
+
+class SettlementMembershipNotFoundError(Exception):
+    """Transaction is not a member of the source settlement group."""
 
 
 class App(ABC):
@@ -1617,6 +1630,8 @@ class App(ABC):
             )
         except psycopg2.errors.UniqueViolation:
             return None
+        except psycopg2.errors.ForeignKeyViolation:
+            raise InvalidSettlementMemberIdError() from None
         return self.settlement_groups_repository.get_by_id(gid)
 
     def get_settlement_group(self, group_id: int) -> SettlementGroupDetail | None:
@@ -1661,9 +1676,42 @@ class App(ABC):
             self.settlement_groups_repository.add_member(
                 group_id, request.source_type, request.id
             )
-        except (psycopg2.errors.UniqueViolation, psycopg2.errors.ForeignKeyViolation):
+        except psycopg2.errors.UniqueViolation:
             return None
+        except psycopg2.errors.ForeignKeyViolation:
+            raise InvalidSettlementMemberIdError() from None
         return self.settlement_groups_repository.get_by_id(group_id)
+
+    def move_settlement_group_member(
+        self,
+        from_group_id: int,
+        request: MoveSettlementGroupMemberRequest,
+    ) -> SettlementGroupDetail | None:
+        import psycopg2.errors
+
+        if from_group_id == request.target_group_id:
+            return self.settlement_groups_repository.get_by_id(from_group_id)
+        if self.get_settlement_group(request.target_group_id) is None:
+            raise SettlementTargetGroupNotFoundError() from None
+        ex = self.settlement_groups_repository.get_group_id_for_transaction(
+            request.source_type, request.id
+        )
+        if ex != from_group_id:
+            raise SettlementMembershipNotFoundError() from None
+        try:
+            ok = self.settlement_groups_repository.move_member(
+                from_group_id,
+                request.target_group_id,
+                request.source_type,
+                request.id,
+            )
+        except psycopg2.errors.UniqueViolation:
+            return None
+        except psycopg2.errors.ForeignKeyViolation:
+            raise InvalidSettlementMemberIdError() from None
+        if not ok:
+            raise SettlementMembershipNotFoundError() from None
+        return self.settlement_groups_repository.get_by_id(request.target_group_id)
 
     def remove_settlement_group_member(
         self, group_id: int, source_type: str, transaction_id: int

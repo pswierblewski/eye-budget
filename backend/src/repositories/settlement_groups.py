@@ -4,11 +4,14 @@ Repository for settlement_groups and settlement_group_members.
 from __future__ import annotations
 
 import datetime
+import logging
 from decimal import Decimal
 from typing import Any, Optional
 
 import psycopg2
 import psycopg2.errors
+
+logger = logging.getLogger(__name__)
 
 from ..data import (
     LinkedReceiptSummary,
@@ -130,8 +133,8 @@ class SettlementGroupsRepository:
                     )
                 r = cur.fetchone()
                 return int(r[0]) if r else None
-        except Exception as e:
-            print(f"SettlementGroupsRepository.get_group_id_for_transaction error: {e}")
+        except Exception:
+            logger.exception("get_group_id_for_transaction failed")
             return None
 
     def get_list(
@@ -195,8 +198,8 @@ class SettlementGroupsRepository:
                     }
                 )
             return items, total
-        except Exception as e:
-            print(f"SettlementGroupsRepository.get_list error: {e}")
+        except Exception:
+            logger.exception("get_list failed")
             return [], 0
 
     def _member_rows_for_group(
@@ -331,9 +334,65 @@ class SettlementGroupsRepository:
                 total_income=total_income,
                 net=net,
             )
-        except Exception as e:
-            print(f"SettlementGroupsRepository.get_by_id error: {e}")
+        except Exception:
+            logger.exception("get_by_id failed")
             return None
+
+    def move_member(
+        self,
+        from_group_id: int,
+        to_group_id: int,
+        source_type: str,
+        transaction_id: int,
+    ) -> bool:
+        """Remove membership from from_group_id and add to to_group_id in one transaction."""
+        if not self.conn:
+            return False
+        if from_group_id == to_group_id:
+            return True
+        with self.conn.cursor() as cur:
+            try:
+                if source_type == "bank":
+                    cur.execute(
+                        """
+                        DELETE FROM settlement_group_members
+                        WHERE group_id = %s AND bank_transaction_id = %s
+                        """,
+                        (from_group_id, transaction_id),
+                    )
+                    if cur.rowcount == 0:
+                        self.conn.rollback()
+                        return False
+                    cur.execute(
+                        """
+                        INSERT INTO settlement_group_members (group_id, bank_transaction_id)
+                        VALUES (%s, %s)
+                        """,
+                        (to_group_id, transaction_id),
+                    )
+                else:
+                    cur.execute(
+                        """
+                        DELETE FROM settlement_group_members
+                        WHERE group_id = %s AND cash_transaction_id = %s
+                        """,
+                        (from_group_id, transaction_id),
+                    )
+                    if cur.rowcount == 0:
+                        self.conn.rollback()
+                        return False
+                    cur.execute(
+                        """
+                        INSERT INTO settlement_group_members (group_id, cash_transaction_id)
+                        VALUES (%s, %s)
+                        """,
+                        (to_group_id, transaction_id),
+                    )
+                self.conn.commit()
+                return True
+            except (psycopg2.errors.UniqueViolation, psycopg2.errors.ForeignKeyViolation):
+                self.conn.rollback()
+                raise
 
     def add_member(
         self, group_id: int, source_type: str, transaction_id: int
