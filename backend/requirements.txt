@@ -3,6 +3,7 @@ paddlepaddle>=3.0.0,<3.3.0
 paddleocr>=2.10.0
 python-dotenv>=1.0.0
 pillow>=11.1.0
+pymupdf==1.27.2.2
 psycopg2-binary>=2.9.10
 markdown_strings>=3.4.0
 fastapi[standard]>=0.115.0
