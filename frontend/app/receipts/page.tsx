@@ -12,6 +12,7 @@ import Link from "next/link";
 import { StatusBadge, Pill, PageHeader, NavLink, Button, FilterTabs, DateInput, SectionLabel } from "@/components/ui";
 import TagsEditor from "@/components/TagsEditor";
 import { QueryState, QueryErrorNotice, MutationErrorNotice } from "@/components/QueryState";
+import { LinkTransactionSearchModal } from "@/components/LinkTransactionSearchModal";
 
 const STATUS_FILTERS = [
   "all",
@@ -96,6 +97,10 @@ function ExpandedReceiptRow({
   allTags: string[];
   onTagsChange: (row: ReceiptScanListItem, tags: string[]) => void;
 }) {
+  const queryClient = useQueryClient();
+  const [txSearchOpen, setTxSearchOpen] = useState(false);
+  const canLinkTx = row.receipt_transaction_id != null && row.total != null;
+
   return (
     <div>
       <div className="flex gap-8">
@@ -131,6 +136,22 @@ function ExpandedReceiptRow({
               variant="forward"
               className="mt-1"
             />
+            <div className="pt-2 border-t border-gray-100 mt-2">
+              {canLinkTx ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setTxSearchOpen(true)}
+                >
+                  Wyszukaj transakcję…
+                </Button>
+              ) : (
+                <p className="text-xs text-gray-400">
+                  Potwierdź paragon, aby łączyć z transakcją.
+                </p>
+              )}
+            </div>
           </div>
         </div>
 
@@ -144,6 +165,20 @@ function ExpandedReceiptRow({
           />
         </div>
       </div>
+      {canLinkTx && (
+        <LinkTransactionSearchModal
+          open={txSearchOpen}
+          onClose={() => setTxSearchOpen(false)}
+          scanId={row.id}
+          receiptTransactionId={row.receipt_transaction_id!}
+          receiptTotal={row.total!}
+          onLinked={() => {
+            void queryClient.invalidateQueries({ queryKey: ["receipts"] });
+            void queryClient.invalidateQueries({ queryKey: ["transactions"] });
+            void queryClient.invalidateQueries({ queryKey: ["receipt", row.id] });
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -35,6 +35,7 @@ import { getPusher } from "@/lib/pusher";
 import { Upload, ArrowRight, RefreshCw, Link2 } from "lucide-react";
 import { DataTable, Column } from "@/components/DataTable";
 import { SettlementOperationsSection } from "@/components/SettlementOperationsSection";
+import { LinkReceiptSearchModal } from "@/components/LinkReceiptSearchModal";
 import Link from "next/link";
 import { CandidateBar } from "@/components/BankHelpers";
 import {
@@ -63,6 +64,7 @@ function ExpandedRowContent({ tx, tagsQuery }: ExpandedRowProps) {
     tx.category_id ?? undefined
   );
   const [showCandidates, setShowCandidates] = useState(false);
+  const [receiptSearchOpen, setReceiptSearchOpen] = useState(false);
 
   const detailQuery = useQuery<BankTransactionDetail>({
     queryKey: ["bank-transaction", tx.id],
@@ -365,14 +367,22 @@ function ExpandedRowContent({ tx, tagsQuery }: ExpandedRowProps) {
               }
             </QueryState>
           ) : (
-            /* Button to trigger search */
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setShowCandidates(true)}
-            >
-              Znajdź pasujące paragony
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setShowCandidates(true)}
+              >
+                Znajdź pasujące paragony
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setReceiptSearchOpen(true)}
+              >
+                Wyszukaj paragon…
+              </Button>
+            </div>
           )}
     </div>
 
@@ -383,6 +393,18 @@ function ExpandedRowContent({ tx, tagsQuery }: ExpandedRowProps) {
           <SettlementOperationsSection sourceType="bank" transactionId={tx.id} />
         </div>
 
+        <LinkReceiptSearchModal
+          open={receiptSearchOpen}
+          onClose={() => setReceiptSearchOpen(false)}
+          anchorType="bank"
+          transactionId={tx.id}
+          amount={tx.amount}
+          onLinked={() => {
+            queryClient.invalidateQueries({
+              queryKey: ["bank-tx-receipt-candidates", tx.id],
+            });
+          }}
+        />
     </>
   );
 }

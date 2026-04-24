@@ -134,7 +134,7 @@ export async function listReceipts(
   return apiFetch(
     `/api/receipts?${qs}`,
     paginatedSchema(ReceiptScanListItemSchema)
-  );
+  ) as Promise<PaginatedResponse<ReceiptScanListItem>>;
 }
 
 export async function getReceiptCounts(): Promise<Record<string, number>> {
@@ -613,6 +613,8 @@ export async function listUnifiedTransactions(
     amount_min?: number;
     amount_max?: number;
     direction?: string;
+    exclude_receipt?: boolean;
+    abs_amount?: number;
     sort_by?: string;
     sort_dir?: string;
   } = {}
@@ -630,6 +632,8 @@ export async function listUnifiedTransactions(
     amount_min,
     amount_max,
     direction,
+    exclude_receipt,
+    abs_amount,
     sort_by = "date",
     sort_dir = "desc",
   } = params;
@@ -650,6 +654,8 @@ export async function listUnifiedTransactions(
   if (amount_min != null) qs.set("amount_min", String(amount_min));
   if (amount_max != null) qs.set("amount_max", String(amount_max));
   if (direction) qs.set("direction", direction);
+  if (exclude_receipt) qs.set("exclude_receipt", "true");
+  if (abs_amount != null) qs.set("abs_amount", String(abs_amount));
   return apiFetch(
     `/api/transactions?${qs}`,
     paginatedSchema(UnifiedTransactionSchema)

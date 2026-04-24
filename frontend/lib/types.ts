@@ -25,8 +25,10 @@ export const ReceiptScanListItemSchema = z.object({
   date: z.string().nullable(),
   total: z.number().nullable(),
   tags: z.array(z.string()).optional(),
+  receipt_transaction_id: z.number().nullable().optional(),
+  has_transaction_link: z.boolean().default(false),
 });
-export type ReceiptScanListItem = z.infer<typeof ReceiptScanListItemSchema>;
+export type ReceiptScanListItem = z.output<typeof ReceiptScanListItemSchema>;
 
 export const ReceiptTransactionItemSchema = z.object({
   id: z.number(),
