@@ -379,6 +379,33 @@ def test_get_list_direction_income():
     assert 'amount > 0' in sql
 
 
+@pytest.mark.unit
+def test_get_list_exclude_receipt():
+    """exclude_receipt omits receipt rows from the unified outer filter."""
+    repo, cursor = make_repo(fetchall_return=[])
+
+    repo.get_list(exclude_receipt=True)
+
+    call_args = cursor.execute.call_args
+    sql = call_args[0][0]
+    assert "source_type <> 'receipt'" in sql
+
+
+@pytest.mark.unit
+def test_get_list_abs_amount():
+    """abs_amount filters by ABS(amount) within a small tolerance band."""
+    repo, cursor = make_repo(fetchall_return=[])
+
+    repo.get_list(abs_amount=100.0)
+
+    call_args = cursor.execute.call_args
+    sql = call_args[0][0]
+    params = call_args[0][1]
+    assert "ABS(amount::double precision) BETWEEN %s AND %s" in sql
+    assert 100.0 - 0.01 in params
+    assert 100.0 + 0.01 in params
+
+
 # ==============================================================================
 # get_analytics
 # ==============================================================================
