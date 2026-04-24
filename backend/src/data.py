@@ -181,6 +181,8 @@ class ReceiptScanListItem(BaseModel):
     date: str | None = None
     total: float | None = None
     tags: list[str] = []
+    receipt_transaction_id: int | None = None
+    has_transaction_link: bool = False
 
 
 class ReceiptTransactionItem(BaseModel):

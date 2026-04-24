@@ -327,6 +327,23 @@ class ReceiptsScansRepository(ABC):
                            rs.result->>'date',
                            rs.result->>'total',
                            rs.tags,
+                           (SELECT rt_sub.id FROM receipt_transactions rt_sub
+                            WHERE rt_sub.scan_id = rs.id
+                            ORDER BY rt_sub.id ASC LIMIT 1) AS receipt_transaction_id,
+                           EXISTS (
+                             SELECT 1 FROM receipt_transactions rt_h
+                             WHERE rt_h.scan_id = rs.id
+                               AND (
+                                 EXISTS (
+                                   SELECT 1 FROM receipt_bank_links rbl
+                                   WHERE rbl.receipt_transaction_id = rt_h.id
+                                 )
+                                 OR EXISTS (
+                                   SELECT 1 FROM receipt_cash_links rcl
+                                   WHERE rcl.receipt_transaction_id = rt_h.id
+                                 )
+                               )
+                           ) AS has_transaction_link,
                            COUNT(*) OVER () AS total_count
                     FROM {self.table} rs
                     LEFT JOIN receipt_transactions rt ON rt.scan_id = rs.id
@@ -338,7 +355,7 @@ class ReceiptsScansRepository(ABC):
                     params + [limit, offset],
                 )
                 rows = cursor.fetchall()
-                total = int(rows[0][7]) if rows else 0
+                total = int(rows[0][9]) if rows else 0
                 return [
                     ReceiptScanListItem(
                         id=row[0],
@@ -348,6 +365,8 @@ class ReceiptsScansRepository(ABC):
                         date=row[4],
                         total=float(row[5]) if row[5] is not None else None,
                         tags=list(row[6]) if row[6] else [],
+                        receipt_transaction_id=int(row[7]) if row[7] is not None else None,
+                        has_transaction_link=bool(row[8]),
                     )
                     for row in rows
                 ], total

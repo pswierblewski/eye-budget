@@ -21,6 +21,7 @@ import {
   MutationErrorNotice,
 } from "@/components/QueryState";
 import { formatQueryError } from "@/lib/query-error";
+import { LinkTransactionSearchModal } from "@/components/LinkTransactionSearchModal";
 
 export default function ReceiptReviewPage({
   params,
@@ -217,6 +218,7 @@ export default function ReceiptReviewPage({
   });
 
   const [showBankCandidates, setShowBankCandidates] = useState(false);
+  const [txSearchOpen, setTxSearchOpen] = useState(false);
 
   const bankCandidatesQuery = useQuery<BankTxCandidateItem[]>({
     queryKey: ["receipt-bank-candidates", scanId],
@@ -470,6 +472,7 @@ export default function ReceiptReviewPage({
   };
 
   return (
+    <>
     <div className="space-y-6">
       <QueryErrorNotice
         query={categoriesQuery}
@@ -722,6 +725,29 @@ export default function ReceiptReviewPage({
                   </button>
                 )}
               </div>
+
+              {scan.transaction ? (
+                <div className="rounded-xl border border-gray-200 p-4">
+                  <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-2">
+                    Wyszukiwanie transakcji
+                  </h2>
+                  <p className="text-xs text-gray-500 mb-2">
+                    Lista bank + gotówka (z wyszukiwarką), gdy automatyczne dopasowanie nie wystarcza.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setTxSearchOpen(true)}
+                    className="text-xs px-3 py-1.5 rounded-md border border-gray-300 text-gray-700
+                               hover:bg-gray-50 transition-colors"
+                  >
+                    Wyszukaj transakcję…
+                  </button>
+                </div>
+              ) : (
+                <p className="text-xs text-gray-400 italic px-1">
+                  Potwierdź paragon, aby ręcznie łączyć z transakcją bankową lub gotówkową.
+                </p>
+              )}
 
               {/* Cash transaction section */}
               <div className="rounded-xl border border-gray-200 p-4 space-y-2">
@@ -1437,5 +1463,20 @@ export default function ReceiptReviewPage({
         </div>
       </div>
     </div>
+    {scan.transaction && (
+      <LinkTransactionSearchModal
+        open={txSearchOpen}
+        onClose={() => setTxSearchOpen(false)}
+        scanId={scanId}
+        receiptTransactionId={scan.transaction.id}
+        receiptTotal={scan.transaction.total}
+        onLinked={() => {
+          void queryClient.invalidateQueries({ queryKey: ["receipt", scanId] });
+          void queryClient.invalidateQueries({ queryKey: ["receipts"] });
+          void queryClient.invalidateQueries({ queryKey: ["transactions"] });
+        }}
+      />
+    )}
+    </>
   );
 }
