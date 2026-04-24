@@ -21,10 +21,6 @@ type Props = {
   onLinked: () => void;
 };
 
-function absAmountString(amount: number) {
-  return Math.abs(amount).toFixed(2);
-}
-
 /**
  * Search any receipt (with shop/vendor search + exact total filter) to link
  * to the current bank or cash transaction.
@@ -39,11 +35,11 @@ export function LinkReceiptSearchModal({
 }: Props) {
   const queryClient = useQueryClient();
   const absTotal = Math.abs(amount);
-  const [search, setSearch] = useState(absAmountString(amount));
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
     if (!open) return;
-    setSearch(absAmountString(amount));
+    setSearch("");
   }, [open, amount]);
 
   const listQuery = useQuery({

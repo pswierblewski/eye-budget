@@ -34,11 +34,11 @@ export function LinkTransactionSearchModal({
 }: Props) {
   const queryClient = useQueryClient();
   const absTotal = Math.abs(receiptTotal);
-  const [search, setSearch] = useState(absTotal.toFixed(2));
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
     if (!open) return;
-    setSearch(absTotal.toFixed(2));
+    setSearch("");
   }, [open, absTotal]);
 
   const listQuery = useQuery({
