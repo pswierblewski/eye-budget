@@ -590,8 +590,8 @@ def test_get_all_happy_path():
     # Arrange
     repo, cursor = make_repo(
         fetchall_return=[
-            (1, "scan1.jpg", "processed", "Lidl", "2025-01-01", "50.0", ["tag1"], 10),
-            (2, "scan2.jpg", "to_confirm", "Aldi", "2025-01-02", "75.5", ["tag2"], 10),
+            (1, "scan1.jpg", "processed", "Lidl", "2025-01-01", "50.0", ["tag1"], 100, True, 10),
+            (2, "scan2.jpg", "to_confirm", "Aldi", "2025-01-02", "75.5", ["tag2"], None, False, 10),
         ]
     )
 
@@ -603,6 +603,10 @@ def test_get_all_happy_path():
     assert total == 10
     assert items[0].id == 1
     assert items[0].filename == "scan1.jpg"
+    assert items[0].receipt_transaction_id == 100
+    assert items[0].has_transaction_link is True
+    assert items[1].receipt_transaction_id is None
+    assert items[1].has_transaction_link is False
     assert items[1].id == 2
     cursor.execute.assert_called_once()
 
