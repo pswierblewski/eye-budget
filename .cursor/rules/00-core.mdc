@@ -57,19 +57,23 @@ Browser → "use client" page → useQuery/useMutation → lib/api.ts
        → App() → service → repository → PostgreSQL
 ```
 
-## Version bumps (semver)
+## Version bumps (SemVer 2.0.0)
 
-Po **ukończeniu implementacji** (merge-ready): zaktualizuj wersję **tylko** dla komponentów, których kod wchodzi w zmianę.
+Po **ukończeniu implementacji** (merge-ready): zaktualizuj wersję **tylko** dla komponentów, których kod wchodzi w zmianę. Frontend i backend mają **niezależne** `MAJOR.MINOR.PATCH`.
 
-| Zakres zmian | Pliki do aktualizacji |
-|--------------|------------------------|
-| **Tylko backend** | `backend/src/version.py` — stała `VERSION`; `backend/tests/unit/test_version.py` — asercja `assert VERSION == "…"` |
-| **Tylko frontend** | `frontend/package.json` — pole `"version"`; `frontend/package-lock.json` — to samo w `"version"` na poziomie root **oraz** w `packages[""].version` (spójność lockfile) |
-| **Backend i frontend** | Wykonaj **oba** wiersze powyżej; numery FE i BE mogą się różnić |
+| Zmiana wersji | Kiedy podnieść |
+|---------------|----------------|
+| **MAJOR** (X+1.0.0) | Zmiany **niezgodne wstecz** w danej warstwie: usunięty publiczny endpoint / kontrakt, zmiana wymagająca równoległej innej aplikacji lub utraty zgodności zapisanych danych użytkownika bez bezpiecznej migracji. |
+| **MINOR** (x.Y+1.0) | **Nowa** funkcjonalność **wstecz zgodna** (nowe API, opcjonalne pola, nowe trasy/ekrany, nowe zachowanie za zgodnością domyślnej). |
+| **PATCH** (x.y.Z+1) | **Poprawki** (bugfixy), tylko testy, copy, bezpieczny refactor, bez nowej możliwości użytkowej. |
 
-**Poziom semver** (stosuj **osobno** dla FE i BE): zwykle **minor** przy nowej funkcji użytkowej, **patch** przy samych poprawkach / bez nowej funkcji.
+| Zakres plików w PR | Pliki wersji do aktualizacji |
+|--------------------|------------------------------|
+| **Tylko backend** | `backend/src/version.py` — `VERSION`; `backend/tests/unit/test_version.py` — `assert VERSION == "…"` |
+| **Tylko frontend** | `frontend/package.json` — `"version"`; `frontend/package-lock.json` — to samo w `version` root **oraz** `packages[""].version` |
+| **Oba** | Oba wiersze powyżej; numery FE i BE **mogą się różnić** |
 
-Nie podnoś wersji komponentu, którego diff nie zawiera sensownej zmiany (np. sam dokumentacja w root — użyj własnej oceny; czysto mechaniczny refactor tylko po jednej stronie → tylko ta strona).
+Nie podnoś wersji strony, której sensowny diff nie obejmuje (np. wyłącznie docs w root — własna ocena; mechaniczny refactor tylko w jednym katalogu → tylko ta strona).
 
 ## Canonical References
 
