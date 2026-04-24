@@ -8,7 +8,15 @@ Przed rozpoczęciem pracy przeczytaj: `context.md`
 - [ ] Poziom 3 — wiki/index.md (czytaj index, potem relevantne strony)
 
 ## Wersjonowanie (obowiązkowo przy ukończeniu zmian)
-Zanim PR będzie merge-ready: **podbij semver strony monorepo, którą zmieniłeś** (frontend i backend wersjonują się **niezależnie**). Dotyczy **każdej** zmergowanej zmiany w danym katalogu (`frontend/` albo `backend/`), nie tylko dużych feature’ów. Szczegóły: `context.md` → *Kluczowe decyzje*, `.cursor/rules/00-core.mdc` → *Version bumps*, spec: `docs/superpowers/specs/006-semantic-versioning/`.
+Zanim PR będzie merge-ready: **podbij semver tylko tej strony monorepo, której kod się zmienia** (frontend i backend: **osobne** numery, oba wg **Semantic Versioning 2.0.0**).
+
+| Poziom | Kiedy (skrót) |
+|--------|----------------|
+| **MAJOR** (X.0.0) | Niezgodne wstecz w danej warstwie: usunięty publiczny kontrakt, wymuszone zmiany u konsumenta API/UI bez bezpiecznej ścieżki przejścia. |
+| **MINOR** (x.Y.0) | Nowa, wstecz zgodna funkcjonalność (nowe endpointy, pola, widoki, zachowanie domyślne bezpsze w stosunku do klientów). |
+| **PATCH** (x.y.Z) | Poprawki błędów, dopracowania, refaktory bez nowej możliwości użytkowej. |
+
+Źródła plików do edycji: `context.md` (stack) • `.cursor/rules/00-core.mdc` → *Version bumps* • `docs/superpowers/specs/006-semantic-versioning/`. `frontend/AGENTS.md` / `backend/AGENTS.md` — przypomnienie, które pliki wersji dotyczą tylko jednej strefy.
 
 ## Gdzie co leży (bez duplikowania treści)
 - **`context.md`** — krótki obraz repo, porty, struktura, granice (PL); **Git:** SSH **`personal`** → GitHub (patrz *Gotchas*).

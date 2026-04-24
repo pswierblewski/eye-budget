@@ -1,6 +1,6 @@
 # eye-budget — kontekst dla agenta
 
-> Ostatnia aktualizacja: 2026-04-23
+> Ostatnia aktualizacja: 2026-04-24
 
 ## Co to jest
 Aplikacja do budżetu domowego: OCR paragonów (PaddleOCR + OpenAI), transakcje bankowe i gotówkowe, kategoryzacja, **grupy rozliczeń** (powiązane operacje) — listy, szczegół grupy, powiązania z transakcjami w UI.
@@ -10,7 +10,7 @@ Dla agenta: skrót całości; szczegóły: `frontend/AGENTS.md`, `backend/AGENTS
 - Frontend: Next.js 14, App Router, TypeScript strict, Tailwind, Radix, TanStack Query, Zod, recharts, Pusher/Soketi; testy: **Vitest**; błędy API: **`QueryState`**, **`lib/query-error.ts`** (copy PL)
 - Backend: FastAPI, Pydantic v2, psycopg2 (SQL bez ORM), Yoyo, Celery, Redis, MinIO, PaddleOCR / OpenAI
 - Infra: PostgreSQL, MinIO, Redis, Soketi; `docker compose` — m.in. Redis, Soketi, backend, worker (Postgres/MinIO często zewnętrzne — `README.md`)
-- Wersje **niezależne** (semver osobno): `frontend/package.json` + `frontend/package-lock.json` (root i `packages[""]`), `backend/src/version.py` + asercja w `tests/unit/test_version.py`; kontrakt: `docs/superpowers/specs/006-semantic-versioning/`. **Stan w momencie aktualizacji: 1.5.0 (FE i BE)**; liczby zawsze weryfikuj w plikach
+- Wersje **niezależne** (SemVer 2.0.0 osobno dla FE i BE): `frontend/package.json` + `frontend/package-lock.json` (root i `packages[""]`), `backend/src/version.py` + asercja w `tests/unit/test_version.py`; spec: `docs/superpowers/specs/006-semantic-versioning/`. **Przykładowo w tej edycji: FE 1.5.1, BE 1.6.0** — ostatecznie sprawdź w plikach (wersje szybko rosną)
 
 ## Struktura
 - `frontend/app/` — strony (m.in. `settlement-groups/`) + `app/api/*/route.ts` (proxy do backendu)
@@ -31,7 +31,7 @@ Dla agenta: skrót całości; szczegóły: `frontend/AGENTS.md`, `backend/AGENTS
 - HTTP: `lib/api.ts` → proxy Next → FastAPI; `App()` per request w `main.py` + `dispose()` w `finally`
 - Zmiana endpointu: `main.py` + `data.py` + `app/api/.../route.ts` + `lib/api.ts` + `lib/types.ts`
 - Lista bankowa: `ai_top_candidate`; po Celery Pusher `categorization.transaction_updated` / `bank-transactions`. LLM: wpływ vs wydatek — osobne prompty; pensje z kontrahenta przed LLM (`bank_inflow_salary_rules`)
-- **Wersjonowanie (merge-ready):** zmiana kodu w **frontend/** lub **backend/** wymaga podbicia semver **tej** strony monorepozytorium (major/minor/patch według SemVer — nowe zachowanie API/UI zwykle **minor**). Jedna PR-ka z obiema strefami = dwa bumpy, jeśli oba katalogi się zmieniły. Zob. `.cursor/rules/00-core.mdc` → *Version bumps*
+- **Wersjonowanie (SemVer, merge-ready):** po zmianach w `frontend/` lub `backend/` podbij tylko wersję **tej** strony. **MAJOR** — naruszenie kompatybilności w danej warstwie (np. usunięty publiczny endpoint, zmiana kontraktu wymagająca równoległej zmiany drugiej strony albo utraty danych użytkownika bez migracji). **MINOR** — nowa wstecz zgodna funkcjonalność (nowe API, nowy flow UI, nowe opcjonalne pole). **PATCH** — poprawki błędów, tylko testy, bezpieczny refactor, bez nowej możliwości użytkowej. Zob. `.cursor/rules/00-core.mdc` → *Version bumps*; PR obejmujący oba katalogi → zwykle dwa bumpy, jeśli obie strony realnie się zmieniły
 
 ## Gotchas i ograniczenia
 - **Sekrety:** nie commituj `.env`, **`.env.agent`**, lokalnych `backend/.env`. Diagnostyka DB/MinIO: skills + `.env.agent` — bez wklejania tajemnic do czatu
