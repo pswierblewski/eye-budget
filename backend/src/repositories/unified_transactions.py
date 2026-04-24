@@ -54,6 +54,8 @@ class UnifiedTransactionsRepository:
         amount_min: Optional[float] = None,
         amount_max: Optional[float] = None,
         direction: Optional[str] = None,   # 'expense' | 'income'
+        exclude_receipt: bool = False,
+        abs_amount: Optional[float] = None,
         sort_by: str = "date",
         sort_dir: str = "desc",
         limit: int = 50,
@@ -106,6 +108,12 @@ class UnifiedTransactionsRepository:
             conditions.append("amount < 0")
         elif direction == "income":
             conditions.append("amount > 0")
+        if exclude_receipt:
+            conditions.append("source_type <> 'receipt'")
+        if abs_amount is not None:
+            eps = 0.01
+            conditions.append("ABS(amount::double precision) BETWEEN %s AND %s")
+            params.extend([abs_amount - eps, abs_amount + eps])
 
         where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
 
