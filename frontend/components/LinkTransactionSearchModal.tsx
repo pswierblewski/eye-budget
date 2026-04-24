@@ -35,10 +35,12 @@ export function LinkTransactionSearchModal({
   const queryClient = useQueryClient();
   const absTotal = Math.abs(receiptTotal);
   const [search, setSearch] = useState("");
+  const [filterByReceiptAmount, setFilterByReceiptAmount] = useState(true);
 
   useEffect(() => {
     if (!open) return;
     setSearch("");
+    setFilterByReceiptAmount(true);
   }, [open, absTotal]);
 
   const listQuery = useQuery({
@@ -47,6 +49,7 @@ export function LinkTransactionSearchModal({
       "link-tx-search",
       search,
       absTotal,
+      filterByReceiptAmount,
       open,
       scanId,
     ],
@@ -54,7 +57,7 @@ export function LinkTransactionSearchModal({
       listUnifiedTransactions({
         search: search.trim() || undefined,
         exclude_receipt: true,
-        abs_amount: absTotal,
+        abs_amount: filterByReceiptAmount ? absTotal : undefined,
         limit: 40,
         sort_by: "date",
         sort_dir: "desc",
@@ -103,9 +106,22 @@ export function LinkTransactionSearchModal({
           Wyszukaj transakcję
         </h2>
         <p className="text-sm text-gray-600">
-          Tylko bank i gotówka, kwota ~{absTotal.toFixed(2)} PLN. Dopasuj po
-          opisie lub sklepie poniżej.
+          Tylko bank i gotówka. Poniżej: opcjonalne dopasowanie do kwoty paragonu
+          oraz wyszukiwanie po opisie lub sklepie.
         </p>
+        <label className="flex items-start gap-2 text-sm text-gray-800 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            className="mt-0.5 rounded border-gray-300"
+            checked={filterByReceiptAmount}
+            onChange={(e) => setFilterByReceiptAmount(e.target.checked)}
+          />
+          <span>
+            Tylko transakcje o kwocie ~{absTotal.toFixed(2)} PLN (jak suma
+            paragonu). Odznacz, jeśli szukasz innego sklepu lub innej kwoty w
+            banku.
+          </span>
+        </label>
         <Input
           value={search}
           onChange={(e) => setSearch(e.target.value)}

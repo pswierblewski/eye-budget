@@ -36,10 +36,12 @@ export function LinkReceiptSearchModal({
   const queryClient = useQueryClient();
   const absTotal = Math.abs(amount);
   const [search, setSearch] = useState("");
+  const [filterByTxAmount, setFilterByTxAmount] = useState(true);
 
   useEffect(() => {
     if (!open) return;
     setSearch("");
+    setFilterByTxAmount(true);
   }, [open, amount]);
 
   const listQuery = useQuery({
@@ -48,13 +50,14 @@ export function LinkReceiptSearchModal({
       "link-receipt-search",
       search,
       absTotal,
+      filterByTxAmount,
       open,
     ],
     queryFn: () =>
       listReceipts({
         search: search.trim() || undefined,
-        total_min: absTotal,
-        total_max: absTotal,
+        total_min: filterByTxAmount ? absTotal : undefined,
+        total_max: filterByTxAmount ? absTotal : undefined,
         limit: 40,
         sort_by: "date",
         sort_dir: "desc",
@@ -105,9 +108,21 @@ export function LinkReceiptSearchModal({
       <div className="p-4 space-y-3 flex flex-col min-h-0 flex-1">
         <h2 className="text-lg font-semibold text-gray-900">Wyszukaj paragon</h2>
         <p className="text-sm text-gray-600">
-          Filtrowanie po kwocie {absTotal.toFixed(2)} PLN. Możesz zawęzić po nazwie pliku
-          lub sklepie w polu poniżej.
+          Możesz ograniczyć listę do kwoty z bieżącej transakcji albo szukać tylko
+          po tekście (sklep, plik).
         </p>
+        <label className="flex items-start gap-2 text-sm text-gray-800 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            className="mt-0.5 rounded border-gray-300"
+            checked={filterByTxAmount}
+            onChange={(e) => setFilterByTxAmount(e.target.checked)}
+          />
+          <span>
+            Tylko paragony o sumie ~{absTotal.toFixed(2)} PLN (jak ta transakcja).
+            Odznacz, by szukać innej kwoty lub sklepu.
+          </span>
+        </label>
         <Input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
