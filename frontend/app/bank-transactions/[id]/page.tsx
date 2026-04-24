@@ -35,6 +35,7 @@ import {
   ConfirmDeleteModal,
 } from "@/components/ui";
 import { SettlementOperationsSection } from "@/components/SettlementOperationsSection";
+import { LinkReceiptSearchModal } from "@/components/LinkReceiptSearchModal";
 import {
   QueryState,
   QueryErrorNotice,
@@ -117,6 +118,7 @@ export default function BankTransactionDetailPage({
 
   // ── Receipt linking state ────────────────────────────────────────
   const [showCandidates, setShowCandidates] = useState(false);
+  const [receiptSearchOpen, setReceiptSearchOpen] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   // ── Mutations ───────────────────────────────────────────────────
@@ -446,15 +448,36 @@ export default function BankTransactionDetailPage({
               }
             </QueryState>
           ) : (
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setShowCandidates(true)}
-            >
-              Znajdź pasujące paragony
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setShowCandidates(true)}
+              >
+                Znajdź pasujące paragony
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setReceiptSearchOpen(true)}
+              >
+                Wyszukaj paragon…
+              </Button>
+            </div>
           )}
         </Card>
+        <LinkReceiptSearchModal
+          open={receiptSearchOpen}
+          onClose={() => setReceiptSearchOpen(false)}
+          anchorType="bank"
+          transactionId={txId}
+          amount={tx.amount}
+          onLinked={() => {
+            queryClient.invalidateQueries({
+              queryKey: ["bank-tx-receipt-candidates", txId],
+            });
+          }}
+        />
       </div>
     </div>
         );

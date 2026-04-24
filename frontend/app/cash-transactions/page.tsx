@@ -34,6 +34,7 @@ import { VendorDropdown } from "@/components/VendorDropdown";
 import TagsEditor from "@/components/TagsEditor";
 import { DataTable, Column } from "@/components/DataTable";
 import { SettlementOperationsSection } from "@/components/SettlementOperationsSection";
+import { LinkReceiptSearchModal } from "@/components/LinkReceiptSearchModal";
 import Link from "next/link";
 import { Plus, Link2, ArrowRight } from "lucide-react";
 import {
@@ -229,6 +230,7 @@ function ExpandedRowContent({ tx, tagsQuery }: ExpandedRowProps) {
     tx.category_id ?? undefined
   );
   const [showCandidates, setShowCandidates] = useState(false);
+  const [receiptSearchOpen, setReceiptSearchOpen] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   // Edit state
@@ -569,13 +571,22 @@ function ExpandedRowContent({ tx, tagsQuery }: ExpandedRowProps) {
           ) : (
             <div>
               {!showCandidates ? (
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => setShowCandidates(true)}
-                >
-                  Znajdź pasujący paragon
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setShowCandidates(true)}
+                  >
+                    Znajdź pasujący paragon
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setReceiptSearchOpen(true)}
+                  >
+                    Wyszukaj paragon…
+                  </Button>
+                </div>
               ) : (
                 <QueryState
                   query={candidatesQuery}
@@ -640,6 +651,18 @@ function ExpandedRowContent({ tx, tagsQuery }: ExpandedRowProps) {
     >
       <SettlementOperationsSection sourceType="cash" transactionId={tx.id} />
     </div>
+    <LinkReceiptSearchModal
+      open={receiptSearchOpen}
+      onClose={() => setReceiptSearchOpen(false)}
+      anchorType="cash"
+      transactionId={tx.id}
+      amount={tx.amount}
+      onLinked={() => {
+        queryClient.invalidateQueries({
+          queryKey: ["cash-tx-receipt-candidates", tx.id],
+        });
+      }}
+    />
     </>
   );
 }
