@@ -57,6 +57,61 @@ class TestPreprocessingService:
             assert out_img.width == 50
             assert out_img.height == 100
 
+    def test_preprocess_pdf_one_page(self, tmp_path):
+        import fitz
+
+        pdf_path = str(tmp_path / "one.pdf")
+        doc = fitz.open()
+        doc.new_page(width=200, height=100)
+        doc.save(pdf_path)
+        doc.close()
+
+        svc = PreprocessingService()
+        svc.input_dir = str(tmp_path)
+        svc.output_dir = str(tmp_path / "out_pdf")
+        os.makedirs(svc.output_dir, exist_ok=True)
+
+        out = svc.preprocess_image("one.pdf")
+        with Image.open(out) as im:
+            assert im.width == 200
+            assert im.height == 100
+        assert out.endswith("one.jpg")
+
+    def test_preprocess_pdf_two_pages_stack_dimensions(self, tmp_path):
+        import fitz
+
+        path = str(tmp_path / "two.pdf")
+        doc = fitz.open()
+        doc.new_page(width=300, height=50)
+        doc.new_page(width=150, height=40)
+        doc.save(path)
+        doc.close()
+
+        svc = PreprocessingService()
+        svc.input_dir = str(tmp_path)
+        svc.output_dir = str(tmp_path / "out_pdf2")
+        os.makedirs(svc.output_dir, exist_ok=True)
+
+        out = svc.preprocess_image("two.pdf")
+        with Image.open(out) as im:
+            assert im.width == 300
+            assert im.height == 90
+
+    def test_preprocess_corrupt_pdf_raises(self, tmp_path):
+        import fitz
+
+        bad = str(tmp_path / "bad.pdf")
+        with open(bad, "wb") as f:
+            f.write(b"not a real pdf")
+
+        svc = PreprocessingService()
+        svc.input_dir = str(tmp_path)
+        svc.output_dir = str(tmp_path / "out_bad")
+        os.makedirs(svc.output_dir, exist_ok=True)
+
+        with pytest.raises(fitz.FileDataError):
+            svc.preprocess_image("bad.pdf")
+
 
 @pytest.mark.unit
 class TestTextLocalizationService:
