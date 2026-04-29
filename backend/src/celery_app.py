@@ -16,7 +16,6 @@ celery_app = Celery(
         "src.tasks.retry_receipt",
         "src.tasks.run_budget_simulation",
         "src.tasks.refresh_ai_recommendations",
-        "src.tasks.advance_goal_progress",
     ],
 )
 
@@ -29,10 +28,6 @@ celery_app.conf.update(
     task_track_started=True,
     result_expires=3600,  # keep results for 1 hour
     beat_schedule={
-        "advance-goal-progress-monthly": {
-            "task": "tasks.advance_goal_progress",
-            "schedule": 30 * 24 * 3600,  # every 30 days
-        },
         "refresh-ai-recommendations-daily": {
             "task": "tasks.refresh_ai_recommendations",
             "schedule": 24 * 3600,  # every 24 hours
