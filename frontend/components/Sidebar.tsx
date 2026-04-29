@@ -14,7 +14,6 @@ import {
   ArrowLeftRight,
   ChartBar,
   PiggyBank,
-  Target,
   Sliders,
   Sparkles,
   Link2,
@@ -30,7 +29,6 @@ const navItems = [
 ];
 
 const budgetSubItems = [
-  { href: "/budget/goals", label: "Cele finansowe", icon: Target },
   { href: "/budget/simulations", label: "Symulacje", icon: Sliders },
   { href: "/budget/ai-insights", label: "Rekomendacje AI", icon: Sparkles },
 ];
