@@ -705,33 +705,6 @@ export const FinancialFocusResponseSchema = z.object({
 });
 export type FinancialFocusResponse = z.infer<typeof FinancialFocusResponseSchema>;
 
-export const FinancialGoalListItemSchema = z.object({
-  id: z.number(),
-  name: z.string(),
-  target_amount_pln: z.number(),
-  target_date: z.string().nullable(),
-  priority_rank: z.number(),
-  monthly_allocation_amount_pln: z.number(),
-  accumulated_progress_pln: z.number(),
-  progress_pct: z.number(),
-  months_to_completion: z.number().nullable(),
-  projected_completion_date: z.string().nullable(),
-  is_active: z.boolean(),
-});
-export type FinancialGoalListItem = z.infer<typeof FinancialGoalListItemSchema>;
-
-export const MonthlySurplusResponseSchema = z.object({
-  avg_income_3m_pln: z.number(),
-  avg_expenses_3m_pln: z.number(),
-  avg_surplus_3m_pln: z.number(),
-  current_month_income_pln: z.number(),
-  current_month_expenses_pln: z.number(),
-  current_month_surplus_pln: z.number(),
-  total_monthly_goal_allocations_pln: z.number(),
-  unallocated_surplus_pln: z.number(),
-});
-export type MonthlySurplusResponse = z.infer<typeof MonthlySurplusResponseSchema>;
-
 export const SimulationMonthlyPointSchema = z.object({
   month: z.string(),
   baseline_surplus_pln: z.number(),
