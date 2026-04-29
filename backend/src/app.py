@@ -31,10 +31,8 @@ from .repositories.unified_transactions import UnifiedTransactionsRepository
 from .repositories.settlement_groups import SettlementGroupsRepository
 from .repositories.prompt_analytics import PromptAnalyticsRepository
 from .repositories.budget_analysis import BudgetAnalysisRepository
-from .repositories.budget_goals import BudgetGoalsRepository
 from .repositories.budget_simulations import BudgetSimulationsRepository
 from .services.budget_analysis import BudgetAnalysisService
-from .services.budget_goals import BudgetGoalsService
 from .services.budget_simulation import BudgetSimulationService
 from .data import (
     ReceiptsScanStatus,
@@ -84,10 +82,6 @@ from .data import (
     RecurringExpenseItem,
     CyclicalAlertItem,
     AffordabilityCheckResponse,
-    FinancialGoalListItem,
-    CreateFinancialGoalRequest,
-    UpdateFinancialGoalRequest,
-    MonthlySurplusResponse,
     BudgetSimulationListItem,
     BudgetSimulationDetail,
     CreateBudgetSimulationRequest,
@@ -139,7 +133,6 @@ class App(ABC):
         unified_transactions_repository=None,
         prompt_analytics_repository=None,
         budget_analysis_repository=None,
-        budget_goals_repository=None,
         budget_simulations_repository=None,
         settlement_groups_repository=None,
         # Services
@@ -154,7 +147,6 @@ class App(ABC):
         bank_categorization_service=None,
         bank_csv_parser=None,
         budget_analysis_service=None,
-        budget_goals_service=None,
         budget_simulation_service=None,
         evaluation_service=None,
         ground_truth_service=None,
@@ -201,7 +193,6 @@ class App(ABC):
 
         # Budget Analysis repositories and services
         self.budget_analysis_repository = budget_analysis_repository or BudgetAnalysisRepository(self.eye_budget_db_context)
-        self.budget_goals_repository = budget_goals_repository or BudgetGoalsRepository(self.eye_budget_db_context)
         self.budget_simulations_repository = budget_simulations_repository or BudgetSimulationsRepository(self.eye_budget_db_context)
         self.settlement_groups_repository = (
             settlement_groups_repository or SettlementGroupsRepository(self.eye_budget_db_context)
@@ -210,13 +201,8 @@ class App(ABC):
             budget_analysis_repo=self.budget_analysis_repository,
             categories_repo=self.categories_repository,
         )
-        self.budget_goals_service = budget_goals_service or BudgetGoalsService(
-            budget_goals_repo=self.budget_goals_repository,
-            budget_analysis_repo=self.budget_analysis_repository,
-        )
         self.budget_simulation_service = budget_simulation_service or BudgetSimulationService(
             budget_analysis_repo=self.budget_analysis_repository,
-            budget_goals_repo=self.budget_goals_repository,
             budget_simulations_repo=self.budget_simulations_repository,
         )
 
@@ -1497,35 +1483,14 @@ class App(ABC):
     def check_affordability(self, amount_pln: float) -> AffordabilityCheckResponse:
         focus = self.budget_analysis_service.get_financial_focus()
         focus_label = focus.label if focus.id is not None else None
-        goal_allocations = self.budget_goals_repository.get_active_goal_allocations_total()
         return self.budget_analysis_service.check_affordability(
             amount_pln=amount_pln,
             financial_focus_label=focus_label,
-            goal_allocations_pln=goal_allocations,
+            goal_allocations_pln=0.0,
         )
 
     def get_emergency_advice(self, amount_pln: float) -> EmergencyAdvisorResponse:
-        active_goals = self.budget_goals_repository.get_all_goals()
-        return self.budget_analysis_service.get_emergency_advice(amount_pln, active_goals)
-
-    # ------------------------------------------------------------------
-    # Budget Goals methods
-    # ------------------------------------------------------------------
-
-    def get_monthly_surplus(self) -> MonthlySurplusResponse:
-        return self.budget_goals_service.get_monthly_surplus()
-
-    def get_goals(self) -> list[FinancialGoalListItem]:
-        return self.budget_goals_service.get_goals()
-
-    def create_goal(self, req: CreateFinancialGoalRequest) -> FinancialGoalListItem:
-        return self.budget_goals_service.create_goal(req)
-
-    def update_goal(self, goal_id: int, req: UpdateFinancialGoalRequest):
-        return self.budget_goals_service.update_goal(goal_id, req)
-
-    def delete_goal(self, goal_id: int) -> bool:
-        return self.budget_goals_service.delete_goal(goal_id)
+        return self.budget_analysis_service.get_emergency_advice(amount_pln, [])
 
     # ------------------------------------------------------------------
     # Budget Simulations methods
@@ -1748,10 +1713,8 @@ class App(ABC):
         self.ground_truth_service.dispose()
         self.text_localization_service.dispose()
         self.budget_analysis_repository.dispose()
-        self.budget_goals_repository.dispose()
         self.budget_simulations_repository.dispose()
         self.budget_analysis_service.dispose()
-        self.budget_goals_service.dispose()
         self.budget_simulation_service.dispose()
         self.eye_budget_db_context.dispose()
         print("All resources disposed.")
