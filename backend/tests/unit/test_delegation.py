@@ -661,31 +661,6 @@ def test_get_cyclical_alerts_delegates():
 
 
 @pytest.mark.unit
-def test_get_monthly_surplus_delegates():
-    # Arrange
-    app = make_app()
-
-    # Act
-    app.get_monthly_surplus()
-
-    # Assert
-    app.budget_goals_service.get_monthly_surplus.assert_called_once()
-
-
-@pytest.mark.unit
-def test_update_goal_delegates():
-    # Arrange
-    app = make_app()
-    req = MagicMock()
-
-    # Act
-    app.update_goal(1, req)
-
-    # Assert
-    app.budget_goals_service.update_goal.assert_called_once_with(1, req)
-
-
-@pytest.mark.unit
 def test_delete_simulation_delegates():
     # Arrange
     app = make_app()

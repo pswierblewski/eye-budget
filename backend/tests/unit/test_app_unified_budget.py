@@ -117,11 +117,9 @@ def test_set_financial_focus_returns_service_response():
 
 
 @pytest.mark.unit
-def test_get_emergency_advice_passes_goals_and_returns_service_value():
+def test_get_emergency_advice_passes_empty_goals_list():
     # Arrange
     app = make_app()
-    goals = [MagicMock()]
-    app.budget_goals_repository.get_all_goals.return_value = goals
     expected = MagicMock()
     app.budget_analysis_service.get_emergency_advice.return_value = expected
 
@@ -130,7 +128,7 @@ def test_get_emergency_advice_passes_goals_and_returns_service_value():
 
     # Assert
     assert result is expected
-    app.budget_analysis_service.get_emergency_advice.assert_called_once_with(500.0, goals)
+    app.budget_analysis_service.get_emergency_advice.assert_called_once_with(500.0, [])
 
 
 @pytest.mark.unit

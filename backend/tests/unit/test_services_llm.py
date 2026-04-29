@@ -275,20 +275,18 @@ class TestVendorsService:
 class TestBudgetSimulationService:
     def _make_service(self):
         mock_analysis_repo = MagicMock()
-        mock_goals_repo = MagicMock()
         mock_simulations_repo = MagicMock()
         mock_client = MagicMock()
         svc = BudgetSimulationService(
             budget_analysis_repo=mock_analysis_repo,
-            budget_goals_repo=mock_goals_repo,
             budget_simulations_repo=mock_simulations_repo,
             openai_client=mock_client,
         )
-        return svc, mock_analysis_repo, mock_goals_repo, mock_simulations_repo, mock_client
+        return svc, mock_analysis_repo, mock_simulations_repo, mock_client
 
     def test_generate_ai_recommendations_insufficient_data(self):
         # Arrange
-        svc, mock_analysis_repo, _, _, _ = self._make_service()
+        svc, mock_analysis_repo, _, _ = self._make_service()
         mock_analysis_repo.count_distinct_months.return_value = 1
 
         # Act
@@ -300,12 +298,11 @@ class TestBudgetSimulationService:
 
     def test_run_projection_calls_repo_and_returns_12_months(self):
         # Arrange
-        svc, mock_analysis_repo, mock_goals_repo, _, mock_client = self._make_service()
+        svc, mock_analysis_repo, _, mock_client = self._make_service()
         mock_analysis_repo.get_rolling_3month_averages.return_value = {
             "avg_income": 5000.0,
             "avg_expenses": 3000.0,
         }
-        mock_goals_repo.get_all_goals.return_value = []
         # Narrative LLM call fails gracefully — fallback narrative is used
         mock_client.chat.completions.create.side_effect = Exception("no api key in test")
         simulation_row = {
@@ -324,12 +321,11 @@ class TestBudgetSimulationService:
 
     def test_run_projection_recurring_expense_24_months(self):
         # Arrange — recurring expense → 24-month horizon
-        svc, mock_analysis_repo, mock_goals_repo, _, mock_client = self._make_service()
+        svc, mock_analysis_repo, _, mock_client = self._make_service()
         mock_analysis_repo.get_rolling_3month_averages.return_value = {
             "avg_income": 5000.0,
             "avg_expenses": 3000.0,
         }
-        mock_goals_repo.get_all_goals.return_value = []
         mock_client.chat.completions.create.side_effect = Exception("no key")
         simulation_row = {
             "expense_amount": 200.0,
@@ -347,11 +343,10 @@ class TestBudgetSimulationService:
     def test_run_projection_with_date_object(self):
         # Arrange — start_date is already a date object (not a string)
         import datetime
-        svc, mock_analysis_repo, mock_goals_repo, _, mock_client = self._make_service()
+        svc, mock_analysis_repo, _, mock_client = self._make_service()
         mock_analysis_repo.get_rolling_3month_averages.return_value = {
             "avg_income": 5000.0, "avg_expenses": 3000.0,
         }
-        mock_goals_repo.get_all_goals.return_value = []
         mock_client.chat.completions.create.side_effect = Exception("no key")
         simulation_row = {
             "expense_amount": 100.0,
@@ -366,43 +361,12 @@ class TestBudgetSimulationService:
         # Assert
         assert len(result.projection) == 12
 
-    def test_run_projection_with_goal_impact(self):
-        # Arrange — goal exists with allocation, triggers goal_impacts loop
-        svc, mock_analysis_repo, mock_goals_repo, _, mock_client = self._make_service()
-        mock_analysis_repo.get_rolling_3month_averages.return_value = {
-            "avg_income": 5000.0, "avg_expenses": 3000.0,
-        }
-        mock_goals_repo.get_all_goals.return_value = [
-            {
-                "id": 1,
-                "name": "Wakacje",
-                "target_amount": "5000.00",
-                "accumulated_progress": "1000.00",
-                "monthly_allocation_amount": "500.00",
-            }
-        ]
-        mock_client.chat.completions.create.side_effect = Exception("no key")
-        simulation_row = {
-            "expense_amount": 500.0,
-            "expense_type": "one_time",
-            "expense_start_date": "2024-06-01",
-            "expense_name": "Laptop",
-        }
-
-        # Act
-        result = svc.run_projection(simulation_row)
-
-        # Assert — goal_impacts populated
-        assert len(result.goal_impacts) == 1
-        assert result.goal_impacts[0].goal_name == "Wakacje"
-
     def test_run_projection_invalid_date_string_falls_back_to_today(self):
         # Arrange — unparseable start_date triggers fallback to today
-        svc, mock_analysis_repo, mock_goals_repo, _, mock_client = self._make_service()
+        svc, mock_analysis_repo, _, mock_client = self._make_service()
         mock_analysis_repo.get_rolling_3month_averages.return_value = {
             "avg_income": 5000.0, "avg_expenses": 3000.0,
         }
-        mock_goals_repo.get_all_goals.return_value = []
         mock_client.chat.completions.create.side_effect = Exception("no key")
         simulation_row = {
             "expense_amount": 100.0,
@@ -420,11 +384,10 @@ class TestBudgetSimulationService:
     def test_run_projection_recurring_applies_expense_from_start(self):
         # Arrange — recurring: simulated_expenses increases once start_date passed
         import datetime
-        svc, mock_analysis_repo, mock_goals_repo, _, mock_client = self._make_service()
+        svc, mock_analysis_repo, _, mock_client = self._make_service()
         mock_analysis_repo.get_rolling_3month_averages.return_value = {
             "avg_income": 5000.0, "avg_expenses": 3000.0,
         }
-        mock_goals_repo.get_all_goals.return_value = []
         mock_client.chat.completions.create.side_effect = Exception("no key")
         past_date = (datetime.date.today() - datetime.timedelta(days=60)).isoformat()
         simulation_row = {
@@ -442,13 +405,9 @@ class TestBudgetSimulationService:
 
     def test_build_context_summary_returns_dict(self):
         # Arrange
-        svc, mock_analysis_repo, mock_goals_repo, _, _ = self._make_service()
+        svc, mock_analysis_repo, _, _ = self._make_service()
         mock_analysis_repo.get_monthly_history.return_value = []
         mock_analysis_repo.get_financial_focus.return_value = {"label": "Oszczędności"}
-        mock_goals_repo.get_all_goals.return_value = [
-            {"name": "Dom", "target_amount": "200000.00",
-             "accumulated_progress": "10000.00", "monthly_allocation_amount": "2000.00"},
-        ]
 
         # Act
         result = svc._build_context_summary()
@@ -456,11 +415,11 @@ class TestBudgetSimulationService:
         # Assert
         assert "active_goals" in result
         assert result["financial_focus"] == "Oszczędności"
-        assert len(result["active_goals"]) == 1
+        assert result["active_goals"] == []
 
     def test_get_ai_recommendations_from_db_returns_empty_when_no_row(self):
         # Arrange
-        svc, mock_analysis_repo, _, mock_simulations_repo, _ = self._make_service()
+        svc, mock_analysis_repo, mock_simulations_repo, _ = self._make_service()
         mock_simulations_repo.get_current_recommendations.return_value = None
         mock_analysis_repo.count_distinct_months.return_value = 5
 
@@ -473,7 +432,7 @@ class TestBudgetSimulationService:
 
     def test_get_ai_recommendations_from_db_parses_insights(self):
         # Arrange
-        svc, mock_analysis_repo, _, mock_simulations_repo, _ = self._make_service()
+        svc, mock_analysis_repo, mock_simulations_repo, _ = self._make_service()
         mock_analysis_repo.count_distinct_months.return_value = 4
         mock_simulations_repo.get_current_recommendations.return_value = {
             "recommendations_json": [

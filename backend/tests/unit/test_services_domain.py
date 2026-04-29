@@ -3,16 +3,13 @@ import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
 
 from src.data import (
-    CreateFinancialGoalRequest,
     EvaluationMetrics,
     EvaluationResult,
     GroundTruthEntry,
     ProductItem,
     TransactionModel,
-    UpdateFinancialGoalRequest,
 )
 from src.services.budget_analysis import BudgetAnalysisService
-from src.services.budget_goals import BudgetGoalsService
 from src.services.evaluation import EvaluationService
 from src.services.ground_truth import GroundTruthService
 
@@ -72,69 +69,6 @@ class TestBudgetAnalysisService:
         # Assert
         assert result.verdict == "green"
         assert result.amount_pln == 500.0
-
-
-@pytest.mark.unit
-class TestBudgetGoalsService:
-    def _make_service(self) -> tuple[BudgetGoalsService, MagicMock, MagicMock]:
-        mock_goals_repo = MagicMock()
-        mock_analysis_repo = MagicMock()
-        return (
-            BudgetGoalsService(
-                budget_goals_repo=mock_goals_repo,
-                budget_analysis_repo=mock_analysis_repo,
-            ),
-            mock_goals_repo,
-            mock_analysis_repo,
-        )
-
-    def test_get_monthly_surplus_calculates_correctly(self):
-        # Arrange
-        svc, mock_goals_repo, mock_analysis_repo = self._make_service()
-        mock_analysis_repo.get_rolling_3month_averages.return_value = {
-            "avg_income": 5000.0,
-            "avg_expenses": 3000.0,
-        }
-        mock_analysis_repo.get_current_month_income_and_expenses.return_value = {
-            "income_pln": 5000.0,
-            "expenses_pln": 3000.0,
-        }
-        mock_goals_repo.get_active_goal_allocations_total.return_value = 500.0
-
-        # Act
-        result = svc.get_monthly_surplus()
-
-        # Assert
-        assert result.current_month_surplus_pln == 2000.0
-        assert result.unallocated_surplus_pln == 1500.0
-
-    def test_create_goal_calls_repo(self):
-        # Arrange
-        svc, mock_goals_repo, _ = self._make_service()
-        mock_goals_repo.create_goal.return_value = {
-            "id": 1,
-            "name": "Wakacje",
-            "target_amount": "5000.00",
-            "priority_rank": 1,
-            "monthly_allocation_amount": "500.00",
-            "accumulated_progress": "0.00",
-            "is_active": True,
-            "target_date": None,
-            "created_at": datetime.datetime.now(),
-        }
-        req = CreateFinancialGoalRequest(
-            name="Wakacje",
-            target_amount_pln=5000.0,
-            priority_rank=1,
-            monthly_allocation_amount_pln=500.0,
-        )
-
-        # Act
-        result = svc.create_goal(req)
-
-        # Assert
-        mock_goals_repo.create_goal.assert_called_once()
-        assert result.id == 1
 
 
 @pytest.mark.unit
@@ -345,129 +279,6 @@ class TestEvaluationServiceAsync:
         assert result.total_files == 1
         assert result.successful == 1
         mock_eval_repo.add_result.assert_called_once()
-
-
-def _make_goal_row(
-    id: int = 1,
-    name: str = "Wakacje",
-    target: str = "5000.00",
-    progress: str = "0.00",
-    alloc: str = "500.00",
-    is_active: bool = True,
-) -> dict:
-    return {
-        "id": id,
-        "name": name,
-        "target_amount": target,
-        "accumulated_progress": progress,
-        "monthly_allocation_amount": alloc,
-        "is_active": is_active,
-        "priority_rank": 1,
-        "target_date": None,
-        "created_at": datetime.datetime(2024, 1, 1),
-    }
-
-
-@pytest.mark.unit
-class TestBudgetGoalsServiceExtended:
-    def _make_service(self):
-        mock_goals_repo = MagicMock()
-        mock_analysis_repo = MagicMock()
-        svc = BudgetGoalsService(
-            budget_goals_repo=mock_goals_repo,
-            budget_analysis_repo=mock_analysis_repo,
-        )
-        return svc, mock_goals_repo, mock_analysis_repo
-
-    def test_get_goals_returns_enriched_list(self):
-        # Arrange
-        svc, mock_goals_repo, _ = self._make_service()
-        mock_goals_repo.get_all_goals.return_value = [_make_goal_row()]
-
-        # Act
-        result = svc.get_goals()
-
-        # Assert
-        assert len(result) == 1
-        assert result[0].name == "Wakacje"
-
-    def test_enrich_goal_already_completed(self):
-        # Arrange — progress == target → remaining == 0 → months_to_completion = 0
-        svc, mock_goals_repo, _ = self._make_service()
-        mock_goals_repo.get_all_goals.return_value = [
-            _make_goal_row(progress="5000.00")
-        ]
-
-        # Act
-        result = svc.get_goals()
-
-        # Assert
-        assert result[0].months_to_completion == 0
-
-    def test_enrich_goal_target_date_is_date_object(self):
-        # Arrange
-        svc, mock_goals_repo, _ = self._make_service()
-        row = _make_goal_row()
-        row["target_date"] = datetime.date(2025, 12, 31)
-        mock_goals_repo.get_all_goals.return_value = [row]
-
-        # Act
-        result = svc.get_goals()
-
-        # Assert — datetime.date converted to ISO string
-        assert result[0].target_date == "2025-12-31"
-
-    def test_create_goal_raises_when_repo_returns_none(self):
-        # Arrange
-        svc, mock_goals_repo, _ = self._make_service()
-        mock_goals_repo.create_goal.return_value = None
-        req = CreateFinancialGoalRequest(
-            name="Laptop",
-            target_amount_pln=3000.0,
-            priority_rank=1,
-            monthly_allocation_amount_pln=300.0,
-        )
-
-        # Act / Assert
-        with pytest.raises(ValueError):
-            svc.create_goal(req)
-
-    def test_update_goal_returns_none_when_repo_returns_none(self):
-        # Arrange
-        svc, mock_goals_repo, _ = self._make_service()
-        mock_goals_repo.update_goal.return_value = None
-        req = UpdateFinancialGoalRequest(name="Updated")
-
-        # Act
-        result = svc.update_goal(1, req)
-
-        # Assert
-        assert result is None
-
-    def test_update_goal_returns_enriched(self):
-        # Arrange
-        svc, mock_goals_repo, _ = self._make_service()
-        mock_goals_repo.update_goal.return_value = _make_goal_row(name="Updated")
-        req = UpdateFinancialGoalRequest(name="Updated")
-
-        # Act
-        result = svc.update_goal(1, req)
-
-        # Assert
-        assert result is not None
-        assert result.name == "Updated"
-
-    def test_delete_goal_delegates(self):
-        # Arrange
-        svc, mock_goals_repo, _ = self._make_service()
-        mock_goals_repo.soft_delete_goal.return_value = True
-
-        # Act
-        result = svc.delete_goal(1)
-
-        # Assert
-        assert result is True
-        mock_goals_repo.soft_delete_goal.assert_called_once_with(1)
 
 
 @pytest.mark.unit

@@ -22,7 +22,6 @@ ALL_PARAMS = [
     "settlement_groups_repository",
     "prompt_analytics_repository",
     "budget_analysis_repository",
-    "budget_goals_repository",
     "budget_simulations_repository",
     # services
     "ocr_service",
@@ -36,7 +35,6 @@ ALL_PARAMS = [
     "bank_categorization_service",
     "bank_csv_parser",
     "budget_analysis_service",
-    "budget_goals_service",
     "budget_simulation_service",
     "evaluation_service",
     "ground_truth_service",

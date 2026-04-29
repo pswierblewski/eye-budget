@@ -1,6 +1,5 @@
 import pytest
 from unittest.mock import MagicMock
-from src.data import CreateFinancialGoalRequest
 from tests.unit.conftest import make_app
 
 
@@ -17,14 +16,13 @@ def test_get_monthly_breakdown_delegates_year_and_month():
 
 
 @pytest.mark.unit
-def test_check_affordability_fetches_focus_and_allocations():
+def test_check_affordability_passes_zero_goal_allocations():
     # Arrange
     app = make_app()
     focus = MagicMock()
     focus.id = 1
     focus.label = "savings"
     app.budget_analysis_service.get_financial_focus.return_value = focus
-    app.budget_goals_repository.get_active_goal_allocations_total.return_value = 500.0
 
     # Act
     app.check_affordability(1000.0)
@@ -33,7 +31,7 @@ def test_check_affordability_fetches_focus_and_allocations():
     app.budget_analysis_service.check_affordability.assert_called_once_with(
         amount_pln=1000.0,
         financial_focus_label="savings",
-        goal_allocations_pln=500.0,
+        goal_allocations_pln=0.0,
     )
 
 
@@ -44,54 +42,12 @@ def test_check_affordability_uses_none_focus_when_no_focus_set():
     focus = MagicMock()
     focus.id = None
     app.budget_analysis_service.get_financial_focus.return_value = focus
-    app.budget_goals_repository.get_active_goal_allocations_total.return_value = 0.0
-
     # Act
     app.check_affordability(500.0)
 
     # Assert
     _, kwargs = app.budget_analysis_service.check_affordability.call_args
     assert kwargs["financial_focus_label"] is None
-
-
-@pytest.mark.unit
-def test_get_goals_delegates():
-    # Arrange
-    app = make_app()
-    expected = [MagicMock()]
-    app.budget_goals_service.get_goals.return_value = expected
-
-    # Act
-    result = app.get_goals()
-
-    # Assert
-    app.budget_goals_service.get_goals.assert_called_once()
-    assert result is expected
-
-
-@pytest.mark.unit
-def test_create_goal_delegates_request():
-    # Arrange
-    app = make_app()
-    req = MagicMock(spec=CreateFinancialGoalRequest)
-
-    # Act
-    app.create_goal(req)
-
-    # Assert
-    app.budget_goals_service.create_goal.assert_called_once_with(req)
-
-
-@pytest.mark.unit
-def test_delete_goal_delegates_goal_id():
-    # Arrange
-    app = make_app()
-
-    # Act
-    app.delete_goal(42)
-
-    # Assert
-    app.budget_goals_service.delete_goal.assert_called_once_with(42)
 
 
 @pytest.mark.unit
