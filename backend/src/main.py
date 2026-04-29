@@ -17,7 +17,6 @@ from src.tasks.retry_receipt import retry_receipt_task
 from src.tasks.categorize_bank_transactions import categorize_bank_transactions_task
 from src.tasks.run_budget_simulation import run_budget_simulation_task
 from src.tasks.refresh_ai_recommendations import refresh_ai_recommendations_task
-from src.tasks.advance_goal_progress import advance_goal_progress_task
 from src.version import VERSION
 from src.data import (
     EvaluationRunSummary,
@@ -65,10 +64,6 @@ from src.data import (
     RecurringExpenseItem,
     CyclicalAlertItem,
     AffordabilityCheckResponse,
-    FinancialGoalListItem,
-    CreateFinancialGoalRequest,
-    UpdateFinancialGoalRequest,
-    MonthlySurplusResponse,
     BudgetSimulationListItem,
     BudgetSimulationDetail,
     CreateBudgetSimulationRequest,
@@ -1396,64 +1391,6 @@ def check_affordability(amount_pln: float = Query(..., gt=0)) -> AffordabilityCh
     finally:
         my_app.dispose()
 
-
-@app.get("/budget/goals/surplus", response_model=MonthlySurplusResponse)
-def get_budget_surplus() -> MonthlySurplusResponse:
-    """Return 3-month rolling average surplus and current month actuals."""
-    my_app = App()
-    try:
-        return my_app.get_monthly_surplus()
-    finally:
-        my_app.dispose()
-
-
-@app.get("/budget/goals", response_model=list[FinancialGoalListItem])
-def list_goals() -> list[FinancialGoalListItem]:
-    """Return all active financial goals with computed progress."""
-    my_app = App()
-    try:
-        return my_app.get_goals()
-    finally:
-        my_app.dispose()
-
-
-@app.post("/budget/goals", response_model=FinancialGoalListItem, status_code=201)
-def create_goal(request: CreateFinancialGoalRequest) -> FinancialGoalListItem:
-    """Create a new financial goal."""
-    if request.target_amount_pln <= 0:
-        raise HTTPException(status_code=422, detail="target_amount_pln must be > 0")
-    my_app = App()
-    try:
-        return my_app.create_goal(request)
-    except ValueError as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        my_app.dispose()
-
-
-@app.put("/budget/goals/{goal_id}", response_model=FinancialGoalListItem)
-def update_goal(goal_id: int, request: UpdateFinancialGoalRequest) -> FinancialGoalListItem:
-    """Update a financial goal."""
-    my_app = App()
-    try:
-        result = my_app.update_goal(goal_id, request)
-        if result is None:
-            raise HTTPException(status_code=404, detail=f"Goal {goal_id} not found")
-        return result
-    finally:
-        my_app.dispose()
-
-
-@app.delete("/budget/goals/{goal_id}", status_code=204)
-def delete_goal(goal_id: int) -> None:
-    """Soft-delete a financial goal."""
-    my_app = App()
-    try:
-        ok = my_app.delete_goal(goal_id)
-        if not ok:
-            raise HTTPException(status_code=404, detail=f"Goal {goal_id} not found")
-    finally:
-        my_app.dispose()
 
 
 @app.post("/budget/simulations", response_model=SimulationTaskResponse, status_code=202)
