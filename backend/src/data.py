@@ -831,48 +831,6 @@ class AffordabilityCheckResponse(BaseModel):
     narrative: str
 
 
-class FinancialGoalListItem(BaseModel):
-    id: int
-    name: str
-    target_amount_pln: float
-    target_date: Optional[str]
-    priority_rank: int
-    monthly_allocation_amount_pln: float
-    accumulated_progress_pln: float
-    progress_pct: float
-    months_to_completion: Optional[int]
-    projected_completion_date: Optional[str]
-    is_active: bool
-
-
-class CreateFinancialGoalRequest(BaseModel):
-    name: str
-    target_amount_pln: float
-    target_date: Optional[str] = None
-    priority_rank: int = 0
-    monthly_allocation_amount_pln: float = 0.0
-
-
-class UpdateFinancialGoalRequest(BaseModel):
-    name: Optional[str] = None
-    target_amount_pln: Optional[float] = None
-    target_date: Optional[str] = None
-    priority_rank: Optional[int] = None
-    monthly_allocation_amount_pln: Optional[float] = None
-    is_active: Optional[bool] = None
-
-
-class MonthlySurplusResponse(BaseModel):
-    avg_income_3m_pln: float
-    avg_expenses_3m_pln: float
-    avg_surplus_3m_pln: float
-    current_month_income_pln: float
-    current_month_expenses_pln: float
-    current_month_surplus_pln: float
-    total_monthly_goal_allocations_pln: float
-    unallocated_surplus_pln: float
-
-
 class CreateBudgetSimulationRequest(BaseModel):
     name: str
     expense_name: str
