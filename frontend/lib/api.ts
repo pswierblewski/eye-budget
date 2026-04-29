@@ -66,10 +66,6 @@ import {
   AffordabilityCheckResponseSchema,
   FinancialFocusResponse,
   FinancialFocusResponseSchema,
-  FinancialGoalListItem,
-  FinancialGoalListItemSchema,
-  MonthlySurplusResponse,
-  MonthlySurplusResponseSchema,
   BudgetSimulationListItem,
   BudgetSimulationListItemSchema,
   BudgetSimulationDetail,
@@ -877,52 +873,6 @@ export async function checkAffordability(
     `/api/budget/analysis/affordability?amount_pln=${amount_pln}`,
     AffordabilityCheckResponseSchema
   );
-}
-
-export async function getBudgetGoals(): Promise<FinancialGoalListItem[]> {
-  return apiFetch("/api/budget/goals", FinancialGoalListItemSchema.array());
-}
-
-export async function getBudgetSurplus(): Promise<MonthlySurplusResponse> {
-  return apiFetch("/api/budget/goals/surplus", MonthlySurplusResponseSchema);
-}
-
-export async function createGoal(data: {
-  name: string;
-  target_amount_pln: number;
-  target_date?: string;
-  priority_rank?: number;
-  monthly_allocation_amount_pln?: number;
-}): Promise<FinancialGoalListItem> {
-  return apiFetch("/api/budget/goals", FinancialGoalListItemSchema, {
-    method: "POST",
-    body: JSON.stringify(data),
-  });
-}
-
-export async function updateGoal(
-  id: number,
-  data: Partial<{
-    name: string;
-    target_amount_pln: number;
-    target_date: string;
-    priority_rank: number;
-    monthly_allocation_amount_pln: number;
-    is_active: boolean;
-  }>
-): Promise<FinancialGoalListItem> {
-  return apiFetch(`/api/budget/goals/${id}`, FinancialGoalListItemSchema, {
-    method: "PUT",
-    body: JSON.stringify(data),
-  });
-}
-
-export async function deleteGoal(id: number): Promise<void> {
-  const res = await fetch(`/api/budget/goals/${id}`, { method: "DELETE" });
-  if (!res.ok) {
-    const text = await res.text().catch(() => res.statusText);
-    throw new Error(`API ${res.status}: ${text}`);
-  }
 }
 
 export async function getBudgetSimulations(): Promise<BudgetSimulationListItem[]> {
