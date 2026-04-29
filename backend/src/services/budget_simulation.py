@@ -22,7 +22,6 @@ from ..data import (
     AIRecommendationsPayload,
 )
 from ..repositories.budget_analysis import BudgetAnalysisRepository
-from ..repositories.budget_goals import BudgetGoalsRepository
 from ..repositories.budget_simulations import BudgetSimulationsRepository
 
 
@@ -30,12 +29,10 @@ class BudgetSimulationService:
     def __init__(
         self,
         budget_analysis_repo: BudgetAnalysisRepository,
-        budget_goals_repo: BudgetGoalsRepository,
         budget_simulations_repo: BudgetSimulationsRepository,
         openai_client: Optional[OpenAI] = None,
     ):
         self.analysis_repo = budget_analysis_repo
-        self.goals_repo = budget_goals_repo
         self.simulations_repo = budget_simulations_repo
         self.openai_client = openai_client or OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
@@ -93,55 +90,7 @@ class BudgetSimulationService:
                 )
             )
 
-        # Goal impact calculation
-        goals = self.goals_repo.get_all_goals()
         goal_impacts: list[SimulationGoalImpact] = []
-
-        for goal in goals:
-            alloc = float(goal["monthly_allocation_amount"])
-            if alloc <= 0:
-                continue
-            target = float(goal["target_amount"])
-            progress = float(goal["accumulated_progress"])
-            remaining = max(0.0, target - progress)
-
-            baseline_months = math.ceil(remaining / alloc) if alloc > 0 and remaining > 0 else 0
-            baseline_completion = (
-                (datetime.date.today() + datetime.timedelta(days=baseline_months * 30)).isoformat()
-                if baseline_months > 0 else None
-            )
-
-            # Simulated: count months where simulated_surplus >= alloc
-            can_allocate_months = sum(
-                1 for p in projection if p.simulated_surplus_pln >= alloc
-            )
-            if can_allocate_months == 0 and remaining > 0:
-                simulated_months = None
-                simulated_completion = None
-                delay = 99
-            else:
-                total_months = horizon
-                simulated_months = math.ceil(remaining / alloc) if alloc > 0 and remaining > 0 else 0
-                # Add delay for months where we couldn't allocate
-                months_blocked = sum(
-                    1 for p in projection if p.simulated_surplus_pln < alloc
-                )
-                simulated_months_total = simulated_months + months_blocked if simulated_months else 0
-                simulated_completion = (
-                    (datetime.date.today() + datetime.timedelta(days=simulated_months_total * 30)).isoformat()
-                    if simulated_months_total > 0 else None
-                )
-                delay = simulated_months_total - baseline_months if simulated_months_total else 0
-
-            goal_impacts.append(
-                SimulationGoalImpact(
-                    goal_id=goal["id"],
-                    goal_name=goal["name"],
-                    baseline_completion_date=baseline_completion,
-                    simulated_completion_date=simulated_completion,
-                    delay_months=max(0, delay),
-                )
-            )
 
         ai_summary, ai_implications, ai_suggestions = self._generate_narrative(
             projection, goal_impacts, simulation_row
@@ -216,20 +165,11 @@ class BudgetSimulationService:
 
     def _build_context_summary(self) -> dict:
         history = self.analysis_repo.get_monthly_history(3)
-        goals = self.goals_repo.get_all_goals()
         focus = self.analysis_repo.get_financial_focus()
 
         return {
             "monthly_history": history,
-            "active_goals": [
-                {
-                    "name": g["name"],
-                    "target": float(g["target_amount"]),
-                    "progress": float(g["accumulated_progress"]),
-                    "monthly_allocation": float(g["monthly_allocation_amount"]),
-                }
-                for g in goals
-            ],
+            "active_goals": [],
             "financial_focus": focus["label"] if focus else None,
         }
 
