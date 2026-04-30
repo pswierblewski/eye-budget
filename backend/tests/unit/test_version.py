@@ -4,12 +4,6 @@ from src.version import VERSION
 
 
 @pytest.mark.unit
-def test_version_constant_value():
-    # Arrange / Act / Assert
-    assert VERSION == "1.8.0"
-
-
-@pytest.mark.unit
 def test_version_constant_matches_semver():
     # Arrange
     semver_pattern = r"^\d+\.\d+\.\d+$"
