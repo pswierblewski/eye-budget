@@ -43,9 +43,9 @@ This is a CI/CD infrastructure feature. Source paths are:
 
 ## Phase 3: User Story 1 — Automatic Deployment on Push (Priority: P1) 🎯 MVP
 
-**Goal**: Every push to `master` triggers a workflow that builds the Docker image, replaces the running container, and makes the updated app accessible at `http://192.168.1.184:3000` — with no manual steps.
+**Goal**: Every push to `master` triggers a workflow that builds the Docker image, replaces the running container, and makes the updated app accessible at `http://<SERVER_IP>:3000` — with no manual steps.
 
-**Independent Test**: Push a one-line visible text change to master; within 5 minutes, verify the change is live at `http://192.168.1.184:3000`.
+**Independent Test**: Push a one-line visible text change to master; within 5 minutes, verify the change is live at `http://<SERVER_IP>:3000`.
 
 ### Implementation for User Story 1
 
@@ -58,7 +58,7 @@ This is a CI/CD infrastructure feature. Source paths are:
 
 - [ ] T006 [P] [US1] Perform one-time server setup per `specs/004-cicd-local-deploy/quickstart.md`: create `github-runner` user, add to `docker` group, download and configure GitHub Actions runner (`./config.sh` with labels `self-hosted,linux,eye-budget`), register as systemd service (`./svc.sh install`), and add `NEXT_PUBLIC_API_URL` as a GitHub Actions secret
 
-**Checkpoint**: After T005 and T006 are both complete, push to master and confirm the workflow runs on the self-hosted runner and the app is reachable at `http://192.168.1.184:3000`
+**Checkpoint**: After T005 and T006 are both complete, push to master and confirm the workflow runs on the self-hosted runner and the app is reachable at `http://<SERVER_IP>:3000`
 
 ---
 
@@ -74,7 +74,7 @@ This is a CI/CD infrastructure feature. Source paths are:
 
 - [x] T008 [P] [US2] Add a `workflow_dispatch` trigger to `.github/workflows/deploy.yml` alongside the existing `push` trigger, to allow manual re-triggers from the GitHub Actions UI when the server was temporarily unreachable
 
-- [x] T009 [P] [US2] Add a step at the end of the `ci-and-deploy` job in `.github/workflows/deploy.yml` that uses `$GITHUB_STEP_SUMMARY` to post a deployment summary: on success, write `✅ Deployed at $(date -u) — http://192.168.1.184:3000`; this step runs with `if: success()`
+- [x] T009 [P] [US2] Add a step at the end of the `ci-and-deploy` job in `.github/workflows/deploy.yml` that uses `$GITHUB_STEP_SUMMARY` to post a deployment summary: on success, write `✅ Deployed at $(date -u) — http://<SERVER_IP>:3000`; this step runs with `if: success()`
 
 **Checkpoint**: After a successful push, the Actions run summary shows the live URL and timestamp. After a failed push (e.g., lint error), the failing step name and error are visible in the run log.
 
@@ -84,7 +84,7 @@ This is a CI/CD infrastructure feature. Source paths are:
 
 **Goal**: A deployment that fails (broken build, crashing container, or failed health check) leaves the previously working version still running on port 3000.
 
-**Independent Test**: Introduce a deliberate runtime crash (e.g., `process.exit(1)` at startup) and push to master; after the deployment fails, verify the previous working version is still accessible at `http://192.168.1.184:3000`.
+**Independent Test**: Introduce a deliberate runtime crash (e.g., `process.exit(1)` at startup) and push to master; after the deployment fails, verify the previous working version is still accessible at `http://<SERVER_IP>:3000`.
 
 ### Implementation for User Story 3
 
@@ -92,7 +92,7 @@ This is a CI/CD infrastructure feature. Source paths are:
 
 - [x] T011 [US3] Add a rollback step in `.github/workflows/deploy.yml` with `if: failure()` that runs after the health check step: stop and remove the newly started container, then start `eye-budget-frontend:previous` if it exists (`docker image inspect eye-budget-frontend:previous &>/dev/null && docker run -d --name eye-budget-frontend -p 3000:3000 --restart unless-stopped eye-budget-frontend:previous || echo "No previous image available — server may be down"`); step name: `Rollback to previous image`
 
-**Checkpoint**: Force a deployment failure and confirm the rollback step runs and the previous version remains reachable at `http://192.168.1.184:3000`
+**Checkpoint**: Force a deployment failure and confirm the rollback step runs and the previous version remains reachable at `http://<SERVER_IP>:3000`
 
 ---
 
@@ -157,7 +157,7 @@ Task T006: "Perform one-time server setup per quickstart.md"
 1. Complete Phase 1: Setup (T001, T002)
 2. Complete Phase 2: Foundational (T003, T004 in parallel)
 3. Complete Phase 3: US1 (T005, T006 in parallel)
-4. **STOP and VALIDATE**: Push a visible change, confirm it deploys automatically to `http://192.168.1.184:3000`
+4. **STOP and VALIDATE**: Push a visible change, confirm it deploys automatically to `http://<SERVER_IP>:3000`
 5. Pipeline is live and useful — US2 and US3 are enhancements
 
 ### Incremental Delivery

@@ -6,7 +6,7 @@
 
 ## 1. Self-Hosted GitHub Actions Runner on Debian
 
-**Decision**: Install the self-hosted runner directly on the Debian server (192.168.1.184).
+**Decision**: Install the self-hosted runner directly on the Debian server (<SERVER_IP>).
 
 **Rationale**: Since the runner and the deployment target are the same machine, the runner can invoke Docker commands directly via the local Docker daemon — no SSH tunnelling, no image transfer over the network, no registry required. This is the simplest and most reliable topology for a single home-lab server.
 

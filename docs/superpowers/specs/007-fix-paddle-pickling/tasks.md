@@ -38,7 +38,7 @@
 
 **Goal**: `POST /receipts/{id}/localize` returns HTTP 200 with polygon data instead of HTTP 500.
 
-**Independent Test**: `curl -X POST http://192.168.1.184:8001/receipts/4419/localize` returns HTTP 200 with a `product_regions` object containing polygon arrays.
+**Independent Test**: `curl -X POST http://<SERVER_IP>:8001/receipts/4419/localize` returns HTTP 200 with a `product_regions` object containing polygon arrays.
 
 ### Tests for User Story 1 (TDD — write BEFORE applying stash)
 
@@ -81,7 +81,7 @@
 
 - [ ] T011 [US2] After PR merge and automatic deploy, SSH to homeserver and verify: `curl -s -X POST http://localhost:8001/receipts/4419/localize | python3 -c "import sys,json; r=json.load(sys.stdin); print('OK' if 'product_regions' in r else 'FAIL', r.get('detail',''))"` — expected output: `OK`
 
-- [ ] T012 [US2] Open `http://192.168.1.184:3000` in browser, navigate to receipt 4419, trigger localization, confirm bounding-box polygon overlays are rendered on the receipt image
+- [ ] T012 [US2] Open `http://<SERVER_IP>:3000` in browser, navigate to receipt 4419, trigger localization, confirm bounding-box polygon overlays are rendered on the receipt image
 
 **Checkpoint**: Both user stories verified in production. Feature complete.
 

@@ -3,7 +3,7 @@
 **Feature Branch**: `004-cicd-local-deploy`
 **Created**: 2026-03-21
 **Status**: Draft
-**Input**: User description: "I have a debian server in my local network. It's not accessible from the internet, only from local network. It's ip is 192.168.1.184. It has docker installed with portainer. It doesn't have any hosting tools installed for nextjs/react deployments. I want to have a CICD pipeline to deploy a master branch at any change to my debian server."
+**Input**: User description: "I have a debian server in my local network. It's not accessible from the internet, only from local network. It's ip is <SERVER_IP>. It has docker installed with portainer. It doesn't have any hosting tools installed for nextjs/react deployments. I want to have a CICD pipeline to deploy a master branch at any change to my debian server."
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -66,12 +66,12 @@ When a deployment fails (e.g., the build fails or the new container crashes on s
 
 - **FR-001**: The pipeline MUST trigger automatically whenever a commit is pushed to the master branch. Concurrent deployment runs MUST be queued so that at most one deployment runs at a time.
 - **FR-002**: The pipeline MUST build the application into a deployable artifact as part of each run.
-- **FR-003**: The pipeline MUST transfer the deployable artifact to the Debian server at 192.168.1.184 on the local network.
+- **FR-003**: The pipeline MUST transfer the deployable artifact to the Debian server at <SERVER_IP> on the local network.
 - **FR-004**: The pipeline MUST start the application on the server after a successful transfer, replacing the previous running version.
 - **FR-005**: The pipeline MUST report success or failure for each deployment run in a way visible to the developer without accessing the server directly. If the server is unreachable, the pipeline MUST fail immediately with a descriptive error and MUST NOT retry automatically.
 - **FR-006**: The pipeline MUST NOT deploy to the server when triggered by pushes to branches other than master.
-- **FR-007**: The server MUST serve the application continuously over the local network on port 3000 (accessible at `http://192.168.1.184:3000`), surviving across deployments.
-- **FR-008**: The pipeline runner MUST be a self-hosted GitHub Actions runner installed on the local network, able to reach the Debian server at 192.168.1.184. Cloud-hosted GitHub runners MUST NOT be used for deployment steps, as the server is not internet-accessible.
+- **FR-007**: The server MUST serve the application continuously over the local network on port 3000 (accessible at `http://<SERVER_IP>:3000`), surviving across deployments.
+- **FR-008**: The pipeline runner MUST be a self-hosted GitHub Actions runner installed on the local network, able to reach the Debian server at <SERVER_IP>. Cloud-hosted GitHub runners MUST NOT be used for deployment steps, as the server is not internet-accessible.
 - **FR-009**: The deployment process MUST use the Docker runtime already present on the Debian server, without requiring additional virtualisation layers.
 - **FR-010**: The repository MUST contain all pipeline configuration files needed to reproduce the deployment from scratch.
 
@@ -79,7 +79,7 @@ When a deployment fails (e.g., the build fails or the new container crashes on s
 
 - **Pipeline Configuration**: The set of files in the repository that define trigger conditions, build steps, and deployment steps.
 - **Deployable Artifact**: The packaged application produced by the build step and deployed to the server.
-- **Server Environment**: The Debian host at 192.168.1.184 running Docker and Portainer, which receives and runs the application.
+- **Server Environment**: The Debian host at <SERVER_IP> running Docker and Portainer, which receives and runs the application.
 - **Running Application**: The containerised instance of the Next.js application currently serving traffic on the local network.
 
 ## Success Criteria *(mandatory)*
@@ -103,7 +103,7 @@ When a deployment fails (e.g., the build fails or the new container crashes on s
 
 ## Assumptions
 
-- The repository is hosted on GitHub (github.com). A self-hosted GitHub Actions runner is installed on a machine on the local network (e.g., the Debian server itself or another local machine) and can reach 192.168.1.184 directly.
+- The repository is hosted on GitHub (github.com). A self-hosted GitHub Actions runner is installed on a machine on the local network (e.g., the Debian server itself or another local machine) and can reach <SERVER_IP> directly.
 - The Debian server has sufficient resources (CPU, RAM, disk) to build and run the containerised Next.js application.
 - The existing Docker and Portainer installation on the server will remain in place; no OS reinstall or Docker removal is expected.
 - The application to be deployed is the Next.js frontend in this repository; the backend and database are out of scope for this pipeline unless explicitly included later.

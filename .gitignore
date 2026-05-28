@@ -213,3 +213,5 @@ frontend/.env.local
 !frontend/lib/
 !frontend/lib/**
 yoyo.ini
+.cursor/
+.vscode/

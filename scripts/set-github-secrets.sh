@@ -1,6 +1,6 @@
 #!/bin/bash
 # Usage:
-#   scp pawel@192.168.1.184:/home/pawel/eye-budget/backend/.env /tmp/backend.env
+#   scp <user>@<SERVER_IP>:/path/to/backend/.env /tmp/backend.env
 #   bash scripts/set-github-secrets.sh /tmp/backend.env
 #   rm /tmp/backend.env
 

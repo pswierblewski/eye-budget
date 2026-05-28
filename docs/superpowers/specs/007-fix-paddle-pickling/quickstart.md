@@ -36,7 +36,7 @@ python -m pytest -v
 
 ```bash
 # Replace 4419 with any receipt ID that has a stored image
-curl -X POST http://192.168.1.184:8001/receipts/4419/localize
+curl -X POST http://<SERVER_IP>:8001/receipts/4419/localize
 # Expected: HTTP 200 with {"image_width":..., "image_height":..., "product_regions":{...}}
 # Previously: HTTP 500 {"detail":"cannot pickle 'CopyableWeakMethod' object"}
 ```

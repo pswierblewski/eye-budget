@@ -10,7 +10,7 @@ Last updated: 2026-04-01
 
 **Infrastructure**: PostgreSQL, MinIO (S3-compatible), Redis, Docker / Docker Compose
 
-**CI/CD** (in progress — `004-cicd-local-deploy`): GitHub Actions self-hosted runner, deploys Next.js Docker image to Debian server at `192.168.1.184:3000`
+**CI/CD** (in progress — `004-cicd-local-deploy`): GitHub Actions self-hosted runner, deploys Next.js Docker image to Debian server at `<SERVER_IP>:3000`
 
 ## Project Structure
 

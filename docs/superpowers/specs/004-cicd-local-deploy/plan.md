@@ -5,7 +5,7 @@
 
 ## Summary
 
-Add an automated GitHub Actions CI/CD pipeline that deploys the Next.js frontend to a self-hosted Debian server (192.168.1.184) on every push to `master`. The pipeline runs lint/build/test checks, builds a Docker image using a multi-stage standalone Dockerfile, and deploys it via the local Docker daemon (runner and server are the same machine). Deployments are serialised via GitHub Actions concurrency queuing; a post-deploy health check with automatic rollback to the previous image protects against broken deployments.
+Add an automated GitHub Actions CI/CD pipeline that deploys the Next.js frontend to a self-hosted Debian server (<SERVER_IP>) on every push to `master`. The pipeline runs lint/build/test checks, builds a Docker image using a multi-stage standalone Dockerfile, and deploys it via the local Docker daemon (runner and server are the same machine). Deployments are serialised via GitHub Actions concurrency queuing; a post-deploy health check with automatic rollback to the previous image protects against broken deployments.
 
 ## Technical Context
 
@@ -13,7 +13,7 @@ Add an automated GitHub Actions CI/CD pipeline that deploys the Next.js frontend
 **Primary Dependencies**: GitHub Actions self-hosted runner, Docker (already on server), Node 20
 **Storage**: N/A
 **Testing**: `npm run lint`, `npm run build`, backend test suite (pre-deploy gates per constitution); Docker HEALTHCHECK + curl smoke test (post-deploy gate)
-**Target Platform**: Debian Linux x64 (192.168.1.184), GitHub Actions runner environment
+**Target Platform**: Debian Linux x64 (<SERVER_IP>), GitHub Actions runner environment
 **Project Type**: CI/CD pipeline for a web application (Next.js frontend service)
 **Performance Goals**: Full pipeline (checks + build + deploy) completes within 15 minutes; new version live within 5 minutes of a successful build
 **Constraints**: Server not internet-accessible; runner installed on the same Debian server; no image registry needed; port 3000; Docker must be used
@@ -166,7 +166,7 @@ These steps are operator actions — not automated by the pipeline. They are one
 
 | Success Criterion | How to verify |
 |---|---|
-| SC-001: Deploy within 5 min, no manual steps | Push a visible text change to master; check app at http://192.168.1.184:3000 |
+| SC-001: Deploy within 5 min, no manual steps | Push a visible text change to master; check app at http://<SERVER_IP>:3000 |
 | SC-002: 100% of successful builds deploy | Check Actions history — no successful build run without a corresponding deployment |
 | SC-003: Success/failure visible without SSH | Review Actions run logs on GitHub for clear pass/fail and error messages |
 | SC-004: Failed deploy leaves previous version running | Push a build that crashes on startup; verify old version still serves at :3000 |

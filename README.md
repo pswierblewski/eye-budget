@@ -11,8 +11,8 @@ Receipt OCR pipeline — scans receipts, extracts transactions via OpenAI, and s
 | Celery worker | Background task processing | — |
 | Redis | Celery broker + result backend | 6379 |
 | Soketi | Self-hosted WebSocket server (Pusher-compatible) | 6001 |
-| PostgreSQL | Main database (external — 192.168.1.184) | 5432 |
-| MinIO | Image object storage (external — 192.168.1.184) | 9000 |
+| PostgreSQL | Main database (external — <SERVER_IP>) | 5432 |
+| MinIO | Image object storage (external — <SERVER_IP>) | 9000 |
 
 ---
 
@@ -24,7 +24,7 @@ Receipt OCR pipeline — scans receipts, extracts transactions via OpenAI, and s
 cp .env.example .env
 ```
 
-Fill in the required values (OpenAI key, Postgres credentials, MinIO credentials). Point `POSTGRESQL_HOST` and `MINIO_ENDPOINT` at `192.168.1.184` — PostgreSQL and MinIO are **not** managed by docker-compose. The only thing you **must** set beyond external service credentials is `OPENAI_API_KEY`.
+Fill in the required values (OpenAI key, Postgres credentials, MinIO credentials). Point `POSTGRESQL_HOST` and `MINIO_ENDPOINT` at `<SERVER_IP>` — PostgreSQL and MinIO are **not** managed by docker-compose. The only thing you **must** set beyond external service credentials is `OPENAI_API_KEY`.
 
 The `NEXT_PUBLIC_*` vars need to be in the frontend's env as well. For local dev, copy the same file:
 
@@ -38,7 +38,7 @@ cp .env frontend/.env.local
 docker compose up --build
 ```
 
-This starts: redis, soketi, the FastAPI backend, the Celery worker, and the Next.js frontend. PostgreSQL and MinIO are expected to be running on `192.168.1.184`.
+This starts: redis, soketi, the FastAPI backend, the Celery worker, and the Next.js frontend. PostgreSQL and MinIO are expected to be running on `<SERVER_IP>`.
 
 To run in the background:
 
@@ -57,13 +57,7 @@ docker compose up --build -d --force-recreate
 On first run (or after pulling new migrations):
 
 ```bash
-docker compose exec backend yoyo apply --database postgresql://$POSTGRESQL_USER:$POSTGRESQL_PASSWORD@192.168.1.184/$POSTGRESQL_DB ./migrations
-```
-
-Or with hardcoded credentials:
-
-```bash
-docker compose exec backend yoyo apply --database postgresql://eyebudget:eyebudget@192.168.1.184/eyebudget ./migrations
+docker compose exec backend yoyo apply --database postgresql://$POSTGRESQL_USER:$POSTGRESQL_PASSWORD@<SERVER_IP>/$POSTGRESQL_DB ./migrations
 ```
 
 ---
@@ -74,7 +68,7 @@ docker compose exec backend yoyo apply --database postgresql://eyebudget:eyebudg
 |---|---|
 | Frontend | http://localhost:3000 |
 | Backend API docs | http://localhost:8080/docs |
-| MinIO console | http://192.168.1.184:9001 |
+| MinIO console | http://<SERVER_IP>:9001 |
 
 ---
 
@@ -123,7 +117,7 @@ npm run dev
 
 ### Required local services
 
-You still need Redis and Soketi running locally. PostgreSQL and MinIO are on `192.168.1.184` and accessed directly via your `.env` credentials. Start just the local services:
+You still need Redis and Soketi running locally. PostgreSQL and MinIO are on `<SERVER_IP>` and accessed directly via your `.env` credentials. Start just the local services:
 
 ```bash
 docker compose up redis soketi

@@ -1,6 +1,6 @@
 # Server Agent Setup Instructions
 
-> **For the Claude Code agent running on the Debian server (192.168.1.184).**
+> **For the Claude Code agent running on the Debian server (<SERVER_IP>).**
 > Execute all tasks below in order. After completion, this agent session should be closed.
 > Future access to this server will only be via the restricted `deploy` SSH user.
 
@@ -28,7 +28,7 @@ sudo chown deploy:deploy /home/deploy/.ssh
 Now add the public key of the machine where the LLM agent will run (e.g. your laptop):
 
 ```bash
-echo "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDJSWlYUJImG+tsUniHdE8oOrQjR8yr3s8PJ7OmZmVp7 claude-agent@laptop" | sudo tee /home/deploy/.ssh/authorized_keys
+echo "<YOUR_SSH_PUBLIC_KEY>" | sudo tee /home/deploy/.ssh/authorized_keys
 sudo chmod 600 /home/deploy/.ssh/authorized_keys
 sudo chown deploy:deploy /home/deploy/.ssh/authorized_keys
 ```
@@ -176,18 +176,18 @@ After all tasks complete successfully, this agent session should be closed.
 
 From your laptop you will connect as:
 ```bash
-ssh -i ~/.ssh/deploy_eye_budget deploy@192.168.1.184 status
-ssh -i ~/.ssh/deploy_eye_budget deploy@192.168.1.184 health
-ssh -i ~/.ssh/deploy_eye_budget deploy@192.168.1.184 "logs 50"
-ssh -i ~/.ssh/deploy_eye_budget deploy@192.168.1.184 deploy
-ssh -i ~/.ssh/deploy_eye_budget deploy@192.168.1.184 rollback
+ssh -i ~/.ssh/deploy_eye_budget deploy@<SERVER_IP> status
+ssh -i ~/.ssh/deploy_eye_budget deploy@<SERVER_IP> health
+ssh -i ~/.ssh/deploy_eye_budget deploy@<SERVER_IP> "logs 50"
+ssh -i ~/.ssh/deploy_eye_budget deploy@<SERVER_IP> deploy
+ssh -i ~/.ssh/deploy_eye_budget deploy@<SERVER_IP> rollback
 ```
 
 To avoid typing `-i` every time, add this to `~/.ssh/config` on your laptop:
 
 ```
 Host eye-budget-deploy
-    HostName 192.168.1.184
+    HostName <SERVER_IP>
     User deploy
     IdentityFile ~/.ssh/deploy_eye_budget
     IdentitiesOnly yes

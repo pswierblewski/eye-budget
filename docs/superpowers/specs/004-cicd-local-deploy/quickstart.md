@@ -2,7 +2,7 @@
 
 **Feature**: `004-cicd-local-deploy` | **Date**: 2026-03-21
 
-This document describes the one-time setup required on the Debian server (192.168.1.184) to enable automatic deployments.
+This document describes the one-time setup required on the Debian server (<SERVER_IP>) to enable automatic deployments.
 
 ---
 
@@ -63,7 +63,7 @@ In the GitHub repo → **Settings** → **Secrets and variables** → **Actions*
 
 | Name | Value |
 |------|-------|
-| `NEXT_PUBLIC_API_URL` | URL of the backend API (e.g., `http://192.168.1.184:8080`) |
+| `NEXT_PUBLIC_API_URL` | URL of the backend API (e.g., `http://<SERVER_IP>:8080`) |
 
 ---
 
@@ -71,7 +71,7 @@ In the GitHub repo → **Settings** → **Secrets and variables** → **Actions*
 
 Push any commit to the `master` branch. The **Actions** tab on GitHub should show the workflow running on the `self-hosted` runner and deploying successfully.
 
-The app will be accessible at: **http://192.168.1.184:3000**
+The app will be accessible at: **http://<SERVER_IP>:3000**
 
 ---
 
