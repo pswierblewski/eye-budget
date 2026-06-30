@@ -11,6 +11,7 @@ import {
   importBankCsv,
   recategorizeBankTransactions,
   listBankTransactions,
+  listBankAccounts,
   saveBankTransactionCategory,
   getBankTransaction,
   getReceiptCandidates,
@@ -27,12 +28,13 @@ import {
   BankImportResult,
   PaginatedResponse,
   ReceiptCandidateItem,
+  BankAccountStats,
 } from "@/lib/types";
 import { CategoryDropdown } from "@/components/CategoryDropdown";
 import { BankTransactionSplitEditor } from "@/components/BankTransactionSplitEditor";
 import TagsEditor from "@/components/TagsEditor";
 import { getPusher } from "@/lib/pusher";
-import { Upload, ArrowRight, RefreshCw, Link2 } from "lucide-react";
+import { Upload, ArrowRight, RefreshCw, Link2, Settings } from "lucide-react";
 import { DataTable, Column } from "@/components/DataTable";
 import { SettlementOperationsSection } from "@/components/SettlementOperationsSection";
 import { LinkReceiptSearchModal } from "@/components/LinkReceiptSearchModal";
@@ -52,6 +54,7 @@ import {
   QueryErrorNotice,
   MutationErrorNotice,
 } from "@/components/QueryState";
+import { BankAccountsModal } from "@/components/BankAccountsModal";
 
 type ExpandedRowProps = {
   tx: BankTransactionListItem;
@@ -421,7 +424,16 @@ export default function BankTransactionsPage() {
   const [categorizingDone, setCategorizingDone] = useState(false);
   const [recategorizeInfo, setRecategorizeInfo] = useState<string | null>(null);
   const channelRef = useRef<ReturnType<ReturnType<typeof getPusher>["subscribe"]> | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
+  const accountFileRef = useRef<HTMLInputElement>(null);
+  const [selectedAccountId, setSelectedAccountId] = useState<number | undefined>(undefined);
+  const [showAccountsModal, setShowAccountsModal] = useState(false);
+  const [pendingImportAccountId, setPendingImportAccountId] = useState<number | undefined>(undefined);
+
+  const accountsQuery = useQuery({
+    queryKey: ["bank-accounts"],
+    queryFn: listBankAccounts,
+    staleTime: 60_000,
+  });
 
   const ensureBankTransactionsChannel = () => {
     if (channelRef.current) return channelRef.current;
@@ -451,7 +463,7 @@ export default function BankTransactionsPage() {
       } | null;
     }) => {
       queryClient.setQueryData<PaginatedResponse<BankTransactionListItem>>(
-        ["bank-transactions", page, sortBy, sortDir],
+        ["bank-transactions", page, sortBy, sortDir, selectedAccountId],
         (old) => {
           if (!old) return old;
 
@@ -475,16 +487,17 @@ export default function BankTransactionsPage() {
     return () => {
       channel.unbind("categorization.transaction_updated", onTransactionUpdated);
     };
-  }, [page, queryClient, sortBy, sortDir]);
+  }, [page, queryClient, sortBy, sortDir, selectedAccountId]);
 
   const listQuery = useQuery({
-    queryKey: ["bank-transactions", page, sortBy, sortDir],
+    queryKey: ["bank-transactions", page, sortBy, sortDir, selectedAccountId],
     queryFn: () =>
       listBankTransactions({
         page,
         limit: PAGE_SIZE,
         sort_by: sortBy,
         sort_dir: sortDir,
+        account_id: selectedAccountId,
       }),
     staleTime: 30_000,
   });
@@ -505,7 +518,8 @@ export default function BankTransactionsPage() {
   });
 
   const importMutation = useMutation({
-    mutationFn: importBankCsv,
+    mutationFn: ({ file, accountId }: { file: File; accountId: number }) =>
+      importBankCsv(file, accountId),
     onSuccess: (result) => {
       setImportResult(result);
       setImportError(null);
@@ -602,15 +616,21 @@ export default function BankTransactionsPage() {
     },
   });
 
+  function handleImportClick(accountId: number) {
+    setPendingImportAccountId(accountId);
+    accountFileRef.current?.click();
+  }
+
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (!file || pendingImportAccountId === undefined) return;
     setImportResult(null);
     setImportError(null);
     setProgress(null);
     setCategorizingDone(false);
-    importMutation.mutate(file);
+    importMutation.mutate({ file, accountId: pendingImportAccountId });
     e.target.value = "";
+    setPendingImportAccountId(undefined);
   }
 
   const pct = progress ? Math.round((progress.index / progress.total) * 100) : 0;
@@ -842,7 +862,7 @@ export default function BankTransactionsPage() {
 
           {/* CSV upload button */}
           <input
-            ref={fileRef}
+            ref={accountFileRef}
             type="file"
             accept=".csv"
             className="hidden"
@@ -862,16 +882,102 @@ export default function BankTransactionsPage() {
             Ponów kategoryzację
           </Button>
           <Button
-            variant="primary"
+            variant="secondary"
             size="md"
-            onClick={() => fileRef.current?.click()}
-            disabled={importMutation.isPending}
+            onClick={() => setShowAccountsModal(true)}
           >
-            <Upload className="h-4 w-4 mr-2" />
-            Import CSV
+            <Settings className="h-4 w-4 mr-2" />
+            Zarządzaj kontami
           </Button>
+          {accountsQuery.data && accountsQuery.data.length > 0 ? (
+            <div className="relative group">
+              <Button
+                variant="primary"
+                size="md"
+                disabled={importMutation.isPending}
+              >
+                <Upload className="h-4 w-4 mr-2" />
+                Import CSV
+              </Button>
+              <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-10 hidden group-hover:block min-w-[180px]">
+                {accountsQuery.data.map((acc: BankAccountStats) => (
+                  <button
+                    key={acc.id}
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 first:rounded-t-lg last:rounded-b-lg"
+                    onClick={() => handleImportClick(acc.id)}
+                  >
+                    {acc.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <Button
+              variant="primary"
+              size="md"
+              disabled
+              title="Najpierw dodaj konto bankowe"
+            >
+              <Upload className="h-4 w-4 mr-2" />
+              Import CSV
+            </Button>
+          )}
         </div>
         }
+      />
+
+      {/* Account summary cards */}
+      {accountsQuery.data && accountsQuery.data.length > 0 && (
+        <div className="flex flex-wrap gap-3">
+          {accountsQuery.data.map((acc: BankAccountStats) => (
+            <button
+              key={acc.id}
+              onClick={() => {
+                setSelectedAccountId(selectedAccountId === acc.id ? undefined : acc.id);
+                setPage(1);
+              }}
+              className={`flex flex-col gap-0.5 rounded-lg border px-4 py-3 text-left transition-colors min-w-[160px] ${
+                selectedAccountId === acc.id
+                  ? "border-blue-400 bg-blue-50"
+                  : "border-gray-200 bg-white hover:bg-gray-50"
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <span
+                  className={`w-2.5 h-2.5 rounded-full shrink-0 ${
+                    {
+                      blue: "bg-blue-500",
+                      green: "bg-green-500",
+                      purple: "bg-purple-500",
+                      orange: "bg-orange-500",
+                      red: "bg-red-500",
+                    }[acc.color] ?? "bg-gray-400"
+                  }`}
+                />
+                <span className="text-sm font-semibold text-gray-800 truncate">{acc.name}</span>
+              </div>
+              <div className="text-xs text-green-600">+{acc.total_income.toFixed(0)} PLN</div>
+              <div className="text-xs text-red-600">{acc.total_expense.toFixed(0)} PLN</div>
+              <div className="text-xs text-gray-400">{acc.transaction_count} transakcji</div>
+            </button>
+          ))}
+          {selectedAccountId !== undefined && (
+            <button
+              onClick={() => { setSelectedAccountId(undefined); setPage(1); }}
+              className="self-start text-xs text-gray-500 hover:underline mt-1 px-2"
+            >
+              Pokaż wszystkie
+            </button>
+          )}
+        </div>
+      )}
+
+      <BankAccountsModal
+        open={showAccountsModal}
+        onClose={() => {
+          setShowAccountsModal(false);
+          queryClient.invalidateQueries({ queryKey: ["bank-accounts"] });
+        }}
       />
 
       <MutationErrorNotice mutation={saveCategoryFromListMutation} />
