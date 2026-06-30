@@ -29,6 +29,7 @@ from .repositories.cash_transactions import CashTransactionsRepository
 from .repositories.cash_receipt_links import CashReceiptLinksRepository
 from .repositories.unified_transactions import UnifiedTransactionsRepository
 from .repositories.settlement_groups import SettlementGroupsRepository
+from .repositories.bank_accounts import BankAccountsRepository
 from .repositories.prompt_analytics import PromptAnalyticsRepository
 from .repositories.budget_analysis import BudgetAnalysisRepository
 from .repositories.budget_simulations import BudgetSimulationsRepository
@@ -135,6 +136,7 @@ class App(ABC):
         budget_analysis_repository=None,
         budget_simulations_repository=None,
         settlement_groups_repository=None,
+        bank_accounts_repository=None,
         # Services
         ocr_service=None,
         preprocessing_service=None,
@@ -197,6 +199,7 @@ class App(ABC):
         self.settlement_groups_repository = (
             settlement_groups_repository or SettlementGroupsRepository(self.eye_budget_db_context)
         )
+        self.bank_accounts_repository = bank_accounts_repository or BankAccountsRepository(self.eye_budget_db_context)
         self.budget_analysis_service = budget_analysis_service or BudgetAnalysisService(
             budget_analysis_repo=self.budget_analysis_repository,
             categories_repo=self.categories_repository,
@@ -955,17 +958,27 @@ class App(ABC):
     # Bank transactions
     # ------------------------------------------------------------------
 
-    def import_bank_csv(self, data: bytes) -> tuple[BankImportResult, list[int]]:
-        """Parse a Pekao CSV and insert new rows. Returns result + IDs pending categorization.
+    def import_bank_csv(self, data: bytes, account_id: int) -> tuple[BankImportResult, list[int]]:
+        """Parse a bank CSV and insert new rows. Parser is selected by account bank_type.
 
-        LLM categorization is NOT run here — the caller should dispatch it as a
-        background Celery task using the returned list of new IDs.
+        Returns result + IDs pending categorization. LLM categorization is NOT run
+        here — the caller should dispatch it as a background Celery task.
         """
-        rows = self.bank_csv_parser.parse_bytes(data)
+        from .services.revolut_csv_parser import RevolutCsvParser
+
+        account = self.bank_accounts_repository.get_by_id(account_id)
+        if account is None:
+            raise ValueError(f"Bank account {account_id} not found")
+
+        if account.bank_type == "revolut":
+            rows = RevolutCsvParser().parse_bytes(data, account_id)
+        else:
+            rows = self.bank_csv_parser.parse_bytes(data)
+
         if not rows:
             return BankImportResult(imported=0, duplicates=0, errors=0), []
 
-        inserted, duplicates = self.bank_transactions_repository.insert_transactions(rows)
+        inserted, duplicates = self.bank_transactions_repository.insert_transactions(rows, account_id)
 
         # Collect IDs that still need LLM categorization
         new_ids = self.bank_transactions_repository.get_new_ids_for_categorization()
@@ -980,6 +993,18 @@ class App(ABC):
             auto_linked=auto_linked,
             needs_manual_link=needs_manual_link,
         ), new_ids
+
+    def get_bank_accounts(self) -> list:
+        return self.bank_accounts_repository.list_with_stats()
+
+    def create_bank_account(self, name: str, bank_type: str, color: str):
+        return self.bank_accounts_repository.create(name, bank_type, color)
+
+    def update_bank_account(self, account_id: int, name: str, color: str):
+        return self.bank_accounts_repository.update(account_id, name, color)
+
+    def delete_bank_account(self, account_id: int) -> bool:
+        return self.bank_accounts_repository.delete(account_id)
 
     def get_bank_tx_ids_for_recategorization(self) -> list[int]:
         """Return IDs of bank transactions that lack category candidates and have no receipt link."""
@@ -1001,10 +1026,11 @@ class App(ABC):
         self, limit: int = 50, offset: int = 0,
         sort_by: str = "booking_date", sort_dir: str = "desc",
         tag: str | None = None,
+        account_id: int | None = None,
     ) -> tuple[list[BankTransactionListItem], int]:
         return self.bank_transactions_repository.get_list(
             limit=limit, offset=offset, sort_by=sort_by, sort_dir=sort_dir,
-            tag=tag,
+            tag=tag, account_id=account_id,
         )
 
     def get_bank_transaction_by_id(self, tx_id: int) -> BankTransactionDetail | None:
