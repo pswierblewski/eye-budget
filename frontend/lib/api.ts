@@ -1,4 +1,8 @@
 import {
+  BankAccount,
+  BankAccountSchema,
+  BankAccountStats,
+  BankAccountStatsSchema,
   ReceiptScanListItem,
   ReceiptScanListItemSchema,
   ReceiptScanDetail,
@@ -312,9 +316,10 @@ export async function getTaskStatus(taskId: string): Promise<TaskStatus> {
 // Bank transactions
 // ------------------------------------------------------------------
 
-export async function importBankCsv(file: File): Promise<BankImportResult> {
+export async function importBankCsv(file: File, accountId: number): Promise<BankImportResult> {
   const formData = new FormData();
   formData.append("file", file);
+  formData.append("account_id", String(accountId));
   const res = await fetch("/api/bank-transactions/import", {
     method: "POST",
     body: formData,
@@ -336,13 +341,51 @@ export async function recategorizeBankTransactions(): Promise<RecategorizeBankTr
 }
 
 export async function listBankTransactions(
-  params: { page?: number; limit?: number; sort_by?: string; sort_dir?: string; tag?: string } = {}
+  params: { page?: number; limit?: number; sort_by?: string; sort_dir?: string; tag?: string; account_id?: number } = {}
 ): Promise<PaginatedResponse<BankTransactionListItem>> {
-  const { page = 1, limit = 50, sort_by = "booking_date", sort_dir = "desc", tag } = params;
+  const { page = 1, limit = 50, sort_by = "booking_date", sort_dir = "desc", tag, account_id } = params;
   const offset = (page - 1) * limit;
   const qs = new URLSearchParams({ limit: String(limit), offset: String(offset), sort_by, sort_dir });
   if (tag) qs.set("tag", tag);
+  if (account_id !== undefined) qs.set("account_id", String(account_id));
   return apiFetch(`/api/bank-transactions?${qs}`, paginatedSchema(BankTransactionListItemSchema));
+}
+
+// ------------------------------------------------------------------
+// Bank accounts
+// ------------------------------------------------------------------
+
+export async function listBankAccounts(): Promise<BankAccountStats[]> {
+  return apiFetch("/api/bank-accounts", z.array(BankAccountStatsSchema));
+}
+
+export async function createBankAccount(data: {
+  name: string;
+  bank_type: string;
+  color: string;
+}): Promise<BankAccount> {
+  return apiFetch("/api/bank-accounts", BankAccountSchema, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateBankAccount(
+  id: number,
+  data: { name: string; color: string }
+): Promise<BankAccount> {
+  return apiFetch(`/api/bank-accounts/${id}`, BankAccountSchema, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteBankAccount(id: number): Promise<void> {
+  const res = await fetch(`/api/bank-accounts/${id}`, { method: "DELETE" });
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText);
+    throw new Error(`API ${res.status}: ${text}`);
+  }
 }
 
 export async function getBankTransaction(

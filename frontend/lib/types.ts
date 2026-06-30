@@ -327,6 +327,8 @@ export const BankTransactionListItemSchema = z.object({
   ai_top_candidate: CategoryCandidateSchema.optional(),
   settlement_group_id: z.number().nullable().optional(),
   settlement_group_title: z.string().nullable().optional(),
+  account_id: z.number().nullable().optional(),
+  account_name: z.string().nullable().optional(),
 });
 export type BankTransactionListItem = z.infer<typeof BankTransactionListItemSchema>;
 
@@ -364,6 +366,21 @@ export const BankImportResultSchema = z.object({
   needs_manual_link: z.number().optional(),
 });
 export type BankImportResult = z.infer<typeof BankImportResultSchema>;
+
+export const BankAccountSchema = z.object({
+  id: z.number(),
+  name: z.string(),
+  bank_type: z.string(),
+  color: z.string(),
+});
+export type BankAccount = z.infer<typeof BankAccountSchema>;
+
+export const BankAccountStatsSchema = BankAccountSchema.extend({
+  total_income: z.number(),
+  total_expense: z.number(),
+  transaction_count: z.number(),
+});
+export type BankAccountStats = z.infer<typeof BankAccountStatsSchema>;
 
 export const RecategorizeBankTransactionsResultSchema = z.object({
   task_id: z.string().nullable().optional(),
@@ -450,6 +467,8 @@ export const UnifiedTransactionSchema = z.object({
   receipt_categories: z.array(ReceiptCategorySchema).nullable().optional(),
   settlement_group_id: z.number().nullable().optional(),
   settlement_group_title: z.string().nullable().optional(),
+  account_id: z.number().nullable().optional(),
+  account_name: z.string().nullable().optional(),
 });
 export type UnifiedTransaction = z.infer<typeof UnifiedTransactionSchema>;
 
