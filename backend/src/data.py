@@ -369,6 +369,8 @@ class BankTransactionListItem(BaseModel):
     ai_top_candidate: CategoryCandidate | None = None
     settlement_group_id: int | None = None
     settlement_group_title: str | None = None  # from settlement_groups.title when in a group
+    account_id: int | None = None
+    account_name: str | None = None
 
 
 class BankTransactionDetail(BaseModel):
@@ -404,6 +406,32 @@ class BankImportResult(BaseModel):
     task_id: str | None = None  # Celery task ID for background categorization
     auto_linked: int = 0        # Number of receipts auto-linked during import
     needs_manual_link: int = 0  # Transactions skipped because multiple receipt candidates exist
+
+
+class BankAccount(BaseModel):
+    """A registered bank account."""
+    id: int
+    name: str
+    bank_type: str   # 'pekao' | 'revolut' | 'other'
+    color: str
+
+
+class BankAccountStats(BankAccount):
+    """Bank account with aggregated transaction statistics."""
+    total_income: float
+    total_expense: float
+    transaction_count: int
+
+
+class CreateBankAccountRequest(BaseModel):
+    name: str
+    bank_type: str
+    color: str = "blue"
+
+
+class UpdateBankAccountRequest(BaseModel):
+    name: str
+    color: str
 
 
 class RecategorizeBankTransactionsResult(BaseModel):
@@ -660,6 +688,8 @@ class UnifiedTransaction(BaseModel):
     receipt_categories: list['ReceiptCategory'] | None = None  # full list of categories from linked receipt
     settlement_group_id: int | None = None  # only for source bank | cash
     settlement_group_title: str | None = None  # from settlement_groups.title when in a group; null for receipt
+    account_id: int | None = None
+    account_name: str | None = None
 
 
 class MonthlySummary(BaseModel):
