@@ -425,7 +425,7 @@ class BankAccountStats(BankAccount):
 
 class CreateBankAccountRequest(BaseModel):
     name: str
-    bank_type: str
+    bank_type: Literal["pekao", "revolut", "other"]
     color: str = "blue"
 
 

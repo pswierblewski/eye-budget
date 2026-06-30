@@ -526,6 +526,7 @@ export default function BankTransactionsPage() {
       setCategorizingDone(false);
       setProgress(null);
       queryClient.invalidateQueries({ queryKey: ["bank-transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["bank-accounts"] });
 
       if (result.task_id) {
         const channel = ensureBankTransactionsChannel();

@@ -79,6 +79,9 @@ class RevolutCsvParser:
 
     @staticmethod
     def _make_reference(account_id: int, started: str, description: str, amount: str) -> str:
+        # NOTE: Two distinct transactions with identical date+description+amount produce the
+        # same hash and the second is silently dropped as a duplicate on re-import.
+        # This is an inherent limitation of Revolut's CSV format (no stable per-row ID).
         raw = f"{account_id}|{started}|{description}|{amount}"
         digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()
         return f"revolut_{digest}"

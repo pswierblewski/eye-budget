@@ -1,5 +1,4 @@
 import pytest
-import psycopg2
 from unittest.mock import patch, MagicMock
 from fastapi.testclient import TestClient
 from src.main import app
@@ -20,19 +19,6 @@ def mock_celery_task():
         return_value=mock_task,
     ):
         yield
-
-
-def db_conn(migrated_db):
-    pg = migrated_db
-    conn = psycopg2.connect(
-        host=pg.get_container_host_ip(),
-        port=pg.get_exposed_port(5432),
-        dbname=pg.dbname,
-        user=pg.username,
-        password=pg.password,
-    )
-    conn.autocommit = True
-    return conn
 
 
 REVOLUT_CSV = b"""Type,Product,Started Date,Completed Date,Description,Amount,Fee,Currency,State,Balance
