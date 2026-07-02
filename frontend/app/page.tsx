@@ -578,6 +578,16 @@ export default function TransactionsPage() {
       ),
     },
     {
+      header: "Konto",
+      accessor: (r) =>
+        r.source_type === "bank" && r.account_name ? (
+          <span className="text-xs text-gray-600 truncate max-w-[120px] block">
+            {r.account_name}
+          </span>
+        ) : null,
+      className: "whitespace-nowrap",
+    },
+    {
       header: "Kwota",
       serverSortKey: "amount",
       className: "text-right w-32 whitespace-nowrap",

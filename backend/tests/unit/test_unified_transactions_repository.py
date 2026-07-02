@@ -63,6 +63,8 @@ def test_get_list_happy_path():
         None,                       # receipt_categories
         None,                       # settlement_group_id
         None,                       # settlement_group_title
+        None,                       # account_id
+        None,                       # account_name
         1,                          # total_count (window function)
     )
     repo, cursor = make_repo(fetchall_return=[row])
@@ -228,7 +230,9 @@ def test_get_list_converts_date_to_isoformat():
         None,
         None,
         None,  # settlement_group_title
-        1,
+        None,  # account_id
+        None,  # account_name
+        1,     # total_count
     )
     repo, cursor = make_repo(fetchall_return=[row])
 
@@ -263,7 +267,9 @@ def test_get_list_handles_tags_as_list():
         None,
         None,
         None,  # settlement_group_title
-        1,
+        None,  # account_id
+        None,  # account_name
+        1,     # total_count
     )
     repo, cursor = make_repo(fetchall_return=[row])
 
@@ -297,7 +303,9 @@ def test_get_list_handles_none_tags():
         None,
         None,
         None,  # settlement_group_title
-        1,
+        None,  # account_id
+        None,  # account_name
+        1,     # total_count
     )
     repo, cursor = make_repo(fetchall_return=[row])
 
@@ -335,7 +343,9 @@ def test_get_list_handles_receipt_categories_json():
         receipt_cats,  # receipt_categories
         None,  # settlement_group_id
         None,  # settlement_group_title
-        1,
+        None,  # account_id
+        None,  # account_name
+        1,     # total_count
     )
     repo, cursor = make_repo(fetchall_return=[row])
 

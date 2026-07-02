@@ -8,10 +8,11 @@ from tests.unit.conftest import make_app
 def test_import_bank_csv_empty_returns_zeros():
     # Arrange
     app = make_app()
+    app.bank_accounts_repository.get_by_id.return_value = MagicMock(bank_type='pekao')
     app.bank_csv_parser.parse_bytes.return_value = []
 
     # Act
-    result, ids = app.import_bank_csv(b"data")
+    result, ids = app.import_bank_csv(b"data", account_id=1)
 
     # Assert
     assert result.imported == 0
@@ -24,6 +25,7 @@ def test_import_bank_csv_empty_returns_zeros():
 def test_import_bank_csv_with_rows():
     # Arrange
     app = make_app()
+    app.bank_accounts_repository.get_by_id.return_value = MagicMock(bank_type='pekao')
     app.bank_csv_parser.parse_bytes.return_value = [MagicMock()]
     app.bank_transactions_repository.insert_transactions.return_value = (2, 0)
     app.bank_transactions_repository.get_new_ids_for_categorization.return_value = [1, 2]
@@ -31,7 +33,7 @@ def test_import_bank_csv_with_rows():
     app.bank_receipt_links_repository.find_auto_match_receipt.return_value = None
 
     # Act
-    result, ids = app.import_bank_csv(b"data")
+    result, ids = app.import_bank_csv(b"data", account_id=1)
 
     # Assert
     assert result.imported == 2

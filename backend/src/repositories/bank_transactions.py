@@ -27,7 +27,7 @@ class BankTransactionsRepository:
     # Write
     # ------------------------------------------------------------------
 
-    def insert_transactions(self, rows: list[BankTransactionRow]) -> tuple[int, int]:
+    def insert_transactions(self, rows: list[BankTransactionRow], account_id: int) -> tuple[int, int]:
         """Bulk-insert parsed CSV rows.  Returns (inserted, duplicates)."""
         if not self.conn or not rows:
             return 0, 0
@@ -41,8 +41,8 @@ class BankTransactionsRepository:
                         INSERT INTO bank_transactions
                             (reference_number, booking_date, value_date, counterparty,
                              counterparty_address, source_account, target_account,
-                             description, amount, currency, operation_type)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                             description, amount, currency, operation_type, account_id)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                         ON CONFLICT (reference_number) DO NOTHING
                         RETURNING id
                         """,
@@ -58,6 +58,7 @@ class BankTransactionsRepository:
                             float(row.amount),
                             row.currency,
                             row.operation_type,
+                            account_id,
                         ),
                     )
                     result = cur.fetchone()
@@ -135,6 +136,7 @@ class BankTransactionsRepository:
         sort_by: str = "booking_date",
         sort_dir: str = "desc",
         tag: Optional[str] = None,
+        account_id: Optional[int] = None,
     ) -> tuple[list[BankTransactionListItem], int]:
         """Return transactions paginated."""
         _SORT_COLS: dict[str, str] = {
@@ -159,6 +161,9 @@ class BankTransactionsRepository:
                 if tag:
                     conditions.append("%s = ANY(bt.tags)")
                     params.append(tag)
+                if account_id is not None:
+                    conditions.append("bt.account_id = %s")
+                    params.append(account_id)
                 where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
                 cur.execute(
                     f"""
@@ -195,15 +200,18 @@ class BankTransactionsRepository:
                                SELECT COUNT(*)
                                FROM bank_transaction_category_splits s
                                WHERE s.bank_transaction_id = bt.id
-                           ), 0                           ) AS split_count,
+                           ), 0) AS split_count,
                            sgm.group_id,
                            sg.title AS settlement_group_title,
                            bt.category_candidates,
+                           bt.account_id,
+                           ba.name AS account_name,
                            COUNT(*) OVER () AS total_count
                     FROM bank_transactions bt
                     LEFT JOIN categories c ON c.id = bt.category_id
                     LEFT JOIN settlement_group_members sgm ON sgm.bank_transaction_id = bt.id
                     LEFT JOIN settlement_groups sg ON sg.id = sgm.group_id
+                    LEFT JOIN bank_accounts ba ON ba.id = bt.account_id
                     {where}
                     ORDER BY {order_clause}
                     LIMIT %s OFFSET %s
@@ -211,7 +219,7 @@ class BankTransactionsRepository:
                     params + [limit, offset],
                 )
                 rows = cur.fetchall()
-            total = int(rows[0][18]) if rows else 0
+            total = int(rows[0][20]) if rows else 0
             return [
                 BankTransactionListItem(
                     id=r[0],
@@ -236,6 +244,8 @@ class BankTransactionsRepository:
                         if (raw_top := top_category_candidate_from_stored_json(r[17]))
                         else None
                     ),
+                    account_id=r[18],
+                    account_name=r[19],
                 )
                 for r in rows
             ], total

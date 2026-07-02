@@ -78,8 +78,12 @@ from src.data import (
     MoveSettlementGroupMemberRequest,
     SettlementGroupListItem,
     SettlementGroupDetail,
+    BankAccount,
+    BankAccountStats,
+    CreateBankAccountRequest,
+    UpdateBankAccountRequest,
 )
-from fastapi import FastAPI, File, UploadFile, HTTPException, Query
+from fastapi import FastAPI, File, Form, UploadFile, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 import io
@@ -590,21 +594,87 @@ def list_ground_truth(
 
 
 # ------------------------------------------------------------------
+# Bank Accounts (CRUD)
+# ------------------------------------------------------------------
+
+@app.get("/bank-accounts", response_model=list[BankAccountStats])
+def list_bank_accounts() -> list[BankAccountStats]:
+    """List all bank accounts with aggregated statistics."""
+    my_app = App()
+    try:
+        return my_app.get_bank_accounts()
+    finally:
+        my_app.dispose()
+
+
+@app.post("/bank-accounts", response_model=BankAccount, status_code=201)
+def create_bank_account(request: CreateBankAccountRequest) -> BankAccount:
+    """Create a new bank account."""
+    my_app = App()
+    try:
+        return my_app.create_bank_account(request.name, request.bank_type, request.color)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        my_app.dispose()
+
+
+@app.put("/bank-accounts/{account_id}", response_model=BankAccount)
+def update_bank_account(account_id: int, request: UpdateBankAccountRequest) -> BankAccount:
+    """Update account name and color."""
+    my_app = App()
+    try:
+        result = my_app.update_bank_account(account_id, request.name, request.color)
+        if result is None:
+            raise HTTPException(status_code=404, detail=f"Bank account {account_id} not found")
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        my_app.dispose()
+
+
+@app.delete("/bank-accounts/{account_id}", status_code=204)
+def delete_bank_account(account_id: int) -> None:
+    """Delete account. Returns 409 if account has transactions."""
+    my_app = App()
+    try:
+        deleted = my_app.delete_bank_account(account_id)
+        if not deleted:
+            raise HTTPException(
+                status_code=409,
+                detail="Nie można usunąć konta z transakcjami."
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        my_app.dispose()
+
+
+# ------------------------------------------------------------------
 # Bank Transactions (CSV import)
 # ------------------------------------------------------------------
 
 @app.post("/bank-transactions/import", response_model=BankImportResult, status_code=201)
-async def import_bank_transactions(file: UploadFile = File(...)) -> BankImportResult:
-    """Import a Pekao SA CSV export. New transactions are deduplicated by reference number.
-    LLM categorization runs in the background via Celery — poll /tasks/{task_id} for status."""
+async def import_bank_transactions(
+    file: UploadFile = File(...),
+    account_id: int = Form(...),
+) -> BankImportResult:
+    """Import a bank CSV export. Parser selected by account bank_type (pekao/revolut)."""
     my_app = App()
     try:
         data = await file.read()
-        result, new_ids = my_app.import_bank_csv(data)
+        result, new_ids = my_app.import_bank_csv(data, account_id)
         if new_ids:
             task = categorize_bank_transactions_task.delay(new_ids)
             result.task_id = task.id
         return result
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     finally:
@@ -642,13 +712,14 @@ def list_bank_transactions(
     sort_by: str = "booking_date",
     sort_dir: str = "desc",
     tag: str | None = None,
+    account_id: int | None = None,
 ) -> PaginatedResponse[BankTransactionListItem]:
     """List bank transactions, paginated."""
     my_app = App()
     try:
         items, total = my_app.get_all_bank_transactions(
             limit=limit, offset=offset, sort_by=sort_by, sort_dir=sort_dir,
-            tag=tag,
+            tag=tag, account_id=account_id,
         )
         return PaginatedResponse(items=items, total=total, limit=limit, offset=offset)
     finally:
