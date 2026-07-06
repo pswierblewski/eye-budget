@@ -1,0 +1,86 @@
+---
+description: Always-on ground rules for the entire eye-budget monorepo
+globs:
+alwaysApply: true
+---
+When this rule is applied, the FIRST LINE of every response must be: RULE_APPLIED: 00-core.mdc.
+# Core — eye-budget Monorepo
+
+## Repo Layout
+
+```
+eye-budget/
+├── frontend/   # Next.js 14, App Router, TypeScript strict, npm
+└── backend/    # FastAPI, Pydantic, psycopg2, Celery, Python 3.x
+```
+
+No monorepo tool (no Turborepo/Nx). Each app has its own package manager / dependency file.
+
+## Language Boundaries
+
+- TypeScript lives exclusively in `frontend/`. Python lives exclusively in `backend/`.
+- Never introduce Python patterns (dataclasses, snake_case models) into TypeScript files.
+- Never introduce JavaScript/TypeScript patterns (callbacks, promises) into Python files.
+
+## API Contract — both sides must stay in sync
+
+When adding or changing an endpoint, update **all four** of:
+1. `backend/src/main.py` — route definition
+2. `backend/src/data.py` — Pydantic request/response models
+3. `frontend/app/api/<resource>/route.ts` — Next.js proxy route handler
+4. `frontend/lib/api.ts` + `frontend/lib/types.ts` — typed client function + Zod schema
+
+## UI Primitives
+
+Before creating any UI component, check `frontend/components/ui/index.ts`.
+The design system already provides: Button, Input, Textarea, Modal, ConfirmDeleteModal,
+Card, Badge (StatusBadge, SourceBadge, MatchBadge, CountBadge), Pill, FilterTabs,
+PageHeader, SectionLabel, ThreeDotsMenu, Amount, NavLink, PrevNextNav, DateInput.
+
+Do not create parallel or duplicate primitives.
+
+## UI Language
+
+All user-facing strings are in **Polish**. Do not introduce English copy in page/component text.
+
+## Secrets & Credentials
+
+- **Never read or modify `.env`** (contains real DB, OpenAI, MinIO credentials).
+- Use `.env.example` as the reference for available environment variables.
+- `backend/yoyo.ini` contains live DB credentials — treat it as secret.
+
+## Request Flow (summary)
+
+```
+Browser → "use client" page → useQuery/useMutation → lib/api.ts
+       → /api/... route handler → lib/proxy.ts → FastAPI backend
+       → App() → service → repository → PostgreSQL
+```
+
+## Version bumps (SemVer 2.0.0)
+
+Po **ukończeniu implementacji** (merge-ready): zaktualizuj wersję **tylko** dla komponentów, których kod wchodzi w zmianę. Frontend i backend mają **niezależne** `MAJOR.MINOR.PATCH`.
+
+| Zmiana wersji | Kiedy podnieść |
+|---------------|----------------|
+| **MAJOR** (X+1.0.0) | Zmiany **niezgodne wstecz** w danej warstwie: usunięty publiczny endpoint / kontrakt, zmiana wymagająca równoległej innej aplikacji lub utraty zgodności zapisanych danych użytkownika bez bezpiecznej migracji. |
+| **MINOR** (x.Y+1.0) | **Nowa** funkcjonalność **wstecz zgodna** (nowe API, opcjonalne pola, nowe trasy/ekrany, nowe zachowanie za zgodnością domyślnej). |
+| **PATCH** (x.y.Z+1) | **Poprawki** (bugfixy), tylko testy, copy, bezpieczny refactor, bez nowej możliwości użytkowej. |
+
+| Zakres plików w PR | Pliki wersji do aktualizacji |
+|--------------------|------------------------------|
+| **Tylko backend** | `backend/src/version.py` — `VERSION`; `backend/tests/unit/test_version.py` — `assert VERSION == "…"` |
+| **Tylko frontend** | `frontend/package.json` — `"version"`; `frontend/package-lock.json` — to samo w `version` root **oraz** `packages[""].version` |
+| **Oba** | Oba wiersze powyżej; numery FE i BE **mogą się różnić** |
+
+Nie podnoś wersji strony, której sensowny diff nie obejmuje (np. wyłącznie docs w root — własna ocena; mechaniczny refactor tylko w jednym katalogu → tylko ta strona).
+
+## Canonical References
+
+- `context.md` — zwięzły kontekst projektu (PL); `AGENTS.md` — punkt wejścia i mapa dokumentów
+- `CLAUDE.md` — skrót stacku, komend i workflow feature w `specs/`
+- `frontend/components/ui/index.ts` — full list of available UI primitives
+- `backend/src/main.py` — canonical route structure
+- `backend/src/app.py` — App class wiring pattern
+- `docker-compose.yml` — Redis, Soketi, backend (host :8001 → container :8000), celery-worker
+- `.env.example` — all required environment variables
