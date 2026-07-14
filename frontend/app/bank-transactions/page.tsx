@@ -428,6 +428,8 @@ export default function BankTransactionsPage() {
   const [selectedAccountId, setSelectedAccountId] = useState<number | undefined>(undefined);
   const [showAccountsModal, setShowAccountsModal] = useState(false);
   const [pendingImportAccountId, setPendingImportAccountId] = useState<number | undefined>(undefined);
+  const [importMenuOpen, setImportMenuOpen] = useState(false);
+  const importMenuRef = useRef<HTMLDivElement>(null);
 
   const accountsQuery = useQuery({
     queryKey: ["bank-accounts"],
@@ -451,6 +453,17 @@ export default function BankTransactionsPage() {
       channelRef.current = null;
     };
   }, []);
+
+  // Close the "Import CSV" account menu when clicking outside of it
+  useEffect(() => {
+    if (!importMenuOpen) return;
+    const onDocumentMouseDown = (e: MouseEvent) => {
+      if (importMenuRef.current?.contains(e.target as Node)) return;
+      setImportMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onDocumentMouseDown);
+    return () => document.removeEventListener("mousedown", onDocumentMouseDown);
+  }, [importMenuOpen]);
 
   useEffect(() => {
     const channel = ensureBankTransactionsChannel();
