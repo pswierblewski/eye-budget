@@ -79,6 +79,46 @@ def test_update_bank_account(client, integration_app, migrated_db):
 
 
 @pytest.mark.integration
+def test_create_duplicate_bank_account_returns_409(client, integration_app, migrated_db):
+    # Arrange
+    client.post(
+        "/bank-accounts",
+        json={"name": "Pekao SA", "bank_type": "pekao", "color": "blue"},
+    )
+
+    # Act — same name + bank_type as an existing account
+    response = client.post(
+        "/bank-accounts",
+        json={"name": "Pekao SA", "bank_type": "pekao", "color": "green"},
+    )
+
+    # Assert
+    assert response.status_code == 409
+
+
+@pytest.mark.integration
+def test_update_bank_account_to_duplicate_name_returns_409(client, integration_app, migrated_db):
+    # Arrange
+    client.post(
+        "/bank-accounts",
+        json={"name": "Pekao SA", "bank_type": "pekao", "color": "blue"},
+    )
+    other_id = client.post(
+        "/bank-accounts",
+        json={"name": "Pekao SA Konto 2", "bank_type": "pekao", "color": "green"},
+    ).json()["id"]
+
+    # Act — rename the second account to collide with the first
+    response = client.put(
+        f"/bank-accounts/{other_id}",
+        json={"name": "Pekao SA", "color": "green"},
+    )
+
+    # Assert
+    assert response.status_code == 409
+
+
+@pytest.mark.integration
 def test_update_nonexistent_account_returns_404(client, integration_app, migrated_db):
     response = client.put("/bank-accounts/9999", json={"name": "X", "color": "blue"})
     assert response.status_code == 404
