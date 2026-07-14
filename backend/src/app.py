@@ -113,6 +113,10 @@ class SettlementMembershipNotFoundError(Exception):
     """Transaction is not a member of the source settlement group."""
 
 
+class DuplicateBankAccountError(Exception):
+    """A bank account with the same name and bank_type already exists."""
+
+
 class App(ABC):
     def __init__(
         self,
@@ -998,10 +1002,20 @@ class App(ABC):
         return self.bank_accounts_repository.list_with_stats()
 
     def create_bank_account(self, name: str, bank_type: str, color: str):
-        return self.bank_accounts_repository.create(name, bank_type, color)
+        import psycopg2.errors
+
+        try:
+            return self.bank_accounts_repository.create(name, bank_type, color)
+        except psycopg2.errors.UniqueViolation:
+            raise DuplicateBankAccountError() from None
 
     def update_bank_account(self, account_id: int, name: str, color: str):
-        return self.bank_accounts_repository.update(account_id, name, color)
+        import psycopg2.errors
+
+        try:
+            return self.bank_accounts_repository.update(account_id, name, color)
+        except psycopg2.errors.UniqueViolation:
+            raise DuplicateBankAccountError() from None
 
     def delete_bank_account(self, account_id: int) -> bool:
         return self.bank_accounts_repository.delete(account_id)

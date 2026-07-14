@@ -6,6 +6,7 @@ from typing import Literal, Optional
 
 from src.app import (
     App,
+    DuplicateBankAccountError,
     InvalidSettlementMemberIdError,
     SettlementMembershipNotFoundError,
     SettlementTargetGroupNotFoundError,
@@ -613,6 +614,11 @@ def create_bank_account(request: CreateBankAccountRequest) -> BankAccount:
     my_app = App()
     try:
         return my_app.create_bank_account(request.name, request.bank_type, request.color)
+    except DuplicateBankAccountError:
+        raise HTTPException(
+            status_code=409,
+            detail="Konto o tej nazwie i typie banku już istnieje.",
+        ) from None
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     finally:
@@ -630,6 +636,11 @@ def update_bank_account(account_id: int, request: UpdateBankAccountRequest) -> B
         return result
     except HTTPException:
         raise
+    except DuplicateBankAccountError:
+        raise HTTPException(
+            status_code=409,
+            detail="Konto o tej nazwie i typie banku już istnieje.",
+        ) from None
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     finally:
