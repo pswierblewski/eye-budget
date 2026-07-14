@@ -34,7 +34,7 @@ import { CategoryDropdown } from "@/components/CategoryDropdown";
 import { BankTransactionSplitEditor } from "@/components/BankTransactionSplitEditor";
 import TagsEditor from "@/components/TagsEditor";
 import { getPusher } from "@/lib/pusher";
-import { Upload, ArrowRight, RefreshCw, Link2, Settings } from "lucide-react";
+import { Upload, ArrowRight, RefreshCw, Link2, Settings, ChevronDown } from "lucide-react";
 import { DataTable, Column } from "@/components/DataTable";
 import { SettlementOperationsSection } from "@/components/SettlementOperationsSection";
 import { LinkReceiptSearchModal } from "@/components/LinkReceiptSearchModal";
@@ -905,26 +905,32 @@ export default function BankTransactionsPage() {
             Zarządzaj kontami
           </Button>
           {accountsQuery.data && accountsQuery.data.length > 0 ? (
-            <div className="relative group">
+            <div className="relative" ref={importMenuRef}>
               <Button
                 variant="primary"
                 size="md"
                 disabled={importMutation.isPending}
+                onClick={() => setImportMenuOpen((v) => !v)}
               >
                 <Upload className="h-4 w-4 mr-2" />
                 Import CSV
+                <ChevronDown
+                  className={`h-4 w-4 ml-1 transition-transform ${importMenuOpen ? "rotate-180" : ""}`}
+                />
               </Button>
-              <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-10 hidden group-hover:block min-w-[180px]">
-                {accountsQuery.data.map((acc: BankAccountStats) => (
-                  <button
-                    key={acc.id}
-                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 first:rounded-t-lg last:rounded-b-lg"
-                    onClick={() => handleImportClick(acc.id)}
-                  >
-                    {acc.name}
-                  </button>
-                ))}
-              </div>
+              {importMenuOpen && (
+                <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-10 min-w-[180px]">
+                  {accountsQuery.data.map((acc: BankAccountStats) => (
+                    <button
+                      key={acc.id}
+                      className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 first:rounded-t-lg last:rounded-b-lg"
+                      onClick={() => handleImportClick(acc.id)}
+                    >
+                      {acc.name}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           ) : (
             <Button
