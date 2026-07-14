@@ -631,6 +631,7 @@ export default function BankTransactionsPage() {
   });
 
   function handleImportClick(accountId: number) {
+    setImportMenuOpen(false);
     setPendingImportAccountId(accountId);
     accountFileRef.current?.click();
   }
