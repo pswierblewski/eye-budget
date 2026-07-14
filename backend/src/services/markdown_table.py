@@ -1,5 +1,24 @@
 from abc import ABC
-from markdown_strings import table_row, table_delimiter_row
+
+
+def _esc_format(text):
+    """Escape markdown formatting characters (underscore, asterisk) in a cell value."""
+    return str(text).replace("_", r"\_").replace("*", r"\*")
+
+
+def table_row(text_list):
+    """Return a single unpadded markdown table row, e.g. '| a | b | c |'.
+
+    Vendored from `markdown_strings` (MIT, awesmubarak/markdown_strings) —
+    inlined here because the PyPI package was removed upstream and this
+    service only ever needs the unpadded row/delimiter behavior.
+    """
+    return "| " + " | ".join(_esc_format(cell) for cell in text_list) + " |"
+
+
+def table_delimiter_row(number_of_columns):
+    """Return an unpadded markdown table delimiter row, e.g. '| --- | --- |'."""
+    return table_row(["---"] * number_of_columns)
 
 
 class MarkdownTableService(ABC):
