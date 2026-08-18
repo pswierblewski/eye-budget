@@ -612,6 +612,57 @@ def test_get_all_happy_path():
 
 
 @pytest.mark.unit
+def test_get_all_default_sorts_by_date_desc():
+    # Arrange
+    repo, cursor = make_repo(
+        fetchall_return=[
+            (1, "scan1.jpg", "processed", "Lidl", "2025-01-01", "50.0", ["tag1"], 100, True, 1),
+        ]
+    )
+
+    # Act
+    repo.get_all(limit=50, offset=0)
+
+    # Assert
+    sql = cursor.execute.call_args[0][0]
+    assert "ORDER BY rs.result->>'date' DESC NULLS FIRST" in sql
+
+
+@pytest.mark.unit
+def test_get_all_date_asc_nulls_last():
+    # Arrange
+    repo, cursor = make_repo(
+        fetchall_return=[
+            (1, "scan1.jpg", "processed", "Lidl", "2025-01-01", "50.0", [], None, False, 1),
+        ]
+    )
+
+    # Act
+    repo.get_all(limit=50, offset=0, sort_by="date", sort_dir="asc")
+
+    # Assert
+    sql = cursor.execute.call_args[0][0]
+    assert "ORDER BY rs.result->>'date' ASC NULLS LAST" in sql
+
+
+@pytest.mark.unit
+def test_get_all_id_sort_nulls_last():
+    # Arrange
+    repo, cursor = make_repo(
+        fetchall_return=[
+            (1, "scan1.jpg", "processed", "Lidl", "2025-01-01", "50.0", [], None, False, 1),
+        ]
+    )
+
+    # Act
+    repo.get_all(limit=50, offset=0, sort_by="id", sort_dir="desc")
+
+    # Assert
+    sql = cursor.execute.call_args[0][0]
+    assert "ORDER BY rs.id DESC NULLS LAST" in sql
+
+
+@pytest.mark.unit
 def test_get_all_no_conn():
     # Arrange
     repo, cursor = make_repo()
