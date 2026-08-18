@@ -463,7 +463,7 @@ class App(ABC):
         status: str | None = None,
         limit: int = 50,
         offset: int = 0,
-        sort_by: str = "id",
+        sort_by: str = "date",
         sort_dir: str = "desc",
         search: str | None = None,
         vendor: str | None = None,
