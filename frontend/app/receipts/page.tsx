@@ -233,9 +233,6 @@ const FilterPanel = memo(function FilterPanel({
     }
   }, [applied, onChange, onCountChange]);
 
-  // Also report initial count (0)
-  useEffect(() => { onCountChange(0); }, [onCountChange]);
-
   const set = <K extends keyof FilterValues>(key: K, value: FilterValues[K]) =>
     setLocal((prev) => ({ ...prev, [key]: value }));
 
