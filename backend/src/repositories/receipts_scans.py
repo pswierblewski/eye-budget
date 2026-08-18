@@ -223,7 +223,7 @@ class ReceiptsScansRepository(ABC):
         status: str | None = None,
         limit: int = 50,
         offset: int = 0,
-        sort_by: str = "id",
+        sort_by: str = "date",
         sort_dir: str = "desc",
         search: str | None = None,
         vendor: str | None = None,
@@ -242,8 +242,9 @@ class ReceiptsScansRepository(ABC):
             "total": "(rs.result->>'total')::numeric",
             "status": "rs.status",
         }
-        order_expr = _SORT_COLS.get(sort_by, "id")
+        order_expr = _SORT_COLS.get(sort_by, "date")
         direction = "ASC" if sort_dir.lower() == "asc" else "DESC"
+        nulls = "FIRST" if sort_by == "date" and direction == "DESC" else "LAST"
         if not self.conn:
             return [], 0
         try:
@@ -349,7 +350,7 @@ class ReceiptsScansRepository(ABC):
                     LEFT JOIN receipt_transactions rt ON rt.scan_id = rs.id
                     LEFT JOIN vendors v ON v.id = rt.vendor_id
                     {where}
-                    ORDER BY {order_expr} {direction} NULLS LAST
+                    ORDER BY {order_expr} {direction} NULLS {nulls}
                     LIMIT %s OFFSET %s
                     """,
                     params + [limit, offset],
