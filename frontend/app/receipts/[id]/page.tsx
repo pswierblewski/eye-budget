@@ -61,7 +61,7 @@ export default function ReceiptReviewPage({
 
   const navReceiptsQuery = useQuery({
     queryKey: ["receipts", "all", "nav"],
-    queryFn: () => listReceipts({ limit: 1000 }),
+    queryFn: () => listReceipts({ limit: 1000, sort_by: "id", sort_dir: "desc" }),
   });
 
   const { prevReceiptId, nextReceiptId } = (() => {
