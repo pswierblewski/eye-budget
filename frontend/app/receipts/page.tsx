@@ -233,9 +233,6 @@ const FilterPanel = memo(function FilterPanel({
     }
   }, [applied, onChange, onCountChange]);
 
-  // Also report initial count (0)
-  useEffect(() => { onCountChange(0); }, [onCountChange]);
-
   const set = <K extends keyof FilterValues>(key: K, value: FilterValues[K]) =>
     setLocal((prev) => ({ ...prev, [key]: value }));
 
@@ -315,6 +312,7 @@ export default function ReceiptsPage() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [appliedFilters, setAppliedFilters] = useState<FilterValues>(EMPTY_FILTERS);
   const [activeFilterCount, setActiveFilterCount] = useState(0);
+  const [filterPanelKey, setFilterPanelKey] = useState(0);
 
   const handleFiltersChange = useCallback((f: FilterValues) => {
     setAppliedFilters(f);
@@ -323,6 +321,13 @@ export default function ReceiptsPage() {
 
   const handleFilterCountChange = useCallback((n: number) => {
     setActiveFilterCount(n);
+  }, []);
+
+  const clearAdvancedFilters = useCallback(() => {
+    setAppliedFilters(EMPTY_FILTERS);
+    setActiveFilterCount(0);
+    setPage(1);
+    setFilterPanelKey((k) => k + 1);
   }, []);
 
   const tagsMutation = useMutation({
@@ -706,7 +711,7 @@ export default function ReceiptsPage() {
 
         {activeFilterCount > 0 && (
           <button
-            onClick={() => setFiltersOpen(true)}
+            onClick={clearAdvancedFilters}
             className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700"
           >
             <X size={12} />
@@ -762,7 +767,12 @@ export default function ReceiptsPage() {
 
       {/* Advanced filters panel */}
       {filtersOpen && (
-        <FilterPanel onChange={handleFiltersChange} onCountChange={handleFilterCountChange} allTags={allTags} />
+        <FilterPanel
+          key={filterPanelKey}
+          onChange={handleFiltersChange}
+          onCountChange={handleFilterCountChange}
+          allTags={allTags}
+        />
       )}
 
       <QueryState
