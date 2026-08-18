@@ -119,7 +119,7 @@ export async function listReceipts(
     tag?: string;
   } = {}
 ): Promise<PaginatedResponse<ReceiptScanListItem>> {
-  const { page = 1, limit = 50, status, sort_by = "id", sort_dir = "desc", search, vendor, product, date_from, date_to, total_min, total_max, tag } = params;
+  const { page = 1, limit = 50, status, sort_by = "date", sort_dir = "desc", search, vendor, product, date_from, date_to, total_min, total_max, tag } = params;
   const offset = (page - 1) * limit;
   const qs = new URLSearchParams({ limit: String(limit), offset: String(offset), sort_by, sort_dir });
   if (status) qs.set("status", status);

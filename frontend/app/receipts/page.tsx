@@ -302,7 +302,7 @@ export default function ReceiptsPage() {
   const PAGE_SIZE = 50;
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [sortBy, setSortBy] = useState("id");
+  const [sortBy, setSortBy] = useState("date");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [progress, setProgress] = useState<ProgressState | null>(null);
   const [legendOpen, setLegendOpen] = useState(false);
