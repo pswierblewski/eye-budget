@@ -112,7 +112,7 @@ def test_confirm_receipt_normalized_vendor_path():
 
     # Assert
     app.vendors_repository.insert_vendor.assert_called_once_with("Biedronka")
-    app.vendors_repository.insert_alternative_name.assert_called_once_with("BIEDRONKA 1234", 99)
+    app.vendors_repository.upsert_alternative_name.assert_called_once_with("BIEDRONKA 1234", 99)
 
 
 @pytest.mark.unit
@@ -196,7 +196,7 @@ def test_confirm_receipt_normalized_vendor_already_exists():
 
     # Assert
     app.vendors_repository.insert_vendor.assert_not_called()
-    app.vendors_repository.insert_alternative_name.assert_called_once()
+    app.vendors_repository.upsert_alternative_name.assert_called_once()
 
 
 @pytest.mark.unit
@@ -224,7 +224,7 @@ def test_confirm_receipt_normalized_product_path():
 
     # Assert
     app.products_repository.insert_product.assert_called_once_with("Apple Normalized")
-    app.products_repository.insert_alternative_name.assert_called_once()
+    app.products_repository.upsert_alternative_name.assert_called_once()
 
 
 @pytest.mark.unit

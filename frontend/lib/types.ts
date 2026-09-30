@@ -17,6 +17,15 @@ export type PaginatedResponse<T> = {
   offset: number;
 };
 
+export const ConfirmationSourceSchema = z.enum(["manual", "auto"]);
+
+export const AutoConfirmReasonSchema = z.object({
+  code: z.string(),
+  message: z.string(),
+  blocking: z.boolean(),
+});
+export type AutoConfirmReason = z.infer<typeof AutoConfirmReasonSchema>;
+
 export const ReceiptScanListItemSchema = z.object({
   id: z.number(),
   filename: z.string(),
@@ -27,6 +36,7 @@ export const ReceiptScanListItemSchema = z.object({
   tags: z.array(z.string()).optional(),
   receipt_transaction_id: z.number().nullable().optional(),
   has_transaction_link: z.boolean().default(false),
+  confirmation_source: ConfirmationSourceSchema.nullable().optional(),
 });
 export type ReceiptScanListItem = z.output<typeof ReceiptScanListItemSchema>;
 
@@ -78,6 +88,9 @@ export type BankTransactionSplit = z.infer<typeof BankTransactionSplitSchema>;
 export const CategoryCandidatesSchema = z.object({
   product_name: z.string(),
   category_candidates: z.array(CategoryCandidateSchema),
+  source: z.enum(["history", "ai"]).nullable().optional(),
+  product_id: z.number().nullable().optional(),
+  history_count: z.number().nullable().optional(),
 });
 
 export const TransactionModelSchema = z.object({
@@ -182,8 +195,21 @@ export const ReceiptScanDetailSchema = z.object({
   text_regions: TextRegionsResultSchema.optional().nullable(),
   message: z.string().nullable().optional(),
   ocr_raw: z.record(z.unknown()).nullable().optional(),
+  confirmation_source: ConfirmationSourceSchema.nullable().optional(),
+  auto_confirm_reasons: z.array(AutoConfirmReasonSchema).nullable().optional(),
 });
 export type ReceiptScanDetail = z.infer<typeof ReceiptScanDetailSchema>;
+
+export const RescoreReportSchema = z.object({
+  dry_run: z.boolean(),
+  total: z.number(),
+  eligible: z.number(),
+  confirmed: z.number(),
+  skipped: z.number(),
+  errors: z.number(),
+  top_reasons: z.array(z.object({ code: z.string(), message: z.string(), count: z.number() })),
+});
+export type RescoreReport = z.infer<typeof RescoreReportSchema>;
 
 export const CategoryItemSchema = z.object({
   id: z.number(),

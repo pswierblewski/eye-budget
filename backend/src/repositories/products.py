@@ -208,6 +208,84 @@ class ProductsRepository(ABC):
         
         return success
 
+    def has_trigram_support(self) -> bool:
+        if not self.conn:
+            return False
+        try:
+            with self.conn.cursor() as cursor:
+                cursor.execute("SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_trgm')")
+                row = cursor.fetchone()
+                return bool(row and row[0])
+        except Exception as e:
+            print(f"Failed to check pg_trgm: {e}")
+            self.conn.rollback()
+            return False
+
+    def find_similar_alternative_names(
+        self, name: str, limit: int = 10, min_similarity: float = 0.3
+    ) -> List[tuple[str, int, float]]:
+        """Trigram search over raw receipt names. Raises when pg_trgm is unavailable."""
+        if not self.conn:
+            return []
+        try:
+            with self.conn.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT name, product, similarity(name, %s) AS score
+                    FROM products_alternative_names
+                    WHERE name %% %s AND similarity(name, %s) >= %s
+                    ORDER BY score DESC
+                    LIMIT %s
+                    """,
+                    (name, name, name, min_similarity, limit),
+                )
+                return [(r[0], r[1], float(r[2])) for r in cursor.fetchall()]
+        except Exception:
+            self.conn.rollback()
+            raise
+
+    def get_all_alternative_names(self) -> List[tuple[str, int]]:
+        if not self.conn:
+            return []
+        try:
+            with self.conn.cursor() as cursor:
+                cursor.execute("SELECT name, product FROM products_alternative_names")
+                return [(r[0], r[1]) for r in cursor.fetchall()]
+        except Exception as e:
+            print(f"Failed to list alternative names: {e}")
+            self.conn.rollback()
+            return []
+
+    def get_names_by_ids(self, product_ids: List[int]) -> dict[int, str]:
+        if not self.conn or not product_ids:
+            return {}
+        try:
+            with self.conn.cursor() as cursor:
+                cursor.execute("SELECT id, name FROM products WHERE id = ANY(%s)", (list(product_ids),))
+                return {r[0]: r[1] for r in cursor.fetchall()}
+        except Exception as e:
+            print(f"Failed to get product names: {e}")
+            self.conn.rollback()
+            return {}
+
+    def upsert_alternative_name(self, alternative_name: str, product_id: int) -> bool:
+        """Link a raw name to a product, replacing any previous mapping."""
+        if not self.conn:
+            return False
+        try:
+            with self.conn.cursor() as cursor:
+                cursor.execute(
+                    "INSERT INTO products_alternative_names (name, product) VALUES (%s, %s) "
+                    "ON CONFLICT (name) DO UPDATE SET product = EXCLUDED.product",
+                    (alternative_name, product_id),
+                )
+                self.conn.commit()
+                return True
+        except Exception as e:
+            print(f"Failed to upsert alternative name: {e}")
+            self.conn.rollback()
+            return False
+
     def dispose(self):
         pass
 

@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from psycopg2 import extras
 
 from ..data import (
+    AutoConfirmReasonItem,
     ReceiptsScanStatus,
     TransactionModel,
     ReceiptScanListItem,
@@ -200,14 +201,14 @@ class ReceiptsScansRepository(ABC):
             self.conn.rollback()
             return False
 
-    def set_status_done(self, scan_id: int) -> bool:
+    def set_status_done(self, scan_id: int, confirmation_source: str = "manual") -> bool:
         if not self.conn:
             return False
         try:
             with self.conn.cursor() as cursor:
                 cursor.execute(
-                    "UPDATE " + self.table + " SET status = %s WHERE id = %s",
-                    (ReceiptsScanStatus.DONE, scan_id),
+                    "UPDATE " + self.table + " SET status = %s, confirmation_source = %s WHERE id = %s",
+                    (ReceiptsScanStatus.DONE, confirmation_source, scan_id),
                 )
                 self.conn.commit()
                 return True
@@ -222,7 +223,7 @@ class ReceiptsScansRepository(ABC):
         try:
             with self.conn.cursor() as cursor:
                 cursor.execute(
-                    "UPDATE " + self.table + " SET status = %s WHERE id = %s",
+                    "UPDATE " + self.table + " SET status = %s, confirmation_source = NULL WHERE id = %s",
                     (ReceiptsScanStatus.TO_CONFIRM, scan_id),
                 )
                 self.conn.commit()
@@ -231,6 +232,64 @@ class ReceiptsScansRepository(ABC):
             print("Failed to reset status to to_confirm:", e)
             self.conn.rollback()
             return False
+
+    def set_auto_confirm_reasons(self, scan_id: int, reasons: list[dict]) -> bool:
+        if not self.conn:
+            return False
+        try:
+            with self.conn.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE " + self.table + " SET auto_confirm_reasons = %s WHERE id = %s",
+                    (extras.Json(reasons), scan_id),
+                )
+                self.conn.commit()
+                return True
+        except Exception as e:
+            print("Failed to set auto confirm reasons:", e)
+            self.conn.rollback()
+            return False
+
+    def set_category_candidates_if_pending(self, scan_id: int, candidates: dict) -> bool:
+        """Store candidates only while the scan is still awaiting confirmation."""
+        if not self.conn:
+            return False
+        try:
+            with self.conn.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE " + self.table + " SET categories_candidates = %s "
+                    "WHERE id = %s AND status = %s RETURNING id",
+                    (extras.Json(candidates), scan_id, ReceiptsScanStatus.TO_CONFIRM),
+                )
+                row = cursor.fetchone()
+                self.conn.commit()
+                return row is not None
+        except Exception as e:
+            print("Failed to set category candidates for pending scan:", e)
+            self.conn.rollback()
+            return False
+
+    def get_pending_for_rescore(self) -> list[ProcessedScan]:
+        if not self.conn:
+            return []
+        try:
+            with self.conn.cursor() as cursor:
+                cursor.execute(
+                    "SELECT id, filename, result FROM " + self.table +
+                    " WHERE status = %s AND result IS NOT NULL ORDER BY id",
+                    (ReceiptsScanStatus.TO_CONFIRM,),
+                )
+                scans = []
+                for row in cursor.fetchall():
+                    try:
+                        scans.append(
+                            ProcessedScan(id=row[0], filename=row[1], transaction_model=TransactionModel(**row[2]))
+                        )
+                    except Exception as e:
+                        print(f"Skipping scan id={row[0]} for rescore: {e}")
+                return scans
+        except Exception as e:
+            print("Failed to fetch pending scans:", e)
+            return []
 
     def set_result_by_id(self, scan_id: int, result: dict) -> bool:
         if not self.conn:
@@ -263,6 +322,7 @@ class ReceiptsScansRepository(ABC):
         total_min: float | None = None,
         total_max: float | None = None,
         tag: str | None = None,
+        confirmation_source: str | None = None,
     ) -> tuple[list[ReceiptScanListItem], int]:
         _SORT_COLS: dict[str, str] = {
             "id": "rs.id",
@@ -349,6 +409,10 @@ class ReceiptsScansRepository(ABC):
                     conditions.append("%s = ANY(rs.tags)")
                     params.append(tag)
 
+                if confirmation_source:
+                    conditions.append("rs.confirmation_source = %s")
+                    params.append(confirmation_source)
+
                 where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
 
                 cursor.execute(
@@ -375,7 +439,8 @@ class ReceiptsScansRepository(ABC):
                                  )
                                )
                            ) AS has_transaction_link,
-                           COUNT(*) OVER () AS total_count
+                           COUNT(*) OVER () AS total_count,
+                           rs.confirmation_source
                     FROM {self.table} rs
                     LEFT JOIN receipt_transactions rt ON rt.scan_id = rs.id
                     LEFT JOIN vendors v ON v.id = rt.vendor_id
@@ -398,6 +463,7 @@ class ReceiptsScansRepository(ABC):
                         tags=list(row[6]) if row[6] else [],
                         receipt_transaction_id=int(row[7]) if row[7] is not None else None,
                         has_transaction_link=bool(row[8]),
+                        confirmation_source=row[10],
                     )
                     for row in rows
                 ], total
@@ -428,7 +494,8 @@ class ReceiptsScansRepository(ABC):
                 cursor.execute(
                     """
                     SELECT id, filename, status, result, categories_candidates,
-                           minio_object_key, tags, text_regions, message, ocr_raw
+                           minio_object_key, tags, text_regions, message, ocr_raw,
+                           confirmation_source, auto_confirm_reasons
                     FROM """ + self.table + """
                     WHERE id = %s
                     """,
@@ -449,6 +516,12 @@ class ReceiptsScansRepository(ABC):
                         text_regions_model = TextRegionsResult(**row[7])
                     except Exception:
                         pass
+                reasons_model: list[AutoConfirmReasonItem] | None = None
+                if isinstance(row[11], list):
+                    try:
+                        reasons_model = [AutoConfirmReasonItem(**r) for r in row[11]]
+                    except Exception:
+                        pass
                 return ReceiptScanDetail(
                     id=row[0],
                     filename=row[1],
@@ -461,6 +534,8 @@ class ReceiptsScansRepository(ABC):
                     text_regions=text_regions_model,
                     message=row[8],
                     ocr_raw=row[9] if isinstance(row[9], dict) else None,
+                    confirmation_source=row[10],
+                    auto_confirm_reasons=reasons_model,
                 )
         except Exception as e:
             print("Failed to fetch scan by id:", e)

@@ -13,6 +13,7 @@ import { StatusBadge, Pill, PageHeader, NavLink, Button, FilterTabs, DateInput, 
 import TagsEditor from "@/components/TagsEditor";
 import { QueryState, QueryErrorNotice, MutationErrorNotice } from "@/components/QueryState";
 import { LinkTransactionSearchModal } from "@/components/LinkTransactionSearchModal";
+import { RescoreReceiptsModal } from "@/components/RescoreReceiptsModal";
 
 const STATUS_FILTERS = [
   "all",
@@ -20,6 +21,7 @@ const STATUS_FILTERS = [
   "processing",
   "to_confirm",
   "done",
+  "auto",
   "failed",
 ] as const;
 
@@ -29,6 +31,7 @@ const FILTER_LABELS: Record<string, string> = {
   processing: "Przetwarzanie",
   to_confirm: "Do potwierdzenia",
   done: "Gotowe",
+  auto: "Potwierdzone automatycznie",
   failed: "Błąd",
 };
 
@@ -313,6 +316,7 @@ export default function ReceiptsPage() {
   const [appliedFilters, setAppliedFilters] = useState<FilterValues>(EMPTY_FILTERS);
   const [activeFilterCount, setActiveFilterCount] = useState(0);
   const [filterPanelKey, setFilterPanelKey] = useState(0);
+  const [rescoreOpen, setRescoreOpen] = useState(false);
 
   const handleFiltersChange = useCallback((f: FilterValues) => {
     setAppliedFilters(f);
@@ -440,7 +444,8 @@ export default function ReceiptsPage() {
       listReceipts({
         page,
         limit: PAGE_SIZE,
-        status: statusFilter !== "all" ? statusFilter : undefined,
+        status: statusFilter === "auto" ? "done" : statusFilter !== "all" ? statusFilter : undefined,
+        confirmation_source: statusFilter === "auto" ? "auto" : undefined,
         sort_by: sortBy,
         sort_dir: sortDir,
         search: appliedFilters.search || undefined,
@@ -582,7 +587,16 @@ export default function ReceiptsPage() {
     {
       header: "Status",
       className: "w-36",
-      accessor: (r) => <StatusBadge status={r.status} />,
+      accessor: (r) => (
+        <span className="inline-flex items-center gap-1">
+          <StatusBadge status={r.status} />
+          {r.confirmation_source === "auto" && (
+            <Pill variant="category-secondary" size="sm">
+              Auto
+            </Pill>
+          )}
+        </span>
+      ),
       serverSortKey: "status",
     },
     {
@@ -634,15 +648,29 @@ export default function ReceiptsPage() {
         variant="list"
         subtitle="Wszystkie zeskanowane paragony i ich status przetwarzania."
         actions={
-          <Button
-            variant="primary"
-            size="md"
-            onClick={() => processMutation.mutate()}
-            disabled={processMutation.isPending || progress?.status === "running"}
-          >
-            {processMutation.isPending || progress?.status === "running" ? "Przetwarzanie…" : "Przetwórz paragony"}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" size="md" onClick={() => setRescoreOpen(true)}>
+              Przelicz oczekujące
+            </Button>
+            <Button
+              variant="primary"
+              size="md"
+              onClick={() => processMutation.mutate()}
+              disabled={processMutation.isPending || progress?.status === "running"}
+            >
+              {processMutation.isPending || progress?.status === "running" ? "Przetwarzanie…" : "Przetwórz paragony"}
+            </Button>
+          </div>
         }
+      />
+
+      <RescoreReceiptsModal
+        open={rescoreOpen}
+        onClose={() => setRescoreOpen(false)}
+        onFinished={() => {
+          queryClient.invalidateQueries({ queryKey: ["receipts"] });
+          queryClient.invalidateQueries({ queryKey: ["receipts-counts"] });
+        }}
       />
 
       <MutationErrorNotice mutation={processMutation} />
@@ -693,7 +721,9 @@ export default function ReceiptsPage() {
             value: s,
             label: s === "all"
               ? <span>{FILTER_LABELS.all} <span className="ml-1 text-xs bg-gray-100 text-gray-600 rounded-full px-1.5 py-0.5">{totalAll}</span></span>
-              : <span>{FILTER_LABELS[s] ?? s} <span className="ml-1 text-xs bg-gray-100 text-gray-600 rounded-full px-1.5 py-0.5">{statusCounts[s] ?? 0}</span></span>,
+              : s === "auto"
+                ? <span>{FILTER_LABELS.auto}</span>
+                : <span>{FILTER_LABELS[s] ?? s} <span className="ml-1 text-xs bg-gray-100 text-gray-600 rounded-full px-1.5 py-0.5">{statusCounts[s] ?? 0}</span></span>,
           }))}
           value={statusFilter}
           onChange={(v) => { setStatusFilter(v); setPage(1); setSelectedIds(new Set()); }}

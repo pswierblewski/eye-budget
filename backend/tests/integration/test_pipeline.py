@@ -54,6 +54,13 @@ def _mock_pipeline_services(app, ocr_result):
     # text_localization_service — skip
     app.text_localization_service = MagicMock()
 
+    from src.services.receipt_categorization import CategorizationResult
+
+    app.receipt_categorization_service = MagicMock()
+    app.receipt_categorization_service.categorize.return_value = CategorizationResult(
+        candidates={"category_candidates": []}, resolutions=[], vendor_has_history=False
+    )
+
     return tmp.name
 
 

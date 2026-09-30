@@ -53,6 +53,8 @@ source venv/bin/activate
 Each feature uses a folder under `specs/<NNN-feature-name>/` with `spec.md`, `plan.md`, `tasks.md`, and supplementary artifacts. One branch per feature; PR to `master`.
 
 ## Recent Changes
+- feat/receipt-auto-confirm (2026-09-30): history-first categorization, auto-confirm gate, backlog rescore (`POST /receipts/rescore`), `confirmation_source` + `auto_confirm_reasons`; migrations 20260930_03–05; FE 1.10.0 / BE 1.11.0
+- feat/ocr-validation-gate (PR #39, 2026-09-30): OCR semantic validation gate (`receipt_ocr_validation.py`), `failed` + `message` + `ocr_raw`, unified receipt date NULLIF, migrations 20260930_01/02; FE 1.9.0 / BE 1.10.0
 - 008-fix-category-id-ambiguity: Added Python 3.11.7 + FastAPI, psycopg2-binary, pydantic v2, pytest ≥ 8.0, pytest-mock ≥ 3.14
 - 007-fix-paddle-pickling: Added Python 3.11.7 + PaddleOCR ≥ 2.10, concurrent.futures.ProcessPoolExecutor, pytest ≥ 8.0, pytest-mock ≥ 3.14
 - 006-semantic-versioning: Added TypeScript 5 / Node 20 (frontend); Python 3.11.7 (backend) + Next.js 14, React 18, @tanstack/react-query v5 (frontend); FastAPI, Pydantic v2 (backend)
@@ -61,5 +63,6 @@ Each feature uses a folder under `specs/<NNN-feature-name>/` with `spec.md`, `pl
 <!-- MANUAL ADDITIONS END -->
 
 ## Active Technologies
-- Python 3.11.7 + FastAPI, psycopg2-binary, pydantic v2, pytest ≥ 8.0, pytest-mock ≥ 3.14 (008-fix-category-id-ambiguity)
-- PostgreSQL (no schema changes) (008-fix-category-id-ambiguity)
+- Python 3.11.7 + FastAPI, psycopg2-binary, pydantic v2, pytest ≥ 8.0, pytest-mock ≥ 3.14
+- PostgreSQL + Yoyo (`receipts_scans.ocr_raw`, data fix migration for empty receipt dates)
+- Next.js 14 / FE 1.10.0; Backend BE 1.11.0 (SemVer independent)

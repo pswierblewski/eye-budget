@@ -4,7 +4,7 @@ import os
 from openai import OpenAI
 from typing import List
 
-from ..data import ProductItem, ProductMappings
+from ..data import NormalizedProductItem, ProductItem, ProductMappings, ProductResolutionsLLM
 
 
 class ProductsService(ABC):
@@ -82,3 +82,39 @@ class ProductsService(ABC):
         args = json.loads(response_arguments)
         
         return ProductMappings(**args)
+
+    def resolve_products(
+        self, items: List[tuple[str, List[NormalizedProductItem]]]
+    ) -> ProductResolutionsLLM:
+        """Pick an existing product for each raw name or propose a new normalized name."""
+        lines = []
+        for raw_name, candidates in items:
+            listed = ", ".join(f"[{c.id}] {c.name}" for c in candidates) or "brak"
+            lines.append(f"- {raw_name} | kandydaci: {listed}")
+        full_prompt = (
+            "For each Polish receipt product name below, choose the existing normalized product that "
+            "denotes the same generic product (ignore brands, sizes, weights and OCR typos) from that "
+            "name's candidate list and return its product_id. Only use IDs from that name's own list. "
+            "If no candidate fits, return product_id null and new_product_name following these rules:\n"
+            f"{self.prompt}\n\nProducts:\n" + "\n".join(lines)
+        )
+        tool_name = "resolve_product_names"
+        tools = [
+            {
+                "type": "function",
+                "name": tool_name,
+                "description": "Resolve Polish receipt product names to existing normalized products",
+                "parameters": ProductResolutionsLLM.model_json_schema(),
+            }
+        ]
+        response = self.client.responses.create(
+            model=self.model,
+            reasoning={"effort": "medium"},
+            tools=tools,
+            tool_choice={"type": "function", "name": tool_name},
+            input=[{"role": "user", "content": [{"type": "input_text", "text": full_prompt}]}],
+        )
+        tool_call = next((item for item in response.output if item.type == "function_call"), None)
+        if tool_call is None:
+            raise ValueError("No function call found in OpenAI response")
+        return ProductResolutionsLLM(**json.loads(tool_call.arguments))

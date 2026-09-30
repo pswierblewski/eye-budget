@@ -35,10 +35,13 @@ ALL_PARAMS = [
     "bank_categorization_service",
     "bank_csv_parser",
     "bank_accounts_repository",
+    "category_history_repository",
     "budget_analysis_service",
     "budget_simulation_service",
     "evaluation_service",
     "ground_truth_service",
+    "product_resolver",
+    "receipt_categorization_service",
 ]
 
 

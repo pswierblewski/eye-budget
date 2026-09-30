@@ -22,6 +22,7 @@ def process_receipts_task(self):
         filename: str,
         status: str,
         error: str | None = None,
+        auto_confirmed: bool = False,
     ):
         payload = {
             "task_id": task_id,
@@ -29,6 +30,7 @@ def process_receipts_task(self):
             "total": total,
             "filename": os.path.basename(filename),
             "status": status,
+            "auto_confirmed": auto_confirmed,
         }
         if error:
             payload["error"] = error

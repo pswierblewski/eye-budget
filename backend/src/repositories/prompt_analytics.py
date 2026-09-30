@@ -180,6 +180,22 @@ class PromptAnalyticsRepository(ABC):
             print("Failed to get prompt analytics list:", e)
             return []
 
+    def mark_auto_confirm_reverted(self, scan_id: int) -> bool:
+        if not self.conn:
+            return False
+        try:
+            with self.conn.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE prompt_analytics SET auto_confirm_reverted = TRUE WHERE scan_id = %s",
+                    (scan_id,),
+                )
+                self.conn.commit()
+                return True
+        except Exception as e:
+            print("Failed to mark auto confirm reverted:", e)
+            self.conn.rollback()
+            return False
+
     def delete_by_scan_id(self, scan_id: int) -> bool:
         if not self.conn:
             return False

@@ -16,6 +16,7 @@ class CategoriesService(ABC):
         self.client = client if client is not None else OpenAI()
         self.model = os.getenv("MODEL", "gpt-5.2")
         self.categories = ""
+        self.category_ids: set[int] = set()
         self.prompt = """
 You are an expert in Polish fiscal receipts.
 Your task is to assign category candidates to every product in the transaction.
@@ -30,7 +31,9 @@ Please analyze the transaction and return category_ids with a name and a confide
         """
 
     def build(self):
-        self.categories = self._get_categories()
+        rows = self.categories_repository.get_categories() or []
+        self.category_ids = {row[0] for row in rows}
+        self.categories = self._map_categories(rows)
 
     def _get_categories(self) -> str:
         categories = self.categories_repository.get_categories()
@@ -50,7 +53,11 @@ Please analyze the transaction and return category_ids with a name and a confide
         )
         return table
 
-    def assign_category_candidates(self, transaction_model: TransactionModel):
+    def assign_category_candidates(
+        self,
+        transaction_model: TransactionModel,
+        examples: list[tuple[str, str]] | None = None,
+    ):
         tool_name = "get_category_candidates"
         tools = [
             {
@@ -64,6 +71,12 @@ Please analyze the transaction and return category_ids with a name and a confide
             self.categories,
             transaction_model.model_dump_json(),
         )
+        if examples:
+            lines = "\n".join(f"- {name} -> {category}" for name, category in examples)
+            prompt += (
+                "\nPreviously confirmed assignments of similar products "
+                "(treat them as strong hints):\n" + lines
+            )
         response = self.client.responses.create(
             model=self.model,
             reasoning={"effort": "medium"},

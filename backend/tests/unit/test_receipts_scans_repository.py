@@ -616,8 +616,8 @@ def test_get_all_happy_path():
     # Arrange
     repo, cursor = make_repo(
         fetchall_return=[
-            (1, "scan1.jpg", "processed", "Lidl", "2025-01-01", "50.0", ["tag1"], 100, True, 10),
-            (2, "scan2.jpg", "to_confirm", "Aldi", "2025-01-02", "75.5", ["tag2"], None, False, 10),
+            (1, "scan1.jpg", "processed", "Lidl", "2025-01-01", "50.0", ["tag1"], 100, True, 10, None),
+            (2, "scan2.jpg", "to_confirm", "Aldi", "2025-01-02", "75.5", ["tag2"], None, False, 10, None),
         ]
     )
 
@@ -642,7 +642,7 @@ def test_get_all_default_sorts_by_date_desc():
     # Arrange
     repo, cursor = make_repo(
         fetchall_return=[
-            (1, "scan1.jpg", "processed", "Lidl", "2025-01-01", "50.0", ["tag1"], 100, True, 1),
+            (1, "scan1.jpg", "processed", "Lidl", "2025-01-01", "50.0", ["tag1"], 100, True, 1, None),
         ]
     )
 
@@ -659,7 +659,7 @@ def test_get_all_date_asc_nulls_last():
     # Arrange
     repo, cursor = make_repo(
         fetchall_return=[
-            (1, "scan1.jpg", "processed", "Lidl", "2025-01-01", "50.0", [], None, False, 1),
+            (1, "scan1.jpg", "processed", "Lidl", "2025-01-01", "50.0", [], None, False, 1, None),
         ]
     )
 
@@ -676,7 +676,7 @@ def test_get_all_id_sort_nulls_last():
     # Arrange
     repo, cursor = make_repo(
         fetchall_return=[
-            (1, "scan1.jpg", "processed", "Lidl", "2025-01-01", "50.0", [], None, False, 1),
+            (1, "scan1.jpg", "processed", "Lidl", "2025-01-01", "50.0", [], None, False, 1, None),
         ]
     )
 
@@ -841,6 +841,8 @@ def test_get_by_id_happy_path():
             None,  # text_regions
             None,  # message
             None,  # ocr_raw
+            None,  # confirmation_source
+            None,  # auto_confirm_reasons
         )
     )
 
@@ -915,6 +917,8 @@ def test_get_by_id_with_text_regions():
             None,
             [],
             text_regions_data,
+            None,
+            None,
             None,
             None,
         )

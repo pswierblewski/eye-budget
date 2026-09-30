@@ -117,9 +117,25 @@ export async function listReceipts(
     date_from?: string; date_to?: string;
     total_min?: number; total_max?: number;
     tag?: string;
+    confirmation_source?: "auto" | "manual";
   } = {}
 ): Promise<PaginatedResponse<ReceiptScanListItem>> {
-  const { page = 1, limit = 50, status, sort_by = "date", sort_dir = "desc", search, vendor, product, date_from, date_to, total_min, total_max, tag } = params;
+  const {
+    page = 1,
+    limit = 50,
+    status,
+    sort_by = "date",
+    sort_dir = "desc",
+    search,
+    vendor,
+    product,
+    date_from,
+    date_to,
+    total_min,
+    total_max,
+    tag,
+    confirmation_source,
+  } = params;
   const offset = (page - 1) * limit;
   const qs = new URLSearchParams({ limit: String(limit), offset: String(offset), sort_by, sort_dir });
   if (status) qs.set("status", status);
@@ -131,6 +147,7 @@ export async function listReceipts(
   if (total_min != null) qs.set("total_min", String(total_min));
   if (total_max != null) qs.set("total_max", String(total_max));
   if (tag) qs.set("tag", tag);
+  if (confirmation_source) qs.set("confirmation_source", confirmation_source);
   return apiFetch(
     `/api/receipts?${qs}`,
     paginatedSchema(ReceiptScanListItemSchema)
@@ -298,6 +315,12 @@ export async function updateGroundTruth(
 
 export async function processReceipts(): Promise<TaskResponse> {
   return apiFetch("/api/receipts/process", TaskResponseSchema, { method: "POST" });
+}
+
+export async function rescorePendingReceipts(dryRun: boolean): Promise<TaskResponse> {
+  return apiFetch(`/api/receipts/rescore?dry_run=${dryRun ? "true" : "false"}`, TaskResponseSchema, {
+    method: "POST",
+  });
 }
 
 export async function runEvaluation(entryIds?: number[]): Promise<TaskResponse> {

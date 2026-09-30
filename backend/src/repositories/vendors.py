@@ -211,6 +211,24 @@ class VendorsRepository(ABC):
             print(f"Failed to get all vendors: {e}")
             return []
 
+    def upsert_alternative_name(self, alternative_name: str, vendor_id: int) -> bool:
+        """Link a raw vendor name to a vendor, replacing any previous mapping."""
+        if not self.conn:
+            return False
+        try:
+            with self.conn.cursor() as cursor:
+                cursor.execute(
+                    "INSERT INTO vendors_alternative_names (name, vendor) VALUES (%s, %s) "
+                    "ON CONFLICT (name) DO UPDATE SET vendor = EXCLUDED.vendor",
+                    (alternative_name, vendor_id),
+                )
+                self.conn.commit()
+                return True
+        except Exception as e:
+            print(f"Failed to upsert vendor alternative name: {e}")
+            self.conn.rollback()
+            return False
+
     def dispose(self):
         pass
 
