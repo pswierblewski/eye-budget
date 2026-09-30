@@ -546,6 +546,27 @@ export default function ReceiptReviewPage({
         />
       </div>
 
+      {scan.status === "failed" && (scan.message || scan.ocr_raw) && (
+        <div className="flex flex-col gap-3 rounded-lg border border-red-200 bg-red-50/80 p-4 text-sm text-red-900">
+          {scan.message && (
+            <div>
+              <p className="font-semibold mb-1">Co poszło nie tak</p>
+              <p className="whitespace-pre-wrap">{scan.message}</p>
+            </div>
+          )}
+          {scan.ocr_raw && (
+            <details className="group">
+              <summary className="cursor-pointer font-medium text-red-800">
+                Surowa odpowiedź OCR
+              </summary>
+              <pre className="mt-2 max-h-64 overflow-auto rounded bg-white/90 p-3 text-xs text-gray-800 border border-red-100">
+                {JSON.stringify(scan.ocr_raw, null, 2)}
+              </pre>
+            </details>
+          )}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Receipt image */}
         <ReceiptImageViewer

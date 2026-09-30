@@ -17,6 +17,11 @@ from .repositories.files import FilesRepository
 from .repositories.vendors import VendorsRepository
 from .repositories.products import ProductsRepository
 from .services.ocr import OCRService
+from .services.receipt_ocr_validation import (
+    validate_ocr_payload,
+    format_pydantic_validation_error,
+)
+from pydantic import ValidationError
 from .repositories.receipts_scans import ReceiptsScansRepository
 from .repositories.evaluations import EvaluationsRepository
 from .repositories.ground_truth import GroundTruthRepository
@@ -335,6 +340,8 @@ class App(ABC):
 
         async def _process_file(file: str):
             async with sem:
+                status = "failed"
+                file_error: str | None = None
                 try:
                     print(f"Processing file: {file}")
                     async with db_lock:
@@ -367,56 +374,55 @@ class App(ABC):
                     ocr_result = await self.ocr_service.process_image_async(preprocessed_image_path)
 
                     async with db_lock:
-                        await asyncio.to_thread(
-                            self.receipts_scans_repository.set_result, file, ocr_result
+                        handled_ok, payload, err_msg = await asyncio.to_thread(
+                            self._handle_ocr_dict, file, ocr_result
                         )
-                        await asyncio.to_thread(
-                            self.receipts_scans_repository.set_status,
-                            file, ReceiptsScanStatus.PROCESSED,
+                    if not handled_ok:
+                        status = "failed"
+                        file_error = err_msg
+                    else:
+                        print(f"File {file} processed successfully.")
+                        file_error = None
+                        transaction_model = TransactionModel(**payload)
+
+                        vendor_mapping = await asyncio.to_thread(
+                            self.vendors_service.process_vendor, transaction_model.vendor
                         )
-
-                    print(f"File {file} processed successfully.")
-
-                    transaction_model = TransactionModel(**ocr_result)
-
-                    vendor_mapping = await asyncio.to_thread(
-                        self.vendors_service.process_vendor, transaction_model.vendor
-                    )
-                    async with db_lock:
-                        await asyncio.to_thread(
-                            self.vendors_repository.process_vendor_mapping, vendor_mapping
-                        )
-                    transaction_model = transaction_model.model_copy(
-                        update={"vendor": vendor_mapping.vendor_name}
-                    )
-
-                    product_mappings = await asyncio.to_thread(
-                        self.products_service.process_products, transaction_model.products
-                    )
-                    async with db_lock:
-                        await asyncio.to_thread(
-                            self.products_repository.process_product_mappings,
-                            product_mappings.products,
+                        async with db_lock:
+                            await asyncio.to_thread(
+                                self.vendors_repository.process_vendor_mapping, vendor_mapping
+                            )
+                        transaction_model = transaction_model.model_copy(
+                            update={"vendor": vendor_mapping.vendor_name}
                         )
 
-                    category_candidates = await asyncio.to_thread(
-                        self.categories_service.assign_category_candidates, transaction_model
-                    )
-                    async with db_lock:
-                        await asyncio.to_thread(
-                            self.receipts_scans_repository.set_category_candidates,
-                            file, category_candidates,
+                        product_mappings = await asyncio.to_thread(
+                            self.products_service.process_products, transaction_model.products
                         )
+                        async with db_lock:
+                            await asyncio.to_thread(
+                                self.products_repository.process_product_mappings,
+                                product_mappings.products,
+                            )
 
-                    try:
-                        products = [p.model_dump() for p in transaction_model.products]
-                        await asyncio.to_thread(
-                            self._run_localization, scan_id, preprocessed_image_path, products
+                        category_candidates = await asyncio.to_thread(
+                            self.categories_service.assign_category_candidates, transaction_model
                         )
-                    except Exception as loc_err:
-                        print(f"Text localization failed for {file} (non-fatal): {loc_err}")
+                        async with db_lock:
+                            await asyncio.to_thread(
+                                self.receipts_scans_repository.set_category_candidates,
+                                file, category_candidates,
+                            )
 
-                    status = "done"
+                        try:
+                            products = [p.model_dump() for p in transaction_model.products]
+                            await asyncio.to_thread(
+                                self._run_localization, scan_id, preprocessed_image_path, products
+                            )
+                        except Exception as loc_err:
+                            print(f"Text localization failed for {file} (non-fatal): {loc_err}")
+
+                        status = "done"
                 except Exception as e:
                     print(f"Error processing file {file}: {e}")
                     async with db_lock:
@@ -425,12 +431,19 @@ class App(ABC):
                             file, ReceiptsScanStatus.FAILED, str(e),
                         )
                     status = "failed"
+                    file_error = str(e)
 
             if on_progress:
                 async with counter_lock:
                     counter["value"] += 1
                     idx = counter["value"]
-                on_progress(index=idx, total=total, filename=file, status=status)
+                on_progress(
+                    index=idx,
+                    total=total,
+                    filename=file,
+                    status=status,
+                    error=file_error,
+                )
 
         await asyncio.gather(*[_process_file(f) for f in new_files])
 
@@ -885,6 +898,24 @@ class App(ABC):
             if _os_loc.path.exists(tmp_path):
                 _os_loc.remove(tmp_path)
 
+    def _handle_ocr_dict(self, filename: str, ocr_dict: dict) -> tuple[bool, dict | None, str | None]:
+        """Validate OCR output and persist result or failure. Returns (ok, payload, error_message)."""
+        validation = validate_ocr_payload(ocr_dict)
+        if not validation.ok:
+            message = "\n".join(validation.errors)
+            self.receipts_scans_repository.set_ocr_failure(filename, ocr_dict, message)
+            return False, None, message
+        payload = validation.normalized or ocr_dict
+        try:
+            TransactionModel(**payload)
+        except ValidationError as exc:
+            message = format_pydantic_validation_error(exc)
+            self.receipts_scans_repository.set_ocr_failure(filename, ocr_dict, message)
+            return False, None, message
+        self.receipts_scans_repository.set_result(filename, payload)
+        self.receipts_scans_repository.set_status(filename, ReceiptsScanStatus.PROCESSED)
+        return True, payload, None
+
     def _process_single_file(self, filename: str) -> bool:
         """
         Run the production processing pipeline for one specific file.
@@ -908,11 +939,12 @@ class App(ABC):
             self.receipts_scans_repository.set_minio_key(filename, object_key)
 
             ocr_result = self.ocr_service.process_image(preprocessed_image_path)
-            self.receipts_scans_repository.set_result(filename, ocr_result)
-            self.receipts_scans_repository.set_status(filename, ReceiptsScanStatus.PROCESSED)
+            handled_ok, payload, _err_msg = self._handle_ocr_dict(filename, ocr_result)
+            if not handled_ok:
+                return False
             print(f"File {filename} processed successfully.")
 
-            transaction_model = TransactionModel(**ocr_result)
+            transaction_model = TransactionModel(**payload)
 
             vendor_mapping = self.vendors_service.process_vendor(transaction_model.vendor)
             self.vendors_repository.process_vendor_mapping(vendor_mapping)

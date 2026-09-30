@@ -385,9 +385,16 @@ export default function ReceiptsPage() {
       const channel = pusher.subscribe("receipts");
       channelRef.current = channel;
 
-      channel.bind("receipt.progress", (data: { task_id: string; index: number; total: number; filename: string; status: string }) => {
+      channel.bind("receipt.progress", (data: { task_id: string; index: number; total: number; filename: string; status: string; error?: string }) => {
         if (data.task_id !== task_id) return;
-        setProgress({ index: data.index, total: data.total, filename: data.filename, status: "running" });
+        const uiStatus = data.status === "failed" ? "error" : "running";
+        setProgress({
+          index: data.index,
+          total: data.total,
+          filename: data.filename,
+          status: uiStatus,
+          errorMsg: data.error,
+        });
       });
 
       channel.bind("receipt.done", (data: { task_id: string }) => {

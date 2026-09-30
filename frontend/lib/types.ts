@@ -180,6 +180,8 @@ export const ReceiptScanDetailSchema = z.object({
   bank_candidate_count: z.number().optional(),
   cash_candidate_count: z.number().optional(),
   text_regions: TextRegionsResultSchema.optional().nullable(),
+  message: z.string().nullable().optional(),
+  ocr_raw: z.record(z.unknown()).nullable().optional(),
 });
 export type ReceiptScanDetail = z.infer<typeof ReceiptScanDetailSchema>;
 

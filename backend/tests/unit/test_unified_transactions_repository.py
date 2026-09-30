@@ -402,6 +402,17 @@ def test_get_list_exclude_receipt():
 
 
 @pytest.mark.unit
+def test_get_list_receipt_date_skips_empty_json_string():
+    """Receipt branch must not cast empty result.date to date (PostgreSQL error)."""
+    repo, cursor = make_repo(fetchall_return=[])
+
+    repo.get_list()
+
+    sql = cursor.execute.call_args[0][0]
+    assert "NULLIF(TRIM(rs.result->>'date'), '')" in sql
+
+
+@pytest.mark.unit
 def test_get_list_abs_amount():
     """abs_amount filters by ABS(amount) within a small tolerance band."""
     repo, cursor = make_repo(fetchall_return=[])

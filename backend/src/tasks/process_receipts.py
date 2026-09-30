@@ -16,18 +16,23 @@ def process_receipts_task(self):
     pusher = PusherService()
     my_app = App()
 
-    def on_progress(index: int, total: int, filename: str, status: str):
-        pusher.trigger(
-            "receipts",
-            "receipt.progress",
-            {
-                "task_id": task_id,
-                "index": index,
-                "total": total,
-                "filename": os.path.basename(filename),
-                "status": status,
-            },
-        )
+    def on_progress(
+        index: int,
+        total: int,
+        filename: str,
+        status: str,
+        error: str | None = None,
+    ):
+        payload = {
+            "task_id": task_id,
+            "index": index,
+            "total": total,
+            "filename": os.path.basename(filename),
+            "status": status,
+        }
+        if error:
+            payload["error"] = error
+        pusher.trigger("receipts", "receipt.progress", payload)
 
     try:
         asyncio.run(my_app._run_production_async(on_progress=on_progress))

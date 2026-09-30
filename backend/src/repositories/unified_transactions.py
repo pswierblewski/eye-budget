@@ -257,7 +257,10 @@ class UnifiedTransactionsRepository:
                         SELECT
                             rs.id,
                             'receipt'::text AS source_type,
-                            COALESCE(rt.date::date, (rs.result->>'date')::date) AS date,
+                            COALESCE(
+                                rt.date::date,
+                                NULLIF(TRIM(rs.result->>'date'), '')::date
+                            ) AS date,
                             -COALESCE(rt.total, (rs.result->>'total')::numeric)::float AS amount,
                             COALESCE(v.name, rt.raw_vendor_name, rs.result->>'vendor', rs.filename) AS description,
                             COALESCE(v.name, rt.raw_vendor_name, rs.result->>'vendor') AS vendor_name,
