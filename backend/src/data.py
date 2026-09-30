@@ -84,6 +84,25 @@ class ProductMappings(BaseModel):
         description="A list of product mappings with original and normalized names."
     )
 
+
+class ProductResolutionLLMItem(BaseModel):
+    """LLM decision for one raw receipt product name."""
+    raw_name: str = Field(..., description="The product name exactly as given in the input list.")
+    product_id: int | None = Field(
+        default=None,
+        description="ID of the matching existing product from this name's candidate list, or null if none fits.",
+    )
+    new_product_name: str | None = Field(
+        default=None,
+        description="Normalized, generic Polish product name to create when product_id is null.",
+    )
+
+
+class ProductResolutionsLLM(BaseModel):
+    """LLM tool-call schema for resolving raw receipt names to existing products."""
+    items: List[ProductResolutionLLMItem] = Field(..., description="One decision per input product name.")
+
+
 class VendorItem(BaseModel):
     """Represents a vendor in the database"""
     id: int = Field(..., description="The unique identifier for the vendor.")
@@ -172,6 +191,14 @@ class GroundTruthResponse(BaseModel):
 # Receipt review / confirm models
 # ---------------------------------------------------------------------------
 
+
+class AutoConfirmReasonItem(BaseModel):
+    """Why a receipt was (not) auto-confirmed. `message` is user-facing Polish copy."""
+    code: str
+    message: str
+    blocking: bool
+
+
 class ReceiptScanListItem(BaseModel):
     """Lightweight scan summary for list views."""
     id: int
@@ -183,6 +210,7 @@ class ReceiptScanListItem(BaseModel):
     tags: list[str] = []
     receipt_transaction_id: int | None = None
     has_transaction_link: bool = False
+    confirmation_source: str | None = None
 
 
 class ReceiptTransactionItem(BaseModel):
@@ -243,6 +271,8 @@ class ReceiptScanDetail(BaseModel):
     text_regions: Optional[TextRegionsResult] = None
     message: str | None = None
     ocr_raw: dict | None = None
+    confirmation_source: str | None = None
+    auto_confirm_reasons: list[AutoConfirmReasonItem] | None = None
 
 
 class CategoryItem(BaseModel):
@@ -280,6 +310,23 @@ class ConfirmReceiptRequest(BaseModel):
     # vendors/products tables and linked as alternative names for the raw receipt names.
     normalized_vendor: str | None = None
     normalized_products: dict[str, str] | None = None  # {raw_product_name: normalized_name}
+
+
+class RescoreReasonCount(BaseModel):
+    code: str
+    message: str  # first message seen for this code
+    count: int
+
+
+class RescoreReport(BaseModel):
+    """Result of re-scoring pending receipts (Celery task result and Pusher payload)."""
+    dry_run: bool
+    total: int
+    eligible: int
+    confirmed: int
+    skipped: int
+    errors: int
+    top_reasons: list[RescoreReasonCount]
 
 
 class UpdateTransactionItemRequest(BaseModel):

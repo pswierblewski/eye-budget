@@ -13,6 +13,7 @@ from src.app import (
 )
 from src.celery_app import celery_app
 from src.tasks.process_receipts import process_receipts_task
+from src.tasks.rescore_pending_receipts import rescore_pending_receipts_task
 from src.tasks.run_evaluation import run_evaluation_task
 from src.tasks.retry_receipt import retry_receipt_task
 from src.tasks.categorize_bank_transactions import categorize_bank_transactions_task
@@ -130,6 +131,13 @@ def evaluate_receipts(request: RunEvaluationRequest = RunEvaluationRequest()):
     return TaskResponse(task_id=task.id)
 
 
+@app.post("/receipts/rescore", response_model=TaskResponse, status_code=202)
+def rescore_receipts(dry_run: bool = True):
+    """Re-score pending receipts with history-based categorization. dry_run=true confirms nothing."""
+    task = rescore_pending_receipts_task.delay(dry_run=dry_run)
+    return TaskResponse(task_id=task.id)
+
+
 @app.get("/tasks/{task_id}")
 def get_task_status(task_id: str):
     """Poll the status of a background task by its Celery task ID."""
@@ -171,6 +179,7 @@ def list_receipts(
     total_min: float | None = None,
     total_max: float | None = None,
     tag: str | None = None,
+    confirmation_source: Literal["auto", "manual"] | None = None,
 ) -> PaginatedResponse[ReceiptScanListItem]:
     """List receipt scans, paginated, with optional filters."""
     my_app = App()
@@ -181,6 +190,7 @@ def list_receipts(
             date_from=date_from, date_to=date_to,
             total_min=total_min, total_max=total_max,
             tag=tag,
+            confirmation_source=confirmation_source,
         )
         return PaginatedResponse(items=items, total=total, limit=limit, offset=offset)
     finally:

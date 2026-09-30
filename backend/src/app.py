@@ -36,6 +36,18 @@ from .repositories.unified_transactions import UnifiedTransactionsRepository
 from .repositories.settlement_groups import SettlementGroupsRepository
 from .repositories.bank_accounts import BankAccountsRepository
 from .repositories.prompt_analytics import PromptAnalyticsRepository
+from .repositories.category_history import CategoryHistoryRepository
+from .services.product_resolver import ProductResolver
+from .services.receipt_categorization import ReceiptCategorizationService
+from .services.receipt_auto_confirm import (
+    AutoConfirmDecision,
+    AutoConfirmSettings,
+    ProductResolution,
+    confirm_failed_reason,
+    evaluate,
+    evaluation_error_reason,
+)
+from .services.receipt_categorization import CategorizationResult
 from .repositories.budget_analysis import BudgetAnalysisRepository
 from .repositories.budget_simulations import BudgetSimulationsRepository
 from .services.budget_analysis import BudgetAnalysisService
@@ -51,6 +63,8 @@ from .data import (
     ReceiptTransactionItem,
     CategoryItem,
     ConfirmReceiptRequest,
+    RescoreReport,
+    RescoreReasonCount,
     UpdateTransactionItemRequest,
     EvaluationRunListItem,
     EvaluationRunDetail,
@@ -146,6 +160,7 @@ class App(ABC):
         budget_simulations_repository=None,
         settlement_groups_repository=None,
         bank_accounts_repository=None,
+        category_history_repository=None,
         # Services
         ocr_service=None,
         preprocessing_service=None,
@@ -161,6 +176,9 @@ class App(ABC):
         budget_simulation_service=None,
         evaluation_service=None,
         ground_truth_service=None,
+        product_resolver=None,
+        receipt_categorization_service=None,
+        auto_confirm_settings=None,
     ):
         # Database contexts
         self.eye_budget_db_context = eye_budget_db_context or EyeBudgetDbContext()
@@ -201,6 +219,19 @@ class App(ABC):
         if bank_categorization_service is None:
             self.bank_categorization_service.build()
         self.bank_csv_parser = bank_csv_parser or PekaoCsvParser()
+        self.category_history_repository = (
+            category_history_repository or CategoryHistoryRepository(self.eye_budget_db_context)
+        )
+        self.auto_confirm_settings = auto_confirm_settings or AutoConfirmSettings.from_env()
+        self.product_resolver = product_resolver or ProductResolver(
+            self.products_repository, self.products_service
+        )
+        self.receipt_categorization_service = receipt_categorization_service or ReceiptCategorizationService(
+            product_resolver=self.product_resolver,
+            categories_service=self.categories_service,
+            category_history_repository=self.category_history_repository,
+            settings=self.auto_confirm_settings,
+        )
 
         # Budget Analysis repositories and services
         self.budget_analysis_repository = budget_analysis_repository or BudgetAnalysisRepository(self.eye_budget_db_context)
@@ -342,6 +373,7 @@ class App(ABC):
             async with sem:
                 status = "failed"
                 file_error: str | None = None
+                auto_confirmed = False
                 try:
                     print(f"Processing file: {file}")
                     async with db_lock:
@@ -389,29 +421,16 @@ class App(ABC):
                             self.vendors_service.process_vendor, transaction_model.vendor
                         )
                         async with db_lock:
-                            await asyncio.to_thread(
+                            vendor_id = await asyncio.to_thread(
                                 self.vendors_repository.process_vendor_mapping, vendor_mapping
                             )
                         transaction_model = transaction_model.model_copy(
                             update={"vendor": vendor_mapping.vendor_name}
                         )
 
-                        product_mappings = await asyncio.to_thread(
-                            self.products_service.process_products, transaction_model.products
-                        )
                         async with db_lock:
-                            await asyncio.to_thread(
-                                self.products_repository.process_product_mappings,
-                                product_mappings.products,
-                            )
-
-                        category_candidates = await asyncio.to_thread(
-                            self.categories_service.assign_category_candidates, transaction_model
-                        )
-                        async with db_lock:
-                            await asyncio.to_thread(
-                                self.receipts_scans_repository.set_category_candidates,
-                                file, category_candidates,
+                            categorization = await asyncio.to_thread(
+                                self._categorize_receipt, scan_id, file, transaction_model, vendor_id
                             )
 
                         try:
@@ -421,6 +440,11 @@ class App(ABC):
                             )
                         except Exception as loc_err:
                             print(f"Text localization failed for {file} (non-fatal): {loc_err}")
+
+                        async with db_lock:
+                            auto_confirmed = await asyncio.to_thread(
+                                self._evaluate_and_auto_confirm, scan_id, transaction_model, categorization
+                            )
 
                         status = "done"
                 except Exception as e:
@@ -443,6 +467,7 @@ class App(ABC):
                     filename=file,
                     status=status,
                     error=file_error,
+                    auto_confirmed=auto_confirmed,
                 )
 
         await asyncio.gather(*[_process_file(f) for f in new_files])
@@ -486,6 +511,7 @@ class App(ABC):
         total_min: float | None = None,
         total_max: float | None = None,
         tag: str | None = None,
+        confirmation_source: str | None = None,
     ) -> tuple[list[ReceiptScanListItem], int]:
         """Return receipt scans, paginated, with optional filters."""
         return self.receipts_scans_repository.get_all(
@@ -494,6 +520,7 @@ class App(ABC):
             date_from=date_from, date_to=date_to,
             total_min=total_min, total_max=total_max,
             tag=tag,
+            confirmation_source=confirmation_source,
         )
 
     def get_receipt_status_counts(self) -> dict[str, int]:
@@ -586,7 +613,9 @@ class App(ABC):
             return None
         return self.minio_service.download_image(entry.minio_object_key)
 
-    def confirm_receipt(self, scan_id: int, request: ConfirmReceiptRequest) -> ReceiptScanDetail | None:
+    def confirm_receipt(
+        self, scan_id: int, request: ConfirmReceiptRequest, confirmation_source: str = "manual"
+    ) -> ReceiptScanDetail | None:
         """
         Confirm receipt categories.
 
@@ -627,7 +656,7 @@ class App(ABC):
             if vendor_id is None:
                 vendor_id = self.vendors_repository.insert_vendor(request.normalized_vendor)
             if vendor_id is not None:
-                self.vendors_repository.insert_alternative_name(tx_model.vendor, vendor_id)
+                self.vendors_repository.upsert_alternative_name(tx_model.vendor, vendor_id)
         else:
             vendor_id = self.transactions_repository.lookup_vendor_id(tx_model.vendor)
 
@@ -659,7 +688,7 @@ class App(ABC):
                 if product_id is None:
                     product_id = self.products_repository.insert_product(normalized_product_name)
                 if product_id is not None:
-                    self.products_repository.insert_alternative_name(product.name, product_id)
+                    self.products_repository.upsert_alternative_name(product.name, product_id)
             else:
                 product_id = self.transactions_repository.lookup_product_id(product.name)
             category_id = request.product_categories.get(product.name)
@@ -675,7 +704,7 @@ class App(ABC):
                 price=product.price,
             )
 
-        self.receipts_scans_repository.set_status_done(scan_id)
+        self.receipts_scans_repository.set_status_done(scan_id, confirmation_source)
 
         # Auto-link to best matching bank/cash transaction (bank has priority)
         self._auto_link_receipt(scan_id, transaction_id)
@@ -683,14 +712,44 @@ class App(ABC):
         # Collect prompt analytics
         self._save_prompt_analytics(scan_id, detail, request, tx_model)
 
-        # Auto-save as ground truth (skip silently if already present)
-        self.ground_truth_service.create_from_confirmed_receipt(
-            filename=detail.filename,
-            minio_object_key=detail.minio_object_key,
-            transaction=tx_model,
-        )
+        if confirmation_source == "manual":
+            self.ground_truth_service.create_from_confirmed_receipt(
+                filename=detail.filename,
+                minio_object_key=detail.minio_object_key,
+                transaction=tx_model,
+            )
 
         return self.get_receipt_by_id(scan_id)
+
+    def _apply_auto_confirm(
+        self,
+        scan_id: int,
+        decision: AutoConfirmDecision,
+        resolutions: list[ProductResolution],
+        force: bool = False,
+    ) -> bool:
+        """Persist the decision's reasons and confirm when allowed. Returns True if confirmed."""
+        reasons = [r.to_dict() for r in decision.reasons]
+        self.receipts_scans_repository.set_auto_confirm_reasons(scan_id, reasons)
+        if not decision.ok or not (force or self.auto_confirm_settings.enabled):
+            return False
+        normalized = {r.raw_name: r.normalized_name for r in resolutions if r.normalized_name}
+        request = ConfirmReceiptRequest(
+            product_categories={r.raw_name: r.category_id for r in resolutions if r.category_id is not None},
+            normalized_products=normalized or None,
+        )
+        try:
+            confirmed = self.confirm_receipt(scan_id, request, confirmation_source="auto")
+        except Exception as e:
+            print(f"Auto-confirm failed for scan {scan_id}: {e}")
+            confirmed = None
+        if confirmed is None:
+            self.transactions_repository.delete_by_scan_id(scan_id)
+            self.receipts_scans_repository.set_status_to_confirm_by_id(scan_id)
+            reasons.append(confirm_failed_reason().to_dict())
+            self.receipts_scans_repository.set_auto_confirm_reasons(scan_id, reasons)
+            return False
+        return True
 
     def _save_prompt_analytics(
         self,
@@ -809,6 +868,8 @@ class App(ABC):
         detail = self.receipts_scans_repository.get_by_id(scan_id)
         if detail is None:
             return None
+        if detail.confirmation_source == "auto":
+            self.prompt_analytics_repository.mark_auto_confirm_reverted(scan_id)
         self.transactions_repository.delete_by_scan_id(scan_id)
         self.receipts_scans_repository.set_status_to_confirm_by_id(scan_id)
         return self.get_receipt_by_id(scan_id)
@@ -916,6 +977,92 @@ class App(ABC):
         self.receipts_scans_repository.set_status(filename, ReceiptsScanStatus.PROCESSED)
         return True, payload, None
 
+    def _categorize_receipt(
+        self, scan_id: int, filename: str, transaction_model: TransactionModel, vendor_id: int | None
+    ) -> CategorizationResult | None:
+        """History-first categorization; on failure falls back to the plain LLM path."""
+        try:
+            result = self.receipt_categorization_service.categorize(transaction_model, vendor_id)
+        except Exception as e:
+            print(f"History-based categorization failed for {filename}, falling back: {e}")
+            candidates = self.categories_service.assign_category_candidates(transaction_model)
+            self.receipts_scans_repository.set_category_candidates(filename, candidates)
+            self.receipts_scans_repository.set_auto_confirm_reasons(scan_id, [evaluation_error_reason().to_dict()])
+            return None
+        self.receipts_scans_repository.set_category_candidates(filename, result.candidates)
+        return result
+
+    def _evaluate_and_auto_confirm(
+        self, scan_id: int, transaction_model: TransactionModel, categorization: CategorizationResult | None
+    ) -> bool:
+        if categorization is None:
+            return False
+        decision = evaluate(
+            transaction_model,
+            categorization.resolutions,
+            categorization.vendor_has_history,
+            self.auto_confirm_settings,
+        )
+        return self._apply_auto_confirm(scan_id, decision, categorization.resolutions)
+
+    def rescore_pending_receipts(self, dry_run: bool, on_progress=None) -> RescoreReport:
+        """Re-run categorization + gate for all to_confirm scans (no OCR)."""
+        scans = self.receipts_scans_repository.get_pending_for_rescore()
+        reason_counts: dict[str, list] = {}
+        eligible = confirmed = skipped = errors = 0
+
+        for index, scan in enumerate(scans, start=1):
+            try:
+                raw = scan.transaction_model
+                vendor_id = self.vendors_repository.get_vendor_by_alternative_name(raw.vendor)
+                normalized_vendor = (
+                    self.vendors_repository.get_normalized_name_by_alternative_name(raw.vendor) or raw.vendor
+                )
+                transaction_model = raw.model_copy(update={"vendor": normalized_vendor})
+                result = self.receipt_categorization_service.categorize(transaction_model, vendor_id)
+                if not self.receipts_scans_repository.set_category_candidates_if_pending(scan.id, result.candidates):
+                    skipped += 1
+                    continue
+                decision = evaluate(
+                    transaction_model, result.resolutions, result.vendor_has_history, self.auto_confirm_settings
+                )
+                for reason in decision.reasons:
+                    entry = reason_counts.setdefault(reason.code, [reason.message, 0])
+                    entry[1] += 1
+                if decision.ok:
+                    eligible += 1
+                if dry_run or not decision.ok:
+                    self.receipts_scans_repository.set_auto_confirm_reasons(
+                        scan.id, [r.to_dict() for r in decision.reasons]
+                    )
+                    continue
+                current = self.receipts_scans_repository.get_by_id(scan.id)
+                if current is None or current.status != ReceiptsScanStatus.TO_CONFIRM:
+                    skipped += 1
+                    continue
+                if self._apply_auto_confirm(scan.id, decision, result.resolutions, force=True):
+                    confirmed += 1
+            except Exception as e:
+                print(f"Rescore failed for scan {scan.id}: {e}")
+                errors += 1
+            finally:
+                if on_progress:
+                    on_progress(index=index, total=len(scans))
+
+        top_reasons = [
+            RescoreReasonCount(code=code, message=message, count=count)
+            for code, (message, count) in sorted(reason_counts.items(), key=lambda kv: -kv[1][1])[:5]
+        ]
+        return RescoreReport(
+            dry_run=dry_run,
+            total=len(scans),
+            eligible=eligible,
+            confirmed=confirmed,
+            skipped=skipped,
+            errors=errors,
+            top_reasons=top_reasons,
+        )
+
     def _process_single_file(self, filename: str) -> bool:
         """
         Run the production processing pipeline for one specific file.
@@ -947,16 +1094,12 @@ class App(ABC):
             transaction_model = TransactionModel(**payload)
 
             vendor_mapping = self.vendors_service.process_vendor(transaction_model.vendor)
-            self.vendors_repository.process_vendor_mapping(vendor_mapping)
+            vendor_id = self.vendors_repository.process_vendor_mapping(vendor_mapping)
             transaction_model = transaction_model.model_copy(
                 update={"vendor": vendor_mapping.vendor_name}
             )
 
-            product_mappings = self.products_service.process_products(transaction_model.products)
-            self.products_repository.process_product_mappings(product_mappings.products)
-
-            category_candidates = self.categories_service.assign_category_candidates(transaction_model)
-            self.receipts_scans_repository.set_category_candidates(filename, category_candidates)
+            categorization = self._categorize_receipt(scan_id, filename, transaction_model, vendor_id)
 
             try:
                 products = [p.model_dump() for p in transaction_model.products]
@@ -964,6 +1107,7 @@ class App(ABC):
             except Exception as loc_err:
                 print(f"Text localization failed for {filename} (non-fatal): {loc_err}")
 
+            self._evaluate_and_auto_confirm(scan_id, transaction_model, categorization)
             return True
         except Exception as e:
             print(f"Error processing file {filename}: {e}")

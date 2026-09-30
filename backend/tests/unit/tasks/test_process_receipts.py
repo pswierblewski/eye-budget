@@ -44,3 +44,24 @@ class TestProcessReceiptsTask:
         assert len(err) == 1
         assert "pipeline failed" in err[0][0][2]["error"]
         assert_app_disposed(app)
+
+    def test_progress_payload_includes_auto_confirmed(self):
+        # Arrange
+        app = make_app()
+
+        async def fake_run(on_progress=None):
+            on_progress(index=1, total=1, filename="/in/a.jpg", status="done", error=None, auto_confirmed=True)
+
+        app._run_production_async = fake_run
+        mock_pusher = MagicMock()
+
+        with (
+            patch("src.tasks.process_receipts.App", return_value=app),
+            patch("src.tasks.process_receipts.PusherService", return_value=mock_pusher),
+        ):
+            # Act
+            process_receipts_task.apply(task_id=TASK_ID, throw=True)
+
+        # Assert
+        progress = triggers_with_event(mock_pusher, "receipts", "receipt.progress")
+        assert progress[0][0][2]["auto_confirmed"] is True

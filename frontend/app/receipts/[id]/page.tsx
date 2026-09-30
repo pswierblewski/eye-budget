@@ -22,6 +22,8 @@ import {
 } from "@/components/QueryState";
 import { formatQueryError } from "@/lib/query-error";
 import { LinkTransactionSearchModal } from "@/components/LinkTransactionSearchModal";
+import { CategorySourcePill } from "@/components/CategorySourcePill";
+import { AutoConfirmReasonsPanel } from "@/components/AutoConfirmReasonsPanel";
 
 export default function ReceiptReviewPage({
   params,
@@ -385,10 +387,12 @@ export default function ReceiptReviewPage({
     string,
     { category_id: number; category_name: string; category_score: number }[]
   > = {};
+  const sourceMap: Record<string, { source?: "history" | "ai" | null; history_count?: number | null }> = {};
 
   if (scan.categories_candidates?.category_candidates) {
     for (const entry of scan.categories_candidates.category_candidates) {
       candidatesMap[entry.product_name] = entry.category_candidates;
+      sourceMap[entry.product_name] = { source: entry.source, history_count: entry.history_count };
     }
   }
 
@@ -546,6 +550,10 @@ export default function ReceiptReviewPage({
         />
       </div>
 
+      {scan.status === "to_confirm" && scan.auto_confirm_reasons && (
+        <AutoConfirmReasonsPanel reasons={scan.auto_confirm_reasons} />
+      )}
+
       {scan.status === "failed" && (scan.message || scan.ocr_raw) && (
         <div className="flex flex-col gap-3 rounded-lg border border-red-200 bg-red-50/80 p-4 text-sm text-red-900">
           {scan.message && (
@@ -614,7 +622,9 @@ export default function ReceiptReviewPage({
             /* Confirmed — read-only view */
             <>
               <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-2.5 flex items-center justify-between gap-2">
-                <span className="text-green-600 font-semibold text-sm">✓ Potwierdzono</span>
+                <span className="text-green-600 font-semibold text-sm">
+                  {scan.confirmation_source === "auto" ? "✓ Potwierdzony automatycznie" : "✓ Potwierdzono"}
+                </span>
                 <button
                   onClick={() => reopenMutation.mutate()}
                   disabled={reopenMutation.isPending}
@@ -1433,6 +1443,19 @@ export default function ReceiptReviewPage({
                         />
                       </div>
                     </div>
+
+                    {sourceMap[product.name]?.source && (
+                      <div className="px-3 pb-2 flex">
+                        <CategorySourcePill
+                          source={sourceMap[product.name].source}
+                          history_count={sourceMap[product.name].history_count}
+                          topScore={(candidatesMap[product.name] ?? []).reduce<number | null>(
+                            (max, c) => (max == null || c.category_score > max ? c.category_score : max),
+                            null
+                          )}
+                        />
+                      </div>
+                    )}
 
                     {/* Category selector — hide built-in header since we render it above */}
                     <div className="[&>div]:rounded-none [&>div]:border-0 [&>div]:border-t [&>div]:border-gray-100">
