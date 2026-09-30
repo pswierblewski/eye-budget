@@ -241,6 +241,8 @@ class ReceiptScanDetail(BaseModel):
     bank_candidate_count: int = 0
     cash_candidate_count: int = 0
     text_regions: Optional[TextRegionsResult] = None
+    message: str | None = None
+    ocr_raw: dict | None = None
 
 
 class CategoryItem(BaseModel):

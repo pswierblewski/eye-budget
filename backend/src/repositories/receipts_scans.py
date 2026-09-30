@@ -57,15 +57,45 @@ class ReceiptsScansRepository(ABC):
             error_message = str(error_message)
         try:
             with self.conn.cursor() as cursor:
-                cursor.execute(
-                    "UPDATE " + self.table + " SET status = %s, message = %s WHERE filename = %s",
-                    (status, error_message, receipt_filename)
-                )
+                if status == ReceiptsScanStatus.PROCESSING:
+                    cursor.execute(
+                        "UPDATE " + self.table + " SET status = %s, message = NULL, ocr_raw = NULL WHERE filename = %s",
+                        (status, receipt_filename),
+                    )
+                elif error_message is not None:
+                    cursor.execute(
+                        "UPDATE " + self.table + " SET status = %s, message = %s WHERE filename = %s",
+                        (status, error_message, receipt_filename),
+                    )
+                else:
+                    cursor.execute(
+                        "UPDATE " + self.table + " SET status = %s WHERE filename = %s",
+                        (status, receipt_filename),
+                    )
                 self.conn.commit()
                 print(f"Status for {receipt_filename} updated to {status}.")
                 return True
         except Exception as e:
             print("Failed to update status:", e)
+            self.conn.rollback()
+            return False
+
+    def set_ocr_failure(self, receipt_filename: str, ocr_raw: dict, message: str) -> bool:
+        if not self.conn:
+            print("No database connection available.")
+            return False
+        try:
+            with self.conn.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE "
+                    + self.table
+                    + " SET status = %s, message = %s, ocr_raw = %s, result = NULL WHERE filename = %s",
+                    (ReceiptsScanStatus.FAILED, message, extras.Json(ocr_raw), receipt_filename),
+                )
+                self.conn.commit()
+                return True
+        except Exception as e:
+            print("Failed to set OCR failure:", e)
             self.conn.rollback()
             return False
     
@@ -398,7 +428,7 @@ class ReceiptsScansRepository(ABC):
                 cursor.execute(
                     """
                     SELECT id, filename, status, result, categories_candidates,
-                           minio_object_key, tags, text_regions
+                           minio_object_key, tags, text_regions, message, ocr_raw
                     FROM """ + self.table + """
                     WHERE id = %s
                     """,
@@ -429,6 +459,8 @@ class ReceiptsScansRepository(ABC):
                     tags=list(row[6]) if row[6] else [],
                     transaction=None,  # populated by endpoint handler
                     text_regions=text_regions_model,
+                    message=row[8],
+                    ocr_raw=row[9] if isinstance(row[9], dict) else None,
                 )
         except Exception as e:
             print("Failed to fetch scan by id:", e)

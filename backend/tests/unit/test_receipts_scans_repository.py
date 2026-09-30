@@ -158,6 +158,32 @@ def test_set_status_with_error_message():
 
 
 @pytest.mark.unit
+def test_set_ocr_failure_clears_result_and_stores_raw():
+    repo, cursor = make_repo()
+    raw = {"vendor": "X", "date": "", "total": 1, "products": []}
+
+    result = repo.set_ocr_failure("test.jpg", raw, "Brak daty transakcji.")
+
+    assert result is True
+    sql = cursor.execute.call_args[0][0]
+    assert "ocr_raw" in sql
+    assert "result = NULL" in sql
+    assert cursor.execute.call_args[0][1][0] == ReceiptsScanStatus.FAILED
+
+
+@pytest.mark.unit
+def test_set_status_processing_clears_message_and_ocr_raw():
+    repo, cursor = make_repo()
+
+    result = repo.set_status("test.jpg", ReceiptsScanStatus.PROCESSING)
+
+    assert result is True
+    sql = cursor.execute.call_args[0][0]
+    assert "message = NULL" in sql
+    assert "ocr_raw = NULL" in sql
+
+
+@pytest.mark.unit
 def test_set_status_converts_exception_to_string():
     # Arrange
     repo, cursor = make_repo()
@@ -813,6 +839,8 @@ def test_get_by_id_happy_path():
             "minio/key/test.jpg",
             ["tag1", "tag2"],
             None,  # text_regions
+            None,  # message
+            None,  # ocr_raw
         )
     )
 
@@ -887,6 +915,8 @@ def test_get_by_id_with_text_regions():
             None,
             [],
             text_regions_data,
+            None,
+            None,
         )
     )
 
