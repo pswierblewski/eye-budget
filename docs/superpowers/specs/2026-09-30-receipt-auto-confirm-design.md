@@ -21,8 +21,8 @@
 
 - **`product_resolver.py`** — surowa nazwa → `product_id`:
   1. dokładne dopasowanie w `products_alternative_names`,
-  2. dopasowanie przybliżone do znanych nazw surowych (`pg_trgm similarity ≥ 0.6`; toleruje błędy OCR, np. Ł/L),
-  3. LLM: nazwa + krótka lista (top ~10) najbliższych istniejących produktów → wybór istniejącego `product_id` albo `new` z propozycją nazwy.
+  2. dopasowanie przybliżone do znanych nazw surowych (`pg_trgm`; toleruje błędy OCR, np. Ł/L) — przy podobieństwie **≥ 0.85** najlepszy kandydat jest przyjmowany bez LLM,
+  3. w pozostałych przypadkach LLM (jedno wywołanie na paragon): nazwa + krótka lista (top 10, podobieństwo ≥ 0.3) najbliższych istniejących produktów → wybór istniejącego `product_id` (tylko spośród podanych kandydatów) albo nowa znormalizowana nazwa.
   Zastępuje obecne wywołanie `ProductsService.process_products` w pipeline. Nowy produkt jest wstawiany do `products` + `products_alternative_names` jak dotąd.
 - **`category_history.py`** — dla `product_id` zwraca rozkład potwierdzonych kategorii z `receipt_transaction_items` (np. `{Nabiał: 14, Słodycze: 1}`) i werdykt: kategoria dominująca, jeśli `count ≥ HISTORY_MIN_COUNT` i `share ≥ HISTORY_MIN_SHARE`; w przeciwnym razie brak werdyktu.
 - **`CategoriesService`** (rozszerzony) — wywoływany jednym zapytaniem na paragon **tylko** dla produktów bez werdyktu historii. Prompt zawiera kilka podobnych potwierdzonych pozycji (few-shot, dobór przez podobieństwo nazw) oraz nazwę sklepu. Jeśli wszystkie produkty mają werdykt historii — brak wywołania LLM.
@@ -34,7 +34,8 @@
   - `|Σ product.price − total| ≤ 0.01` (rabaty to pozycje z ujemną ceną — wliczają się naturalnie),
   - każdy produkt ma kategorię z `source=history` albo `source=ai` z `confidence ≥ MIN_AI_CONFIDENCE`.
 - **Miękkie (tylko informacja w `reasons`, nie blokuje):** sklep bez wcześniejszego potwierdzonego paragonu.
-- Powody zapisywane po polsku, np. `"Suma produktów 47,30 zł ≠ 49,99 zł"`, `"Nowy produkt „SER KOZI 150G”: pewność AI 62%"`.
+- Powód to obiekt `{code, message, blocking}`; `message` po polsku, np. `"Suma produktów 47,30 zł ≠ 49,99 zł"`, `"Nowy produkt „SER KOZI 150G”: pewność AI 62%"`. Kody: `sum_mismatch`, `no_category`, `low_confidence`, `vendor_new` (nieblokujący), `evaluation_error`, `confirm_failed`. Kod służy do agregacji w raporcie przeliczenia.
+- Kandydaci AI z `category_id` spoza listy kategorii wydatków są odrzucani (inaczej auto-potwierdzenie zgubiłoby pozycję na kluczu obcym).
 
 ### Konfiguracja (env, dokumentowana w `.env.example`)
 
@@ -51,7 +52,7 @@ Domyślnie wyłączone — użytkownik włącza po przejrzeniu raportu z trybu p
 
 1. `CREATE EXTENSION IF NOT EXISTS pg_trgm` + indeks GIN (`gin_trgm_ops`) na `products_alternative_names.name`. Jeśli rozszerzenie niedostępne (brak uprawnień na zewnętrznym Postgresie) — resolver przechodzi na `rapidfuzz` w Pythonie na liście nazw w pamięci i loguje ostrzeżenie.
 2. `receipts_scans.confirmation_source TEXT NULL` (`'manual' | 'auto'`, `CHECK`), `NULL` dla niepotwierdzonych.
-3. `receipts_scans.auto_confirm_reasons JSONB NULL`.
+3. `receipts_scans.auto_confirm_reasons JSONB NULL` (lista obiektów `{code, message, blocking}`).
 4. `prompt_analytics.auto_confirm_reverted BOOLEAN NOT NULL DEFAULT FALSE`.
 
 `categories_candidates` (JSONB, bez migracji): każdy produkt dostaje opcjonalne `source: "history" | "ai"`, `product_id`, `history_count`.
@@ -65,7 +66,7 @@ Domyślnie wyłączone — użytkownik włącza po przejrzeniu raportu z trybu p
 3. `category_history` → werdykty; reszta → `CategoriesService` (z few-shot).
 4. Zapis `categories_candidates` (z `source`, `product_id`, `history_count`); lokalizacja tekstu (bez zmian).
 5. Jeśli `RECEIPT_AUTO_CONFIRM_ENABLED`: `evaluate(...)`.
-   - **ok** → istniejące `confirm_receipt` z `product_categories` z najlepszych kandydatów i znormalizowanymi nazwami, `confirmation_source='auto'`. Auto-link bank/gotówka, analityka i ground truth działają jak przy ręcznym potwierdzeniu.
+   - **ok** → istniejące `confirm_receipt` z `product_categories` z najlepszych kandydatów i znormalizowanymi nazwami, `confirmation_source='auto'`. Auto-link bank/gotówka i analityka działają jak przy ręcznym potwierdzeniu. **Ground truth zapisuje się tylko przy potwierdzeniu ręcznym** — niezweryfikowany OCR nie może trafiać do zbioru, którym oceniamy OCR.
    - **nie ok** → status `to_confirm`, `auto_confirm_reasons` zapisane.
    - Pusher `receipt.progress` dostaje pole `auto_confirmed: bool`.
 
@@ -87,7 +88,7 @@ Domyślnie wyłączone — użytkownik włącza po przejrzeniu raportu z trybu p
 - `dry_run=true`: zapisuje nowych kandydatów i `auto_confirm_reasons`, nic nie potwierdza; raport: liczba paragonów, ile przeszłoby, najczęstsze powody blokady.
 - `dry_run=false`: jak wyżej + potwierdza paragony z `ok` (niezależnie od `RECEIPT_AUTO_CONFIRM_ENABLED` — to jawna akcja użytkownika).
 - Przed potwierdzeniem ponowna kontrola statusu (pomiń, jeśli w międzyczasie potwierdzony ręcznie).
-- Postęp przez Pusher; wynik w `task_runs`.
+- Postęp przez Pusher (`receipt.rescore_progress`); raport w zdarzeniu `receipt.rescore_done` oraz jako wynik zadania Celery (dostępny przez istniejące `GET /tasks/{task_id}`). Tabela `task_runs` nie jest używana w kodzie i nie ma kolumny na wynik — nie korzystamy z niej.
 
 ## Kontrakt API (wszystkie cztery miejsca: `main.py`, `data.py`, `route.ts`, `api.ts` + `types.ts`)
 
