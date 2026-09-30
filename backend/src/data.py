@@ -329,6 +329,16 @@ class RescoreReport(BaseModel):
     top_reasons: list[RescoreReasonCount]
 
 
+class SingleAutoConfirmResult(BaseModel):
+    """Result of re-running the auto-confirm gate for one pending receipt (sync)."""
+    dry_run: bool
+    ok: bool
+    confirmed: bool
+    skipped: bool = False
+    reasons: list[AutoConfirmReasonItem]
+    receipt: ReceiptScanDetail | None = None
+
+
 class UpdateTransactionItemRequest(BaseModel):
     """Request body for updating a single confirmed receipt transaction item.
 

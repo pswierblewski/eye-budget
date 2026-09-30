@@ -211,6 +211,16 @@ export const RescoreReportSchema = z.object({
 });
 export type RescoreReport = z.infer<typeof RescoreReportSchema>;
 
+export const SingleAutoConfirmResultSchema = z.object({
+  dry_run: z.boolean(),
+  ok: z.boolean(),
+  confirmed: z.boolean(),
+  skipped: z.boolean().optional(),
+  reasons: z.array(AutoConfirmReasonSchema),
+  receipt: ReceiptScanDetailSchema.nullable().optional(),
+});
+export type SingleAutoConfirmResult = z.infer<typeof SingleAutoConfirmResultSchema>;
+
 export const CategoryItemSchema = z.object({
   id: z.number(),
   name: z.string(),

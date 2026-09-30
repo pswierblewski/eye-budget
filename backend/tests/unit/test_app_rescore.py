@@ -124,3 +124,74 @@ def test_errors_are_counted_and_progress_reported():
     # Assert
     assert report.errors == 1
     progress.assert_called_once_with(index=1, total=1)
+
+
+def _pending_detail():
+    return ReceiptScanDetail(id=1, filename="a.jpg", status="to_confirm", result=_tx())
+
+
+@pytest.mark.unit
+def test_try_auto_confirm_returns_none_when_not_pending():
+    # Arrange
+    app = make_app(auto_confirm_settings=AutoConfirmSettings(enabled=False))
+    app.receipts_scans_repository.get_by_id.return_value = ReceiptScanDetail(
+        id=1, filename="a.jpg", status="done", result=_tx()
+    )
+
+    # Act / Assert
+    assert app.try_auto_confirm_receipt(1, dry_run=True) is None
+
+
+@pytest.mark.unit
+def test_try_auto_confirm_dry_run_does_not_confirm():
+    # Arrange
+    app = _app([])
+    detail = _pending_detail()
+    app.receipts_scans_repository.get_by_id.return_value = detail
+    app.get_receipt_by_id = MagicMock(return_value=detail)
+
+    # Act
+    result = app.try_auto_confirm_receipt(1, dry_run=True)
+
+    # Assert
+    assert result is not None
+    assert result.dry_run is True
+    assert result.ok is True
+    assert result.confirmed is False
+    app._apply_auto_confirm.assert_not_called()
+
+
+@pytest.mark.unit
+def test_try_auto_confirm_real_run_force_confirms():
+    # Arrange
+    app = _app([])
+    detail = _pending_detail()
+    app.receipts_scans_repository.get_by_id.return_value = detail
+    app.get_receipt_by_id = MagicMock(return_value=detail)
+
+    # Act
+    result = app.try_auto_confirm_receipt(1, dry_run=False)
+
+    # Assert
+    assert result is not None
+    assert result.confirmed is True
+    app._apply_auto_confirm.assert_called_once()
+    assert app._apply_auto_confirm.call_args.kwargs["force"] is True
+
+
+@pytest.mark.unit
+def test_try_auto_confirm_skipped_when_pending_lost():
+    # Arrange
+    app = _app([])
+    detail = _pending_detail()
+    app.receipts_scans_repository.get_by_id.return_value = detail
+    app.get_receipt_by_id = MagicMock(return_value=detail)
+    app.receipts_scans_repository.set_category_candidates_if_pending.return_value = False
+
+    # Act
+    result = app.try_auto_confirm_receipt(1, dry_run=True)
+
+    # Assert
+    assert result is not None
+    assert result.skipped is True
+    assert result.confirmed is False

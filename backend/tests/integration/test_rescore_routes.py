@@ -40,6 +40,44 @@ def test_rescore_real_run(client):
 
 
 @pytest.mark.integration
+def test_auto_confirm_defaults_to_dry_run(client):
+    # Arrange
+    from src.data import AutoConfirmReasonItem, SingleAutoConfirmResult
+
+    payload = SingleAutoConfirmResult(
+        dry_run=True,
+        ok=True,
+        confirmed=False,
+        reasons=[AutoConfirmReasonItem(code="ok", message="OK", blocking=False)],
+        receipt=None,
+    )
+    with patch("src.main.App") as mock_app_cls:
+        instance = mock_app_cls.return_value
+        instance.try_auto_confirm_receipt.return_value = payload
+        instance.dispose = MagicMock()
+
+        # Act
+        response = client.post("/receipts/42/auto-confirm")
+
+    # Assert
+    assert response.status_code == 200
+    instance.try_auto_confirm_receipt.assert_called_once_with(42, dry_run=True)
+    assert response.json()["ok"] is True
+
+
+@pytest.mark.integration
+def test_auto_confirm_not_found(client):
+    with patch("src.main.App") as mock_app_cls:
+        instance = mock_app_cls.return_value
+        instance.try_auto_confirm_receipt.return_value = None
+        instance.dispose = MagicMock()
+
+        response = client.post("/receipts/99/auto-confirm")
+
+    assert response.status_code == 404
+
+
+@pytest.mark.integration
 def test_list_receipts_rejects_unknown_confirmation_source(client):
     # Act
     response = client.get("/receipts?confirmation_source=robot")

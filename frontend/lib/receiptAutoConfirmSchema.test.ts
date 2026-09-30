@@ -1,6 +1,11 @@
 /** @vitest-environment node */
 import { describe, expect, it } from "vitest";
-import { ReceiptScanDetailSchema, ReceiptScanListItemSchema, RescoreReportSchema } from "./types";
+import {
+  ReceiptScanDetailSchema,
+  ReceiptScanListItemSchema,
+  RescoreReportSchema,
+  SingleAutoConfirmResultSchema,
+} from "./types";
 
 const baseDetail = {
   id: 1,
@@ -77,5 +82,18 @@ describe("receipt auto-confirm schemas", () => {
     });
 
     expect(parsed.eligible).toBe(32);
+  });
+
+  it("parses single auto-confirm result", () => {
+    const parsed = SingleAutoConfirmResultSchema.parse({
+      dry_run: true,
+      ok: false,
+      confirmed: false,
+      reasons: [{ code: "vendor_new", message: "Nowy sprzedawca", blocking: true }],
+      receipt: null,
+    });
+
+    expect(parsed.ok).toBe(false);
+    expect(parsed.reasons[0].blocking).toBe(true);
   });
 });

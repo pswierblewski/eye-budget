@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getReceipt, listReceipts, listCategories, listProducts, confirmReceipt, reopenReceipt, deleteReceipt, retryReceipt, reuployReceiptImage, getBankTxCandidates, linkBankToReceipt, unlinkBankTransaction, updateReceiptTags, getAllTags, createCashFromReceipt, getCashTxCandidatesForReceipt, linkCashToReceipt, unlinkCashTransaction, updateTransactionItem, deleteTransactionItem, localizeReceipt } from "@/lib/api";
+import { getReceipt, listReceipts, listCategories, listProducts, confirmReceipt, reopenReceipt, tryAutoConfirmReceipt, deleteReceipt, retryReceipt, reuployReceiptImage, getBankTxCandidates, linkBankToReceipt, unlinkBankTransaction, updateReceiptTags, getAllTags, createCashFromReceipt, getCashTxCandidatesForReceipt, linkCashToReceipt, unlinkCashTransaction, updateTransactionItem, deleteTransactionItem, localizeReceipt } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import { ReceiptImageViewer } from "@/components/ReceiptImageViewer";
 import { ProductCategoryRow } from "@/components/ProductCategoryRow";
@@ -332,6 +332,31 @@ export default function ReceiptReviewPage({
     },
   });
 
+  const [autoConfirmEligible, setAutoConfirmEligible] = useState<boolean | null>(null);
+
+  const autoConfirmCheckMutation = useMutation({
+    mutationFn: () => tryAutoConfirmReceipt(scanId, true),
+    onSuccess: (result) => {
+      setAutoConfirmEligible(result.ok);
+      if (result.receipt) {
+        queryClient.setQueryData(["receipt", scanId], result.receipt);
+      } else {
+        queryClient.invalidateQueries({ queryKey: ["receipt", scanId] });
+      }
+    },
+  });
+
+  const autoConfirmApplyMutation = useMutation({
+    mutationFn: () => tryAutoConfirmReceipt(scanId, false),
+    onSuccess: (result) => {
+      if (result.receipt) {
+        queryClient.setQueryData(["receipt", scanId], result.receipt);
+      }
+      queryClient.invalidateQueries({ queryKey: ["receipts"] });
+      setAutoConfirmEligible(null);
+    },
+  });
+
   // Map confirmed transaction item index → OCR product index.
   // Greedy name-match with a "used" set so duplicates (e.g. "Rabat") each get a unique slot.
   const confirmedToOcrIndex = useMemo<Record<number, number>>(() => {
@@ -507,6 +532,8 @@ export default function ReceiptReviewPage({
       <MutationErrorNotice mutation={unlinkCashMutation} />
       <MutationErrorNotice mutation={tagsMutation} />
       <MutationErrorNotice mutation={localizeMutation} />
+      <MutationErrorNotice mutation={autoConfirmCheckMutation} />
+      <MutationErrorNotice mutation={autoConfirmApplyMutation} />
       {/* Confirm Delete Modal */}
       <ConfirmDeleteModal
         open={showDeleteModal}
@@ -549,6 +576,37 @@ export default function ReceiptReviewPage({
           ]}
         />
       </div>
+
+      {scan.status === "to_confirm" && (
+        <div className="rounded-lg border border-gray-200 bg-gray-50/80 p-4 space-y-3">
+          <p className="text-sm font-semibold text-gray-800">Auto-potwierdzenie</p>
+          <p className="text-xs text-gray-600">
+            Ponownie przypisuje kategorie z historii i sprawdza, czy paragon można potwierdzić bez ręcznej edycji.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => autoConfirmCheckMutation.mutate()}
+              disabled={autoConfirmCheckMutation.isPending || autoConfirmApplyMutation.isPending}
+            >
+              {autoConfirmCheckMutation.isPending ? "Sprawdzam…" : "Sprawdź auto-potwierdzenie"}
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => autoConfirmApplyMutation.mutate()}
+              disabled={autoConfirmCheckMutation.isPending || autoConfirmApplyMutation.isPending}
+            >
+              {autoConfirmApplyMutation.isPending ? "Potwierdzam…" : "Potwierdź automatycznie"}
+            </Button>
+          </div>
+          {autoConfirmEligible === true && (
+            <p className="text-sm text-green-800">
+              Paragon spełnia warunki auto-potwierdzenia — możesz użyć „Potwierdź automatycznie”.
+            </p>
+          )}
+        </div>
+      )}
 
       {scan.status === "to_confirm" && scan.auto_confirm_reasons && (
         <AutoConfirmReasonsPanel reasons={scan.auto_confirm_reasons} />

@@ -30,6 +30,7 @@ from src.data import (
     CategoryItem,
     CreateCategoryRequest,
     ConfirmReceiptRequest,
+    SingleAutoConfirmResult,
     UpdateTransactionItemRequest,
     EvaluationRunListItem,
     EvaluationRunDetail,
@@ -294,6 +295,32 @@ def reopen_receipt(scan_id: int) -> ReceiptScanDetail:
         result = my_app.reopen_receipt(scan_id)
         if result is None:
             raise HTTPException(status_code=404, detail=f"Receipt scan {scan_id} not found")
+        return result
+    finally:
+        my_app.dispose()
+
+
+@app.post("/receipts/{scan_id}/auto-confirm", response_model=SingleAutoConfirmResult)
+def auto_confirm_receipt(scan_id: int, dry_run: bool = True) -> SingleAutoConfirmResult:
+    """
+    Re-run history-based categorization and the auto-confirm gate for one pending receipt.
+
+    With dry_run=true (default), updates category candidates and reasons without confirming.
+    With dry_run=false, confirms automatically when the gate passes (ignores the global enabled flag).
+    """
+    my_app = App()
+    try:
+        result = my_app.try_auto_confirm_receipt(scan_id, dry_run=dry_run)
+        if result is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Receipt scan {scan_id} not found, has no OCR result, or is not awaiting confirmation",
+            )
+        if result.skipped:
+            raise HTTPException(
+                status_code=409,
+                detail="Paragon nie oczekuje już na potwierdzenie lub został zmieniony równolegle.",
+            )
         return result
     finally:
         my_app.dispose()
