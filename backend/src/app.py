@@ -65,6 +65,8 @@ from .data import (
     ConfirmReceiptRequest,
     RescoreReport,
     RescoreReasonCount,
+    SingleAutoConfirmResult,
+    AutoConfirmReasonItem,
     UpdateTransactionItemRequest,
     EvaluationRunListItem,
     EvaluationRunDetail,
@@ -1005,6 +1007,73 @@ class App(ABC):
         )
         return self._apply_auto_confirm(scan_id, decision, categorization.resolutions)
 
+    def _rescore_one_pending_scan(
+        self, scan_id: int, raw: TransactionModel, dry_run: bool
+    ) -> tuple[bool, AutoConfirmDecision | None, bool]:
+        """Re-categorize one pending scan and optionally auto-confirm. Returns (skipped, decision, confirmed)."""
+        vendor_id = self.vendors_repository.get_vendor_by_alternative_name(raw.vendor)
+        normalized_vendor = (
+            self.vendors_repository.get_normalized_name_by_alternative_name(raw.vendor) or raw.vendor
+        )
+        transaction_model = raw.model_copy(update={"vendor": normalized_vendor})
+        result = self.receipt_categorization_service.categorize(transaction_model, vendor_id)
+        if not self.receipts_scans_repository.set_category_candidates_if_pending(scan_id, result.candidates):
+            return True, None, False
+        decision = evaluate(
+            transaction_model, result.resolutions, result.vendor_has_history, self.auto_confirm_settings
+        )
+        if dry_run or not decision.ok:
+            self.receipts_scans_repository.set_auto_confirm_reasons(
+                scan_id, [r.to_dict() for r in decision.reasons]
+            )
+            return False, decision, False
+        current = self.receipts_scans_repository.get_by_id(scan_id)
+        if current is None or current.status != ReceiptsScanStatus.TO_CONFIRM:
+            return True, decision, False
+        confirmed = self._apply_auto_confirm(scan_id, decision, result.resolutions, force=True)
+        return False, decision, confirmed
+
+    def try_auto_confirm_receipt(self, scan_id: int, dry_run: bool) -> SingleAutoConfirmResult | None:
+        """Re-run categorization + auto-confirm gate for one to_confirm scan (no OCR)."""
+        detail = self.receipts_scans_repository.get_by_id(scan_id)
+        if detail is None or detail.result is None or detail.status != ReceiptsScanStatus.TO_CONFIRM:
+            return None
+        try:
+            skipped, decision, confirmed = self._rescore_one_pending_scan(scan_id, detail.result, dry_run)
+        except Exception as e:
+            print(f"Auto-confirm failed for scan {scan_id}: {e}")
+            err = evaluation_error_reason()
+            self.receipts_scans_repository.set_auto_confirm_reasons(scan_id, [err.to_dict()])
+            return SingleAutoConfirmResult(
+                dry_run=dry_run,
+                ok=False,
+                confirmed=False,
+                skipped=False,
+                reasons=[AutoConfirmReasonItem(**err.to_dict())],
+                receipt=self.get_receipt_by_id(scan_id),
+            )
+        if skipped:
+            reasons: list[AutoConfirmReasonItem] = []
+            if decision is not None:
+                reasons = [AutoConfirmReasonItem(**r.to_dict()) for r in decision.reasons]
+            return SingleAutoConfirmResult(
+                dry_run=dry_run,
+                ok=decision.ok if decision is not None else False,
+                confirmed=False,
+                skipped=True,
+                reasons=reasons,
+                receipt=self.get_receipt_by_id(scan_id),
+            )
+        assert decision is not None
+        return SingleAutoConfirmResult(
+            dry_run=dry_run,
+            ok=decision.ok,
+            confirmed=confirmed,
+            skipped=False,
+            reasons=[AutoConfirmReasonItem(**r.to_dict()) for r in decision.reasons],
+            receipt=self.get_receipt_by_id(scan_id),
+        )
+
     def rescore_pending_receipts(self, dry_run: bool, on_progress=None) -> RescoreReport:
         """Re-run categorization + gate for all to_confirm scans (no OCR)."""
         scans = self.receipts_scans_repository.get_pending_for_rescore()
@@ -1013,34 +1082,19 @@ class App(ABC):
 
         for index, scan in enumerate(scans, start=1):
             try:
-                raw = scan.transaction_model
-                vendor_id = self.vendors_repository.get_vendor_by_alternative_name(raw.vendor)
-                normalized_vendor = (
-                    self.vendors_repository.get_normalized_name_by_alternative_name(raw.vendor) or raw.vendor
+                skipped_scan, decision, did_confirm = self._rescore_one_pending_scan(
+                    scan.id, scan.transaction_model, dry_run
                 )
-                transaction_model = raw.model_copy(update={"vendor": normalized_vendor})
-                result = self.receipt_categorization_service.categorize(transaction_model, vendor_id)
-                if not self.receipts_scans_repository.set_category_candidates_if_pending(scan.id, result.candidates):
+                if skipped_scan:
                     skipped += 1
                     continue
-                decision = evaluate(
-                    transaction_model, result.resolutions, result.vendor_has_history, self.auto_confirm_settings
-                )
+                assert decision is not None
                 for reason in decision.reasons:
                     entry = reason_counts.setdefault(reason.code, [reason.message, 0])
                     entry[1] += 1
                 if decision.ok:
                     eligible += 1
-                if dry_run or not decision.ok:
-                    self.receipts_scans_repository.set_auto_confirm_reasons(
-                        scan.id, [r.to_dict() for r in decision.reasons]
-                    )
-                    continue
-                current = self.receipts_scans_repository.get_by_id(scan.id)
-                if current is None or current.status != ReceiptsScanStatus.TO_CONFIRM:
-                    skipped += 1
-                    continue
-                if self._apply_auto_confirm(scan.id, decision, result.resolutions, force=True):
+                if did_confirm:
                     confirmed += 1
             except Exception as e:
                 print(f"Rescore failed for scan {scan.id}: {e}")

@@ -25,6 +25,8 @@ import {
   GroundTruthEntry,
   GroundTruthEntrySchema,
   ConfirmReceiptRequest,
+  SingleAutoConfirmResult,
+  SingleAutoConfirmResultSchema,
   TransactionModel,
   TaskResponse,
   TaskResponseSchema,
@@ -176,6 +178,17 @@ export async function reopenReceipt(id: number): Promise<ReceiptScanDetail> {
   return apiFetch(`/api/receipts/${id}/reopen`, ReceiptScanDetailSchema, {
     method: "POST",
   });
+}
+
+export async function tryAutoConfirmReceipt(
+  id: number,
+  dryRun: boolean
+): Promise<SingleAutoConfirmResult> {
+  return apiFetch(
+    `/api/receipts/${id}/auto-confirm?dry_run=${dryRun ? "true" : "false"}`,
+    SingleAutoConfirmResultSchema,
+    { method: "POST" }
+  );
 }
 
 export async function updateTransactionItem(
