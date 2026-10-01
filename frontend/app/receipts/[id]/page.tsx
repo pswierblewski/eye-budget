@@ -595,7 +595,7 @@ export default function ReceiptReviewPage({
         </h1>
         <span className="text-xs text-gray-400 font-mono shrink-0">#{scanId}</span>
         <StatusBadge status={scan.status} />
-        {["new", "processing", "processed", "failed"].includes(scan.status) && (
+        {["new", "processing", "processed", "failed", "to_confirm"].includes(scan.status) && (
           <Button
             variant="secondary"
             size="sm"
