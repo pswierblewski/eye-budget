@@ -67,4 +67,32 @@ describe("RescoreReceiptsModal", () => {
     expect(await screen.findByText("Potwierdzono automatycznie 31 paragonów.")).toBeInTheDocument();
     expect(onFinished).toHaveBeenCalled();
   });
+
+  it("confirms directly without dry run", async () => {
+    rescore.mockResolvedValueOnce({ task_id: "real" });
+    const onFinished = renderModal();
+
+    await userEvent.click(screen.getByRole("button", { name: "Potwierdź automatycznie" }));
+    expect(rescore).toHaveBeenCalledWith(false);
+
+    await waitFor(() => expect(bind).toHaveBeenCalledTimes(3));
+    handlers["receipt.rescore_done"]({
+      task_id: "real",
+      report: {
+        dry_run: false,
+        total: 10,
+        eligible: 8,
+        confirmed: 7,
+        skipped: 0,
+        errors: 1,
+        top_reasons: [],
+      },
+    });
+
+    expect(await screen.findByText("Potwierdzono automatycznie 7 paragonów.")).toBeInTheDocument();
+    expect(
+      screen.getByText("3 paragonów nie zostało potwierdzonych automatycznie (bramka lub błąd).")
+    ).toBeInTheDocument();
+    expect(onFinished).toHaveBeenCalled();
+  });
 });

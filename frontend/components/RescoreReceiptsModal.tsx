@@ -23,6 +23,7 @@ export function RescoreReceiptsModal({
   const [progress, setProgress] = useState<{ index: number; total: number } | null>(null);
   const [report, setReport] = useState<RescoreReport | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [runningDryRun, setRunningDryRun] = useState<boolean | null>(null);
   const channelRef = useRef<ReturnType<ReturnType<typeof getPusher>["subscribe"]> | null>(null);
 
   useEffect(() => {
@@ -34,7 +35,8 @@ export function RescoreReceiptsModal({
 
   const mutation = useMutation({
     mutationFn: (dryRun: boolean) => rescorePendingReceipts(dryRun),
-    onMutate: () => {
+    onMutate: (dryRun: boolean) => {
+      setRunningDryRun(dryRun);
       setPhase("running");
       setProgress(null);
       setErrorMsg(null);
@@ -71,6 +73,7 @@ export function RescoreReceiptsModal({
     if (phase === "running") return;
     setPhase("idle");
     setReport(null);
+    setRunningDryRun(null);
     onClose();
   };
 
@@ -82,14 +85,17 @@ export function RescoreReceiptsModal({
 
         {phase === "idle" && (
           <p className="text-gray-600">
-            Dla paragonów „Do potwierdzenia” ponownie uruchomimy kategoryzację i bramkę auto-potwierdzenia.
-            Najpierw zobaczysz raport — nic nie zostanie potwierdzone bez Twojej zgody.
+            Dla paragonów „Do potwierdzenia” uruchomimy kategoryzację i bramkę auto-potwierdzenia.
+            Możesz od razu potwierdzić te, które przejdą bramkę — reszta zostanie bez zmian.
+            Opcjonalnie najpierw zobaczysz raport (bez potwierdzania).
           </p>
         )}
 
         {phase === "running" && (
           <p className="text-gray-600">
-            {progress ? `Sprawdzanie ${progress.index} / ${progress.total}…` : "Uruchamianie…"}
+            {progress
+              ? `${runningDryRun ? "Sprawdzanie" : "Potwierdzanie"} ${progress.index} / ${progress.total}…`
+              : "Uruchamianie…"}
           </p>
         )}
 
@@ -112,7 +118,16 @@ export function RescoreReceiptsModal({
         )}
 
         {phase === "done" && report && (
-          <p className="font-medium text-green-700">Potwierdzono automatycznie {report.confirmed} paragonów.</p>
+          <div className="flex flex-col gap-1">
+            <p className="font-medium text-green-700">
+              Potwierdzono automatycznie {report.confirmed} paragonów.
+            </p>
+            {report.total > report.confirmed && (
+              <p className="text-gray-600">
+                {report.total - report.confirmed} paragonów nie zostało potwierdzonych automatycznie (bramka lub błąd).
+              </p>
+            )}
+          </div>
         )}
 
         {phase === "error" && (
@@ -124,9 +139,14 @@ export function RescoreReceiptsModal({
             Zamknij
           </Button>
           {phase === "idle" && (
-            <Button onClick={() => mutation.mutate(true)} disabled={mutation.isPending}>
-              Sprawdź auto-potwierdzenie
-            </Button>
+            <>
+              <Button variant="secondary" onClick={() => mutation.mutate(true)} disabled={mutation.isPending}>
+                Sprawdź auto-potwierdzenie
+              </Button>
+              <Button onClick={() => mutation.mutate(false)} disabled={mutation.isPending}>
+                Potwierdź automatycznie
+              </Button>
+            </>
           )}
           {phase === "report" && report && report.eligible > 0 && (
             <Button onClick={() => mutation.mutate(false)} disabled={mutation.isPending}>
