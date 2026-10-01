@@ -5,6 +5,7 @@ from psycopg2 import extras
 
 from ..data import (
     AutoConfirmReasonItem,
+    AutoConfirmWaiverItem,
     ReceiptsScanStatus,
     TransactionModel,
     ReceiptScanListItem,
@@ -230,6 +231,71 @@ class ReceiptsScansRepository(ABC):
                 return True
         except Exception as e:
             print("Failed to reset status to to_confirm:", e)
+            self.conn.rollback()
+            return False
+
+    def set_category_selections(self, scan_id: int, mapping: dict[str, int]) -> bool:
+        if not self.conn:
+            return False
+        try:
+            with self.conn.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE " + self.table + " SET category_selections = %s WHERE id = %s",
+                    (extras.Json(mapping), scan_id),
+                )
+                self.conn.commit()
+                return True
+        except Exception as e:
+            print("Failed to set category selections:", e)
+            self.conn.rollback()
+            return False
+
+    def append_auto_confirm_waiver(self, scan_id: int, item: AutoConfirmWaiverItem) -> bool:
+        if not self.conn:
+            return False
+        try:
+            with self.conn.cursor() as cursor:
+                cursor.execute(
+                    "SELECT auto_confirm_waivers FROM " + self.table + " WHERE id = %s FOR UPDATE",
+                    (scan_id,),
+                )
+                row = cursor.fetchone()
+                if row is None:
+                    self.conn.rollback()
+                    return False
+                existing: list = row[0] if isinstance(row[0], list) else []
+                key = (item.code, item.product_name)
+                for entry in existing:
+                    if isinstance(entry, dict) and (entry.get("code"), entry.get("product_name")) == key:
+                        self.conn.commit()
+                        return True
+                existing.append({"code": item.code, "product_name": item.product_name})
+                cursor.execute(
+                    "UPDATE " + self.table + " SET auto_confirm_waivers = %s WHERE id = %s",
+                    (extras.Json(existing), scan_id),
+                )
+                self.conn.commit()
+                return True
+        except Exception as e:
+            print("Failed to append auto confirm waiver:", e)
+            self.conn.rollback()
+            return False
+
+    def clear_save_review_fields(self, scan_id: int) -> bool:
+        if not self.conn:
+            return False
+        try:
+            with self.conn.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE "
+                    + self.table
+                    + " SET category_selections = NULL, auto_confirm_waivers = NULL WHERE id = %s",
+                    (scan_id,),
+                )
+                self.conn.commit()
+                return True
+        except Exception as e:
+            print("Failed to clear save-review fields:", e)
             self.conn.rollback()
             return False
 
@@ -495,7 +561,8 @@ class ReceiptsScansRepository(ABC):
                     """
                     SELECT id, filename, status, result, categories_candidates,
                            minio_object_key, tags, text_regions, message, ocr_raw,
-                           confirmation_source, auto_confirm_reasons
+                           confirmation_source, auto_confirm_reasons,
+                           category_selections, auto_confirm_waivers
                     FROM """ + self.table + """
                     WHERE id = %s
                     """,
@@ -522,6 +589,18 @@ class ReceiptsScansRepository(ABC):
                         reasons_model = [AutoConfirmReasonItem(**r) for r in row[11]]
                     except Exception:
                         pass
+                category_selections: dict[str, int] | None = None
+                if isinstance(row[12], dict):
+                    try:
+                        category_selections = {str(k): int(v) for k, v in row[12].items()}
+                    except Exception:
+                        pass
+                waivers_model: list[AutoConfirmWaiverItem] | None = None
+                if isinstance(row[13], list):
+                    try:
+                        waivers_model = [AutoConfirmWaiverItem(**w) for w in row[13]]
+                    except Exception:
+                        pass
                 return ReceiptScanDetail(
                     id=row[0],
                     filename=row[1],
@@ -536,6 +615,8 @@ class ReceiptsScansRepository(ABC):
                     ocr_raw=row[9] if isinstance(row[9], dict) else None,
                     confirmation_source=row[10],
                     auto_confirm_reasons=reasons_model,
+                    category_selections=category_selections,
+                    auto_confirm_waivers=waivers_model,
                 )
         except Exception as e:
             print("Failed to fetch scan by id:", e)

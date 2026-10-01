@@ -4,8 +4,10 @@ from src.data import ProductItem, TransactionModel
 from src.services.receipt_auto_confirm import (
     AutoConfirmSettings,
     ProductResolution,
+    SOURCE_AI,
     evaluate,
     normalize_score,
+    waiver_key,
 )
 
 SETTINGS = AutoConfirmSettings(enabled=True, min_ai_confidence=0.9, history_min_count=2, history_min_share=0.9)
@@ -152,6 +154,37 @@ def test_settings_from_env(monkeypatch):
 
     # Assert
     assert settings == AutoConfirmSettings(True, 0.8, 3, 0.75)
+
+
+@pytest.mark.unit
+def test_waiver_low_confidence_per_product_unblocks():
+    # Arrange
+    tx = _tx([ProductItem(name="RĘKAWICZKI", quantity=1, price=9.99)], 9.99)
+    resolutions = [
+        ProductResolution("RĘKAWICZKI", 1, "Rękawiczki", 5, "Inne", SOURCE_AI, 0.85, 0)
+    ]
+    waivers = frozenset({waiver_key("low_confidence", "RĘKAWICZKI")})
+
+    # Act
+    decision = evaluate(tx, resolutions, False, SETTINGS, waivers=waivers)
+
+    # Assert
+    assert decision.ok is True
+    assert all(not r.blocking for r in decision.reasons)
+
+
+@pytest.mark.unit
+def test_waiver_sum_mismatch_global():
+    # Arrange
+    tx = _tx([ProductItem(name="MLEKO", quantity=1, price=47.30)], 49.99)
+    resolutions = [_history("MLEKO")]
+    waivers = frozenset({waiver_key("sum_mismatch")})
+
+    # Act
+    decision = evaluate(tx, resolutions, True, SETTINGS, waivers=waivers)
+
+    # Assert
+    assert decision.ok is True
 
 
 @pytest.mark.unit

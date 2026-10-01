@@ -25,6 +25,8 @@ import {
   GroundTruthEntry,
   GroundTruthEntrySchema,
   ConfirmReceiptRequest,
+  SaveReviewResponse,
+  SaveReviewResponseSchema,
   SingleAutoConfirmResult,
   SingleAutoConfirmResultSchema,
   TransactionModel,
@@ -189,6 +191,26 @@ export async function tryAutoConfirmReceipt(
     SingleAutoConfirmResultSchema,
     { method: "POST" }
   );
+}
+
+export async function saveReceiptReview(
+  id: number,
+  body: ConfirmReceiptRequest
+): Promise<SaveReviewResponse> {
+  return apiFetch(`/api/receipts/${id}/save-review`, SaveReviewResponseSchema, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function addAutoConfirmWaiver(
+  id: number,
+  body: { code: string; product_name?: string | null }
+): Promise<SaveReviewResponse> {
+  return apiFetch(`/api/receipts/${id}/auto-confirm-waiver`, SaveReviewResponseSchema, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
 }
 
 export async function updateTransactionItem(

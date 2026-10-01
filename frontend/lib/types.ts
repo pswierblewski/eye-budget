@@ -23,8 +23,15 @@ export const AutoConfirmReasonSchema = z.object({
   code: z.string(),
   message: z.string(),
   blocking: z.boolean(),
+  product_name: z.string().nullable().optional(),
 });
 export type AutoConfirmReason = z.infer<typeof AutoConfirmReasonSchema>;
+
+export const AutoConfirmWaiverItemSchema = z.object({
+  code: z.string(),
+  product_name: z.string().nullable().optional(),
+});
+export type AutoConfirmWaiverItem = z.infer<typeof AutoConfirmWaiverItemSchema>;
 
 export const ReceiptScanListItemSchema = z.object({
   id: z.number(),
@@ -197,6 +204,8 @@ export const ReceiptScanDetailSchema = z.object({
   ocr_raw: z.record(z.unknown()).nullable().optional(),
   confirmation_source: ConfirmationSourceSchema.nullable().optional(),
   auto_confirm_reasons: z.array(AutoConfirmReasonSchema).nullable().optional(),
+  category_selections: z.record(z.string(), z.number()).nullable().optional(),
+  auto_confirm_waivers: z.array(AutoConfirmWaiverItemSchema).nullable().optional(),
 });
 export type ReceiptScanDetail = z.infer<typeof ReceiptScanDetailSchema>;
 
@@ -220,6 +229,12 @@ export const SingleAutoConfirmResultSchema = z.object({
   receipt: ReceiptScanDetailSchema.nullable().optional(),
 });
 export type SingleAutoConfirmResult = z.infer<typeof SingleAutoConfirmResultSchema>;
+
+export const SaveReviewResponseSchema = z.object({
+  receipt: ReceiptScanDetailSchema,
+  auto_confirm: SingleAutoConfirmResultSchema,
+});
+export type SaveReviewResponse = z.infer<typeof SaveReviewResponseSchema>;
 
 export const CategoryItemSchema = z.object({
   id: z.number(),

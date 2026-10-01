@@ -4,6 +4,7 @@ import {
   ReceiptScanDetailSchema,
   ReceiptScanListItemSchema,
   RescoreReportSchema,
+  SaveReviewResponseSchema,
   SingleAutoConfirmResultSchema,
 } from "./types";
 
@@ -82,6 +83,25 @@ describe("receipt auto-confirm schemas", () => {
     });
 
     expect(parsed.eligible).toBe(32);
+  });
+
+  it("parses save-review response with selections and waivers", () => {
+    const parsed = SaveReviewResponseSchema.parse({
+      receipt: {
+        ...baseDetail,
+        category_selections: { MLEKO: 1 },
+        auto_confirm_waivers: [{ code: "sum_mismatch" }],
+      },
+      auto_confirm: {
+        dry_run: true,
+        ok: false,
+        confirmed: false,
+        reasons: [{ code: "sum_mismatch", message: "Suma", blocking: true }],
+      },
+    });
+
+    expect(parsed.receipt.category_selections?.MLEKO).toBe(1);
+    expect(parsed.receipt.auto_confirm_waivers?.[0].code).toBe("sum_mismatch");
   });
 
   it("parses single auto-confirm result", () => {

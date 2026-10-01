@@ -197,6 +197,7 @@ class AutoConfirmReasonItem(BaseModel):
     code: str
     message: str
     blocking: bool
+    product_name: str | None = None
 
 
 class ReceiptScanListItem(BaseModel):
@@ -273,6 +274,18 @@ class ReceiptScanDetail(BaseModel):
     ocr_raw: dict | None = None
     confirmation_source: str | None = None
     auto_confirm_reasons: list[AutoConfirmReasonItem] | None = None
+    category_selections: dict[str, int] | None = None
+    auto_confirm_waivers: list["AutoConfirmWaiverItem"] | None = None
+
+
+class AutoConfirmWaiverItem(BaseModel):
+    code: str
+    product_name: str | None = None
+
+
+class AutoConfirmWaiverRequest(BaseModel):
+    code: str
+    product_name: str | None = None
 
 
 class CategoryItem(BaseModel):
@@ -337,6 +350,11 @@ class SingleAutoConfirmResult(BaseModel):
     skipped: bool = False
     reasons: list[AutoConfirmReasonItem]
     receipt: ReceiptScanDetail | None = None
+
+
+class SaveReviewResponse(BaseModel):
+    receipt: ReceiptScanDetail
+    auto_confirm: SingleAutoConfirmResult
 
 
 class UpdateTransactionItemRequest(BaseModel):

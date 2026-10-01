@@ -45,9 +45,39 @@ class AutoConfirmReason:
     code: str
     message: str
     blocking: bool
+    product_name: str | None = None
 
     def to_dict(self) -> dict:
-        return {"code": self.code, "message": self.message, "blocking": self.blocking}
+        out: dict = {"code": self.code, "message": self.message, "blocking": self.blocking}
+        if self.product_name is not None:
+            out["product_name"] = self.product_name
+        return out
+
+
+def waiver_key(code: str, product_name: str | None = None) -> tuple[str, str | None]:
+    if code in ("low_confidence", "no_category"):
+        return (code, product_name)
+    return (code, None)
+
+
+def _is_waived(
+    code: str, product_name: str | None, waivers: frozenset[tuple[str, str | None]] | None
+) -> bool:
+    if not waivers:
+        return False
+    return waiver_key(code, product_name) in waivers
+
+
+def _reason(
+    code: str,
+    message: str,
+    blocking: bool,
+    product_name: str | None = None,
+    waivers: frozenset[tuple[str, str | None]] | None = None,
+) -> AutoConfirmReason:
+    if blocking and _is_waived(code, product_name, waivers):
+        blocking = False
+    return AutoConfirmReason(code, message, blocking, product_name)
 
 
 @dataclass(frozen=True)
@@ -77,16 +107,18 @@ def evaluate(
     resolutions: list[ProductResolution],
     vendor_has_history: bool,
     settings: AutoConfirmSettings,
+    waivers: frozenset[tuple[str, str | None]] | None = None,
 ) -> AutoConfirmDecision:
     reasons: list[AutoConfirmReason] = []
 
     products_sum = round(sum(p.price for p in transaction.products), 2)
     if abs(products_sum - transaction.total) > SUM_TOLERANCE + 1e-9:
         reasons.append(
-            AutoConfirmReason(
+            _reason(
                 "sum_mismatch",
                 f"Suma produktów {_pln(products_sum)} ≠ {_pln(transaction.total)}",
                 True,
+                waivers=waivers,
             )
         )
 
@@ -94,19 +126,31 @@ def evaluate(
     for name in dict.fromkeys(p.name for p in transaction.products):
         resolution = by_name.get(name)
         if resolution is None or resolution.category_id is None:
-            reasons.append(AutoConfirmReason("no_category", f"Brak kategorii dla „{name}”", True))
+            reasons.append(
+                _reason(
+                    "no_category",
+                    f"Brak kategorii dla „{name}”",
+                    True,
+                    product_name=name,
+                    waivers=waivers,
+                )
+            )
         elif resolution.source == SOURCE_AI and resolution.confidence < settings.min_ai_confidence:
             reasons.append(
-                AutoConfirmReason(
+                _reason(
                     "low_confidence",
                     f"Nowy produkt „{name}”: pewność AI {round(resolution.confidence * 100)}%",
                     True,
+                    product_name=name,
+                    waivers=waivers,
                 )
             )
 
     if not vendor_has_history:
         reasons.append(
-            AutoConfirmReason("vendor_new", f"Pierwszy paragon ze sklepu „{transaction.vendor}”", False)
+            AutoConfirmReason(
+                "vendor_new", f"Pierwszy paragon ze sklepu „{transaction.vendor}”", False
+            )
         )
 
     return AutoConfirmDecision(ok=not any(r.blocking for r in reasons), reasons=reasons)

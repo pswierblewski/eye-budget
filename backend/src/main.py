@@ -30,6 +30,8 @@ from src.data import (
     CategoryItem,
     CreateCategoryRequest,
     ConfirmReceiptRequest,
+    AutoConfirmWaiverRequest,
+    SaveReviewResponse,
     SingleAutoConfirmResult,
     UpdateTransactionItemRequest,
     EvaluationRunListItem,
@@ -320,6 +322,40 @@ def auto_confirm_receipt(scan_id: int, dry_run: bool = True) -> SingleAutoConfir
             raise HTTPException(
                 status_code=409,
                 detail="Paragon nie oczekuje już na potwierdzenie lub został zmieniony równolegle.",
+            )
+        return result
+    finally:
+        my_app.dispose()
+
+
+@app.post("/receipts/{scan_id}/save-review", response_model=SaveReviewResponse)
+def save_receipt_review(scan_id: int, request: ConfirmReceiptRequest) -> SaveReviewResponse:
+    """Persist OCR/category edits on a pending receipt and re-run the auto-confirm gate (dry-run)."""
+    my_app = App()
+    try:
+        result = my_app.save_review(scan_id, request)
+        if result is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Receipt scan {scan_id} not found, has no OCR result, or is not awaiting confirmation",
+            )
+        return result
+    finally:
+        my_app.dispose()
+
+
+@app.post("/receipts/{scan_id}/auto-confirm-waiver", response_model=SaveReviewResponse)
+def add_auto_confirm_waiver_route(
+    scan_id: int, request: AutoConfirmWaiverRequest
+) -> SaveReviewResponse:
+    """Accept one auto-confirm blocking reason for a pending receipt and re-run the gate (dry-run)."""
+    my_app = App()
+    try:
+        result = my_app.add_auto_confirm_waiver(scan_id, request)
+        if result is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Receipt scan {scan_id} not found, has no OCR result, or is not awaiting confirmation",
             )
         return result
     finally:
