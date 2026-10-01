@@ -650,7 +650,7 @@ export default function ReceiptsPage() {
         actions={
           <div className="flex items-center gap-2">
             <Button variant="secondary" size="md" onClick={() => setRescoreOpen(true)}>
-              Przelicz oczekujące
+              Potwierdź automatycznie
             </Button>
             <Button
               variant="primary"

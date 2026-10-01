@@ -35,7 +35,7 @@ describe("RescoreReceiptsModal", () => {
     rescore.mockResolvedValueOnce({ task_id: "dry" }).mockResolvedValueOnce({ task_id: "real" });
     const onFinished = renderModal();
 
-    await userEvent.click(screen.getByRole("button", { name: "Sprawdź oczekujące" }));
+    await userEvent.click(screen.getByRole("button", { name: "Sprawdź auto-potwierdzenie" }));
     expect(rescore).toHaveBeenCalledWith(true);
 
     await waitFor(() => expect(bind).toHaveBeenCalledTimes(3));

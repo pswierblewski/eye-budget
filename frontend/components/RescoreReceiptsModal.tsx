@@ -77,19 +77,19 @@ export function RescoreReceiptsModal({
   return (
     <Modal open={open} onClose={close} maxWidth="lg">
       <div className="p-6 flex flex-col gap-4 text-sm">
-        <h2 className="text-lg font-semibold text-gray-900">Przelicz oczekujące paragony</h2>
+        <h2 className="text-lg font-semibold text-gray-900">Potwierdź automatycznie — oczekujące paragony</h2>
         <MutationErrorNotice mutation={mutation} />
 
         {phase === "idle" && (
           <p className="text-gray-600">
-            Kategorie paragonów „Do potwierdzenia” zostaną przeliczone na podstawie historii. Najpierw zobaczysz
-            raport — nic nie zostanie potwierdzone bez Twojej zgody.
+            Dla paragonów „Do potwierdzenia” ponownie uruchomimy kategoryzację i bramkę auto-potwierdzenia.
+            Najpierw zobaczysz raport — nic nie zostanie potwierdzone bez Twojej zgody.
           </p>
         )}
 
         {phase === "running" && (
           <p className="text-gray-600">
-            {progress ? `Przeliczanie ${progress.index} / ${progress.total}…` : "Uruchamianie…"}
+            {progress ? `Sprawdzanie ${progress.index} / ${progress.total}…` : "Uruchamianie…"}
           </p>
         )}
 
@@ -115,7 +115,9 @@ export function RescoreReceiptsModal({
           <p className="font-medium text-green-700">Potwierdzono automatycznie {report.confirmed} paragonów.</p>
         )}
 
-        {phase === "error" && <p className="text-red-600">Przeliczanie nie powiodło się: {errorMsg}</p>}
+        {phase === "error" && (
+          <p className="text-red-600">Auto-potwierdzenie nie powiodło się: {errorMsg}</p>
+        )}
 
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={close} disabled={phase === "running"}>
@@ -123,7 +125,7 @@ export function RescoreReceiptsModal({
           </Button>
           {phase === "idle" && (
             <Button onClick={() => mutation.mutate(true)} disabled={mutation.isPending}>
-              Sprawdź oczekujące
+              Sprawdź auto-potwierdzenie
             </Button>
           )}
           {phase === "report" && report && report.eligible > 0 && (
