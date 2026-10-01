@@ -23,7 +23,7 @@ import {
 import { formatQueryError } from "@/lib/query-error";
 import { LinkTransactionSearchModal } from "@/components/LinkTransactionSearchModal";
 import { CategorySourcePill } from "@/components/CategorySourcePill";
-import { AutoConfirmReasonsPanel } from "@/components/AutoConfirmReasonsPanel";
+import { AutoConfirmReasonsPanel, waiverAcceptPendingKey } from "@/components/AutoConfirmReasonsPanel";
 
 export default function ReceiptReviewPage({
   params,
@@ -392,6 +392,11 @@ export default function ReceiptReviewPage({
     onSuccess: applySaveReviewSuccess,
   });
 
+  const waiverAcceptPendingKeyActive =
+    waiverMutation.isPending && waiverMutation.variables
+      ? waiverAcceptPendingKey(waiverMutation.variables)
+      : null;
+
   // Map confirmed transaction item index → OCR product index.
   // Greedy name-match with a "used" set so duplicates (e.g. "Rabat") each get a unique slot.
   const confirmedToOcrIndex = useMemo<Record<number, number>>(() => {
@@ -649,7 +654,7 @@ export default function ReceiptReviewPage({
         <AutoConfirmReasonsPanel
           reasons={scan.auto_confirm_reasons}
           waivers={scan.auto_confirm_waivers ?? undefined}
-          acceptPending={waiverMutation.isPending}
+          acceptPendingKey={waiverAcceptPendingKeyActive}
           onAccept={(payload) => waiverMutation.mutate(payload)}
         />
       )}
