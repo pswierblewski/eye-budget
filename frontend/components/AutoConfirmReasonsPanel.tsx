@@ -13,14 +13,23 @@ function isWaived(reason: AutoConfirmReason, waivers?: AutoConfirmWaiverItem[]):
   return waivers?.some((w) => waiverMatches(reason, w)) ?? false;
 }
 
+/** Stable key for per-row accept loading state (matches mutation variables). */
+export function waiverAcceptPendingKey(payload: {
+  code: string;
+  product_name?: string | null;
+}): string {
+  return `${payload.code}\0${payload.product_name ?? ""}`;
+}
+
 type Props = {
   reasons: AutoConfirmReason[];
   waivers?: AutoConfirmWaiverItem[];
   onAccept?: (payload: { code: string; product_name?: string | null }) => void;
-  acceptPending?: boolean;
+  /** Key of the row currently saving; other rows keep „Akceptuj”. */
+  acceptPendingKey?: string | null;
 };
 
-export function AutoConfirmReasonsPanel({ reasons, waivers, onAccept, acceptPending }: Props) {
+export function AutoConfirmReasonsPanel({ reasons, waivers, onAccept, acceptPendingKey }: Props) {
   if (!reasons.some((r) => r.blocking || isWaived(r, waivers))) return null;
   return (
     <div className="rounded-lg border border-orange-200 bg-orange-50/80 p-4 text-sm text-orange-900">
@@ -29,6 +38,12 @@ export function AutoConfirmReasonsPanel({ reasons, waivers, onAccept, acceptPend
         {reasons.map((r, i) => {
           const waived = isWaived(r, waivers);
           const showAccept = r.blocking && !waived && onAccept;
+          const rowKey = waiverAcceptPendingKey({
+            code: r.code,
+            product_name: r.product_name ?? null,
+          });
+          const isRowPending = acceptPendingKey === rowKey;
+          const anyAcceptPending = acceptPendingKey != null;
           return (
             <li
               key={`${r.code}-${r.product_name ?? ""}-${i}`}
@@ -46,7 +61,7 @@ export function AutoConfirmReasonsPanel({ reasons, waivers, onAccept, acceptPend
                   type="button"
                   variant="secondary"
                   size="sm"
-                  disabled={acceptPending}
+                  disabled={anyAcceptPending}
                   onClick={() =>
                     onAccept({
                       code: r.code,
@@ -54,7 +69,7 @@ export function AutoConfirmReasonsPanel({ reasons, waivers, onAccept, acceptPend
                     })
                   }
                 >
-                  {acceptPending ? "Zapisuję…" : "Akceptuj"}
+                  {isRowPending ? "Zapisuję…" : "Akceptuj"}
                 </Button>
               )}
             </li>

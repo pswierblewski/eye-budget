@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { AutoConfirmReasonsPanel } from "./AutoConfirmReasonsPanel";
+import { AutoConfirmReasonsPanel, waiverAcceptPendingKey } from "./AutoConfirmReasonsPanel";
 
 describe("AutoConfirmReasonsPanel", () => {
   it("lists blocking and informational reasons", () => {
@@ -48,6 +48,32 @@ describe("AutoConfirmReasonsPanel", () => {
     await user.click(screen.getByRole("button", { name: "Akceptuj" }));
 
     expect(onAccept).toHaveBeenCalledWith({ code: "low_confidence", product_name: "X" });
+  });
+
+  it("shows Zapisuję only on the row matching acceptPendingKey", () => {
+    render(
+      <AutoConfirmReasonsPanel
+        reasons={[
+          {
+            code: "low_confidence",
+            message: "Produkt A",
+            blocking: true,
+            product_name: "A",
+          },
+          {
+            code: "low_confidence",
+            message: "Produkt B",
+            blocking: true,
+            product_name: "B",
+          },
+        ]}
+        onAccept={vi.fn()}
+        acceptPendingKey={waiverAcceptPendingKey({ code: "low_confidence", product_name: "A" })}
+      />
+    );
+
+    expect(screen.getByRole("button", { name: "Zapisuję…" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Akceptuj" })).toBeInTheDocument();
   });
 
   it("shows Zaakceptowano for waived reasons", () => {
