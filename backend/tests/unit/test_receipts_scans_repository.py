@@ -843,6 +843,8 @@ def test_get_by_id_happy_path():
             None,  # ocr_raw
             None,  # confirmation_source
             None,  # auto_confirm_reasons
+            None,  # category_selections
+            None,  # auto_confirm_waivers
         )
     )
 
@@ -917,6 +919,8 @@ def test_get_by_id_with_text_regions():
             None,
             [],
             text_regions_data,
+            None,
+            None,
             None,
             None,
             None,

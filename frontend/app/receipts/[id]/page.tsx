@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getReceipt, listReceipts, listCategories, listProducts, confirmReceipt, reopenReceipt, tryAutoConfirmReceipt, deleteReceipt, retryReceipt, reuployReceiptImage, getBankTxCandidates, linkBankToReceipt, unlinkBankTransaction, updateReceiptTags, getAllTags, createCashFromReceipt, getCashTxCandidatesForReceipt, linkCashToReceipt, unlinkCashTransaction, updateTransactionItem, deleteTransactionItem, localizeReceipt } from "@/lib/api";
+import { getReceipt, listReceipts, listCategories, listProducts, confirmReceipt, saveReceiptReview, addAutoConfirmWaiver, reopenReceipt, tryAutoConfirmReceipt, deleteReceipt, retryReceipt, reuployReceiptImage, getBankTxCandidates, linkBankToReceipt, unlinkBankTransaction, updateReceiptTags, getAllTags, createCashFromReceipt, getCashTxCandidatesForReceipt, linkCashToReceipt, unlinkCashTransaction, updateTransactionItem, deleteTransactionItem, localizeReceipt } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import { ReceiptImageViewer } from "@/components/ReceiptImageViewer";
 import { ProductCategoryRow } from "@/components/ProductCategoryRow";
@@ -176,6 +176,12 @@ export default function ReceiptReviewPage({
       );
     }
   }, [scan?.result]);
+
+  useEffect(() => {
+    if (scan?.category_selections) {
+      setSelections(scan.category_selections);
+    }
+  }, [scan?.category_selections]);
 
   const confirmMutation = useMutation({
     mutationFn: (productCategories: Record<string, number>) =>
@@ -357,6 +363,35 @@ export default function ReceiptReviewPage({
     },
   });
 
+  const applySaveReviewSuccess = (data: Awaited<ReturnType<typeof saveReceiptReview>>) => {
+    queryClient.setQueryData(["receipt", scanId], data.receipt);
+    setAutoConfirmEligible(data.auto_confirm.ok);
+    queryClient.invalidateQueries({ queryKey: ["receipts"] });
+  };
+
+  const saveReviewMutation = useMutation({
+    mutationFn: (productCategories: Record<string, number>) =>
+      saveReceiptReview(scanId, {
+        product_categories: productCategories,
+        vendor: editedVendor || undefined,
+        date: editedDate || undefined,
+        total: editedTotal ?? undefined,
+        products: editedProducts.length > 0 ? editedProducts : undefined,
+        normalized_vendor: editedNormalizedVendor.trim() || undefined,
+        normalized_products: (() => {
+          const entries = Object.entries(editedNormalizedProducts).filter(([, v]) => v.trim() !== "");
+          return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+        })(),
+      }),
+    onSuccess: applySaveReviewSuccess,
+  });
+
+  const waiverMutation = useMutation({
+    mutationFn: (body: { code: string; product_name?: string | null }) =>
+      addAutoConfirmWaiver(scanId, body),
+    onSuccess: applySaveReviewSuccess,
+  });
+
   // Map confirmed transaction item index → OCR product index.
   // Greedy name-match with a "used" set so duplicates (e.g. "Rabat") each get a unique slot.
   const confirmedToOcrIndex = useMemo<Record<number, number>>(() => {
@@ -534,6 +569,8 @@ export default function ReceiptReviewPage({
       <MutationErrorNotice mutation={localizeMutation} />
       <MutationErrorNotice mutation={autoConfirmCheckMutation} />
       <MutationErrorNotice mutation={autoConfirmApplyMutation} />
+      <MutationErrorNotice mutation={saveReviewMutation} />
+      <MutationErrorNotice mutation={waiverMutation} />
       {/* Confirm Delete Modal */}
       <ConfirmDeleteModal
         open={showDeleteModal}
@@ -609,7 +646,12 @@ export default function ReceiptReviewPage({
       )}
 
       {scan.status === "to_confirm" && scan.auto_confirm_reasons && (
-        <AutoConfirmReasonsPanel reasons={scan.auto_confirm_reasons} />
+        <AutoConfirmReasonsPanel
+          reasons={scan.auto_confirm_reasons}
+          waivers={scan.auto_confirm_waivers ?? undefined}
+          acceptPending={waiverMutation.isPending}
+          onAccept={(payload) => waiverMutation.mutate(payload)}
+        />
       )}
 
       {scan.status === "failed" && (scan.message || scan.ocr_raw) && (
@@ -1349,20 +1391,37 @@ export default function ReceiptReviewPage({
                 </div>
               </div>
 
-              <button
-                disabled={!allSelected || confirmMutation.isPending}
-                onClick={() => {
-                  const resolved: Record<string, number> = {};
-                  for (const p of products) {
-                    const sel = getSelection(p.name);
-                    if (sel !== undefined) resolved[p.name] = sel;
-                  }
-                  confirmMutation.mutate(resolved);
-                }}
-                className="w-full py-2.5 rounded-md bg-accent text-white font-medium text-sm hover:bg-accent-hover disabled:opacity-50 transition-colors"
-              >
-                {confirmMutation.isPending ? "Zapisywanie…" : "Potwierdź paragon"}
-              </button>
+              <div className="flex flex-col gap-2">
+                <button
+                  type="button"
+                  disabled={saveReviewMutation.isPending || confirmMutation.isPending}
+                  onClick={() => {
+                    const resolved: Record<string, number> = {};
+                    for (const p of products) {
+                      const sel = getSelection(p.name);
+                      if (sel !== undefined) resolved[p.name] = sel;
+                    }
+                    saveReviewMutation.mutate(resolved);
+                  }}
+                  className="w-full py-2.5 rounded-md border border-gray-300 bg-white text-gray-800 font-medium text-sm hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                >
+                  {saveReviewMutation.isPending ? "Zapisuję…" : "Zapisz poprawki"}
+                </button>
+                <button
+                  disabled={!allSelected || confirmMutation.isPending}
+                  onClick={() => {
+                    const resolved: Record<string, number> = {};
+                    for (const p of products) {
+                      const sel = getSelection(p.name);
+                      if (sel !== undefined) resolved[p.name] = sel;
+                    }
+                    confirmMutation.mutate(resolved);
+                  }}
+                  className="w-full py-2.5 rounded-md bg-accent text-white font-medium text-sm hover:bg-accent-hover disabled:opacity-50 transition-colors"
+                >
+                  {confirmMutation.isPending ? "Zapisywanie…" : "Potwierdź paragon"}
+                </button>
+              </div>
 
               <div className="space-y-2">
                 <div className="flex items-center gap-3">
@@ -1544,20 +1603,37 @@ export default function ReceiptReviewPage({
                 + Dodaj produkt
               </button>
 
-              <button
-                disabled={!allSelected || confirmMutation.isPending}
-                onClick={() => {
-                  const resolved: Record<string, number> = {};
-                  for (const p of products) {
-                    const sel = getSelection(p.name);
-                    if (sel !== undefined) resolved[p.name] = sel;
-                  }
-                  confirmMutation.mutate(resolved);
-                }}
-                className="mt-2 w-full py-2.5 rounded-md bg-accent text-white font-medium text-sm hover:bg-accent-hover disabled:opacity-50 transition-colors"
-              >
-                {confirmMutation.isPending ? "Zapisywanie…" : "Potwierdź paragon"}
-              </button>
+              <div className="mt-2 flex flex-col gap-2">
+                <button
+                  type="button"
+                  disabled={saveReviewMutation.isPending || confirmMutation.isPending}
+                  onClick={() => {
+                    const resolved: Record<string, number> = {};
+                    for (const p of products) {
+                      const sel = getSelection(p.name);
+                      if (sel !== undefined) resolved[p.name] = sel;
+                    }
+                    saveReviewMutation.mutate(resolved);
+                  }}
+                  className="w-full py-2.5 rounded-md border border-gray-300 bg-white text-gray-800 font-medium text-sm hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                >
+                  {saveReviewMutation.isPending ? "Zapisuję…" : "Zapisz poprawki"}
+                </button>
+                <button
+                  disabled={!allSelected || confirmMutation.isPending}
+                  onClick={() => {
+                    const resolved: Record<string, number> = {};
+                    for (const p of products) {
+                      const sel = getSelection(p.name);
+                      if (sel !== undefined) resolved[p.name] = sel;
+                    }
+                    confirmMutation.mutate(resolved);
+                  }}
+                  className="w-full py-2.5 rounded-md bg-accent text-white font-medium text-sm hover:bg-accent-hover disabled:opacity-50 transition-colors"
+                >
+                  {confirmMutation.isPending ? "Zapisywanie…" : "Potwierdź paragon"}
+                </button>
+              </div>
 
               </>)}
             </>

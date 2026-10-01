@@ -53,6 +53,7 @@ source venv/bin/activate
 Each feature uses a folder under `specs/<NNN-feature-name>/` with `spec.md`, `plan.md`, `tasks.md`, and supplementary artifacts. One branch per feature; PR to `master`.
 
 ## Recent Changes
+- feat/receipt-save-review-waivers (2026-10-01): save-review + auto-confirm waivers (`POST /receipts/{id}/save-review`, `POST /receipts/{id}/auto-confirm-waiver`), `category_selections` / `auto_confirm_waivers` JSONB; FE „Zapisz poprawki” + „Akceptuj”; migration 20261001_01; FE 1.11.0 / BE 1.12.0
 - feat/receipt-auto-confirm (2026-09-30): history-first categorization, auto-confirm gate, backlog rescore (`POST /receipts/rescore`), `confirmation_source` + `auto_confirm_reasons`; migrations 20260930_03–05; FE 1.10.0 / BE 1.11.0
 - feat/ocr-validation-gate (PR #39, 2026-09-30): OCR semantic validation gate (`receipt_ocr_validation.py`), `failed` + `message` + `ocr_raw`, unified receipt date NULLIF, migrations 20260930_01/02; FE 1.9.0 / BE 1.10.0
 - 008-fix-category-id-ambiguity: Added Python 3.11.7 + FastAPI, psycopg2-binary, pydantic v2, pytest ≥ 8.0, pytest-mock ≥ 3.14

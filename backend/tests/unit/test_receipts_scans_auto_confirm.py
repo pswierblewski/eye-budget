@@ -128,6 +128,8 @@ def test_get_by_id_reads_confirmation_fields():
             None,
             "auto",
             [{"code": "vendor_new", "message": "m", "blocking": False}],
+            None,
+            None,
         )
     )
 

@@ -46,6 +46,7 @@ from .services.receipt_auto_confirm import (
     confirm_failed_reason,
     evaluate,
     evaluation_error_reason,
+    waiver_key,
 )
 from .services.receipt_categorization import CategorizationResult
 from .repositories.budget_analysis import BudgetAnalysisRepository
@@ -67,6 +68,9 @@ from .data import (
     RescoreReasonCount,
     SingleAutoConfirmResult,
     AutoConfirmReasonItem,
+    AutoConfirmWaiverItem,
+    AutoConfirmWaiverRequest,
+    SaveReviewResponse,
     UpdateTransactionItemRequest,
     EvaluationRunListItem,
     EvaluationRunDetail,
@@ -615,6 +619,122 @@ class App(ABC):
             return None
         return self.minio_service.download_image(entry.minio_object_key)
 
+    @staticmethod
+    def _waivers_frozen(detail: ReceiptScanDetail | None) -> frozenset[tuple[str, str | None]]:
+        if detail is None or not detail.auto_confirm_waivers:
+            return frozenset()
+        return frozenset(
+            waiver_key(w.code, w.product_name) for w in detail.auto_confirm_waivers
+        )
+
+    def _apply_review_overrides(
+        self, scan_id: int, detail: ReceiptScanDetail, request: ConfirmReceiptRequest
+    ) -> TransactionModel:
+        """Persist OCR overrides and normalized vendor/product links without confirming."""
+        tx_model = detail.result
+        assert tx_model is not None
+
+        overrides: dict = {}
+        if request.vendor is not None:
+            overrides["vendor"] = request.vendor
+        if request.date is not None:
+            overrides["date"] = request.date
+        if request.total is not None:
+            overrides["total"] = request.total
+        if request.products is not None:
+            overrides["products"] = request.products
+        if overrides:
+            tx_model = tx_model.model_copy(update=overrides)
+            self.receipts_scans_repository.set_result_by_id(scan_id, tx_model.model_dump())
+
+        if request.normalized_vendor:
+            vendor_id = self.vendors_repository.get_vendor_by_name(request.normalized_vendor)
+            if vendor_id is None:
+                vendor_id = self.vendors_repository.insert_vendor(request.normalized_vendor)
+            if vendor_id is not None:
+                self.vendors_repository.upsert_alternative_name(tx_model.vendor, vendor_id)
+
+        for product in tx_model.products:
+            normalized_product_name = (
+                request.normalized_products.get(product.name)
+                if request.normalized_products
+                else None
+            )
+            if not normalized_product_name:
+                continue
+            product_id = self.products_repository.get_product_by_name(normalized_product_name)
+            if product_id is None:
+                product_id = self.products_repository.insert_product(normalized_product_name)
+            if product_id is not None:
+                self.products_repository.upsert_alternative_name(product.name, product_id)
+
+        return tx_model
+
+    def _dry_run_gate(self, scan_id: int, transaction_model: TransactionModel) -> SingleAutoConfirmResult:
+        detail = self.receipts_scans_repository.get_by_id(scan_id)
+        vendor_id = self.vendors_repository.get_vendor_by_alternative_name(transaction_model.vendor)
+        normalized_vendor = (
+            self.vendors_repository.get_normalized_name_by_alternative_name(transaction_model.vendor)
+            or transaction_model.vendor
+        )
+        tx = transaction_model.model_copy(update={"vendor": normalized_vendor})
+        result = self.receipt_categorization_service.categorize(tx, vendor_id)
+        self.receipts_scans_repository.set_category_candidates_if_pending(scan_id, result.candidates)
+        waivers = self._waivers_frozen(detail)
+        decision = evaluate(
+            tx,
+            result.resolutions,
+            result.vendor_has_history,
+            self.auto_confirm_settings,
+            waivers=waivers,
+        )
+        self.receipts_scans_repository.set_auto_confirm_reasons(
+            scan_id, [r.to_dict() for r in decision.reasons]
+        )
+        return SingleAutoConfirmResult(
+            dry_run=True,
+            ok=decision.ok,
+            confirmed=False,
+            skipped=False,
+            reasons=[AutoConfirmReasonItem(**r.to_dict()) for r in decision.reasons],
+            receipt=None,
+        )
+
+    def save_review(self, scan_id: int, request: ConfirmReceiptRequest) -> SaveReviewResponse | None:
+        detail = self.receipts_scans_repository.get_by_id(scan_id)
+        if (
+            detail is None
+            or detail.result is None
+            or detail.status != ReceiptsScanStatus.TO_CONFIRM
+        ):
+            return None
+        tx_model = self._apply_review_overrides(scan_id, detail, request)
+        self.receipts_scans_repository.set_category_selections(scan_id, request.product_categories)
+        auto_confirm = self._dry_run_gate(scan_id, tx_model)
+        return SaveReviewResponse(
+            receipt=self.get_receipt_by_id(scan_id),
+            auto_confirm=auto_confirm,
+        )
+
+    def add_auto_confirm_waiver(
+        self, scan_id: int, request: AutoConfirmWaiverRequest
+    ) -> SaveReviewResponse | None:
+        detail = self.receipts_scans_repository.get_by_id(scan_id)
+        if (
+            detail is None
+            or detail.result is None
+            or detail.status != ReceiptsScanStatus.TO_CONFIRM
+        ):
+            return None
+        item = AutoConfirmWaiverItem(code=request.code, product_name=request.product_name)
+        if not self.receipts_scans_repository.append_auto_confirm_waiver(scan_id, item):
+            return None
+        auto_confirm = self._dry_run_gate(scan_id, detail.result)
+        return SaveReviewResponse(
+            receipt=self.get_receipt_by_id(scan_id),
+            auto_confirm=auto_confirm,
+        )
+
     def confirm_receipt(
         self, scan_id: int, request: ConfirmReceiptRequest, confirmation_source: str = "manual"
     ) -> ReceiptScanDetail | None:
@@ -633,32 +753,11 @@ class App(ABC):
         if detail is None or detail.result is None:
             return None
 
-        tx_model = detail.result
-
-        # Apply optional field overrides before creating the transaction
-        overrides: dict = {}
-        if request.vendor is not None:
-            overrides["vendor"] = request.vendor
-        if request.date is not None:
-            overrides["date"] = request.date
-        if request.total is not None:
-            overrides["total"] = request.total
-        if request.products is not None:
-            overrides["products"] = request.products
-        if overrides:
-            tx_model = tx_model.model_copy(update=overrides)
-            self.receipts_scans_repository.set_result_by_id(scan_id, tx_model.model_dump())
+        tx_model = self._apply_review_overrides(scan_id, detail, request)
 
         vendor_id = None
         if request.normalized_vendor:
-            # The user supplied a normalized vendor name — look it up or create it, then
-            # link the raw receipt name as an alternative name so future receipts resolve
-            # automatically.
             vendor_id = self.vendors_repository.get_vendor_by_name(request.normalized_vendor)
-            if vendor_id is None:
-                vendor_id = self.vendors_repository.insert_vendor(request.normalized_vendor)
-            if vendor_id is not None:
-                self.vendors_repository.upsert_alternative_name(tx_model.vendor, vendor_id)
         else:
             vendor_id = self.transactions_repository.lookup_vendor_id(tx_model.vendor)
 
@@ -685,12 +784,7 @@ class App(ABC):
                 else None
             )
             if normalized_product_name:
-                # Look up or create the normalized product and link the raw name.
                 product_id = self.products_repository.get_product_by_name(normalized_product_name)
-                if product_id is None:
-                    product_id = self.products_repository.insert_product(normalized_product_name)
-                if product_id is not None:
-                    self.products_repository.upsert_alternative_name(product.name, product_id)
             else:
                 product_id = self.transactions_repository.lookup_product_id(product.name)
             category_id = request.product_categories.get(product.name)
@@ -707,6 +801,7 @@ class App(ABC):
             )
 
         self.receipts_scans_repository.set_status_done(scan_id, confirmation_source)
+        self.receipts_scans_repository.clear_save_review_fields(scan_id)
 
         # Auto-link to best matching bank/cash transaction (bank has priority)
         self._auto_link_receipt(scan_id, transaction_id)
@@ -736,8 +831,14 @@ class App(ABC):
         if not decision.ok or not (force or self.auto_confirm_settings.enabled):
             return False
         normalized = {r.raw_name: r.normalized_name for r in resolutions if r.normalized_name}
+        detail = self.receipts_scans_repository.get_by_id(scan_id)
+        product_categories = {
+            r.raw_name: r.category_id for r in resolutions if r.category_id is not None
+        }
+        if detail and detail.category_selections:
+            product_categories = {**product_categories, **detail.category_selections}
         request = ConfirmReceiptRequest(
-            product_categories={r.raw_name: r.category_id for r in resolutions if r.category_id is not None},
+            product_categories=product_categories,
             normalized_products=normalized or None,
         )
         try:
@@ -874,6 +975,7 @@ class App(ABC):
             self.prompt_analytics_repository.mark_auto_confirm_reverted(scan_id)
         self.transactions_repository.delete_by_scan_id(scan_id)
         self.receipts_scans_repository.set_status_to_confirm_by_id(scan_id)
+        self.receipts_scans_repository.clear_save_review_fields(scan_id)
         return self.get_receipt_by_id(scan_id)
 
     def update_transaction_item(
@@ -999,11 +1101,14 @@ class App(ABC):
     ) -> bool:
         if categorization is None:
             return False
+        detail = self.receipts_scans_repository.get_by_id(scan_id)
+        waivers = self._waivers_frozen(detail)
         decision = evaluate(
             transaction_model,
             categorization.resolutions,
             categorization.vendor_has_history,
             self.auto_confirm_settings,
+            waivers=waivers,
         )
         return self._apply_auto_confirm(scan_id, decision, categorization.resolutions)
 
@@ -1019,8 +1124,14 @@ class App(ABC):
         result = self.receipt_categorization_service.categorize(transaction_model, vendor_id)
         if not self.receipts_scans_repository.set_category_candidates_if_pending(scan_id, result.candidates):
             return True, None, False
+        detail = self.receipts_scans_repository.get_by_id(scan_id)
+        waivers = self._waivers_frozen(detail)
         decision = evaluate(
-            transaction_model, result.resolutions, result.vendor_has_history, self.auto_confirm_settings
+            transaction_model,
+            result.resolutions,
+            result.vendor_has_history,
+            self.auto_confirm_settings,
+            waivers=waivers,
         )
         if dry_run or not decision.ok:
             self.receipts_scans_repository.set_auto_confirm_reasons(
